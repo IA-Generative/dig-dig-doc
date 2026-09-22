@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.analyse import Analyse
-from app.models.conversation import Conversation, Message, MessageRole
+from app.models.conversation import Conversation, Message, MessageRole, MessageSource
+from app.models.document_page import (
+    DocumentPage,
+    DocumentPrediction,
+    PredictionKind,
+    PredictionValidation,
+    PredictionValidationStatus,
+)
 from app.models.dossier import (
     Dossier,
     DossierDocument,
@@ -16,6 +23,7 @@ from app.models.dossier import (
     ExecutionStepKind,
     ExecutionStepStatus,
 )
+from app.models.execution_log import ExecutionLog, ExecutionLogLevel
 from app.repositories.analyse_repository import AnalyseRepository
 
 
@@ -25,7 +33,22 @@ class DossierRepository:
         self._analyse_repository = AnalyseRepository(db)
 
     def _base_query(self):
-        return select(Dossier).options(selectinload(Dossier.execution_steps), selectinload(Dossier.documents))
+        return (
+            select(Dossier)
+            .options(
+                selectinload(Dossier.execution_steps).selectinload(ExecutionStep.logs),
+                selectinload(Dossier.documents)
+                .selectinload(DossierDocument.pages)
+                .selectinload(DocumentPage.predictions)
+                .selectinload(DocumentPrediction.validations),
+                # populate_existing: nécessaire pour le SSE (/dossiers/{id}/stream),
+                # qui réinterroge en boucle sur la même session - sans ça, une
+                # fois le Dossier chargé une première fois, les requêtes
+                # suivantes renverraient l'objet du cache d'identité, pas l'état
+                # réellement en base.
+            )
+            .execution_options(populate_existing=True)
+        )
 
     async def list_all(self) -> Sequence[Dossier]:
         result = await self.db.execute(self._base_query().order_by(Dossier.created_at.desc()))
@@ -64,13 +87,8 @@ class DossierRepository:
     async def set_document_label(self, document: DossierDocument, label: str | None) -> None:
         document.label = label
         await self.db.commit()
-        await self.db.refresh(document)
-
-    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
-        result = await self.db.execute(
-            select(DossierDocument).where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
-        )
-        return result.scalar_one_or_none()
+        # Pas de refresh(document) : réexpirerait `pages` (déjà chargée par
+        # get_document) et redéclencherait un lazy-load hors contexte async.
 
     def _conversation_query(self):
         # populate_existing: without it, re-querying a Conversation already in
@@ -78,7 +96,9 @@ class DossierRepository:
         # keep the stale, already-loaded `messages` collection instead of
         # picking up the row just committed.
         return (
-            select(Conversation).options(selectinload(Conversation.messages)).execution_options(populate_existing=True)
+            select(Conversation)
+            .options(selectinload(Conversation.messages).selectinload(Message.sources))
+            .execution_options(populate_existing=True)
         )
 
     async def list_conversations(self, dossier_id: uuid.UUID, user_id: str) -> Sequence[Conversation]:
@@ -100,10 +120,183 @@ class DossierRepository:
         await self.db.refresh(conversation)
         return await self.get_conversation(conversation.id)
 
-    async def add_message(self, conversation: Conversation, role: MessageRole, content: str) -> Conversation:
-        self.db.add(Message(conversation_id=conversation.id, role=role, content=content))
+    async def add_message(
+        self, conversation: Conversation, role: MessageRole, content: str, sources: list[dict] | None = None
+    ) -> Conversation:
+        message = Message(conversation_id=conversation.id, role=role, content=content)
+        self.db.add(message)
+        await self.db.flush()
+        for source in sources or []:
+            self.db.add(
+                MessageSource(
+                    message_id=message.id,
+                    dossier_document_id=source.get("dossier_document_id"),
+                    execution_step_id=source.get("execution_step_id"),
+                    excerpt=source.get("excerpt"),
+                )
+            )
         await self.db.commit()
         return await self.get_conversation(conversation.id)
+
+    # --- Logs et callback de fin d'étape (appelés par le worker) ---
+
+    async def get_execution_step(self, dossier_id: uuid.UUID, step_id: uuid.UUID) -> ExecutionStep | None:
+        result = await self.db.execute(
+            select(ExecutionStep)
+            .options(selectinload(ExecutionStep.logs))
+            .where(ExecutionStep.id == step_id, ExecutionStep.dossier_id == dossier_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_execution_step_by_id(self, step_id: uuid.UUID) -> ExecutionStep | None:
+        result = await self.db.execute(
+            select(ExecutionStep)
+            .options(selectinload(ExecutionStep.logs))
+            .where(ExecutionStep.id == step_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def add_log(self, step: ExecutionStep, level: ExecutionLogLevel, message: str) -> ExecutionStep:
+        self.db.add(ExecutionLog(execution_step_id=step.id, level=level, message=message))
+        await self.db.commit()
+        return await self.get_execution_step(step.dossier_id, step.id)
+
+    async def complete_execution_step(
+        self, step: ExecutionStep, status: ExecutionStepStatus, output: str | None
+    ) -> ExecutionStep:
+        step.status = status
+        step.output = output
+        step.ended_at = datetime.now(UTC)
+        await self.db.commit()
+        # Pas de refresh(step) : réexpirerait `logs` (déjà chargée par
+        # get_execution_step_by_id) et redéclencherait un lazy-load hors
+        # contexte async à la sérialisation - même raison que add_page.
+        return step
+
+    # --- Pages, prédictions et validation humaine ---
+
+    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
+        result = await self.db.execute(
+            select(DossierDocument)
+            .options(selectinload(DossierDocument.pages).selectinload(DocumentPage.predictions))
+            .where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_document_by_id(self, document_id: uuid.UUID) -> DossierDocument | None:
+        result = await self.db.execute(select(DossierDocument).where(DossierDocument.id == document_id))
+        return result.scalar_one_or_none()
+
+    async def add_page(
+        self,
+        document: DossierDocument,
+        *,
+        page_number: int,
+        width: int | None,
+        height: int | None,
+        bbox: dict | None,
+        content: str | None,
+    ) -> DocumentPage:
+        page = DocumentPage(
+            dossier_document_id=document.id,
+            page_number=page_number,
+            width=width,
+            height=height,
+            content=content,
+            predictions=[],
+            **(bbox or {}),
+        )
+        self.db.add(page)
+        await self.db.commit()
+        # Pas de refresh(page) : redéclencherait un lazy-load de
+        # `predictions` hors contexte async (MissingGreenlet) - voir le
+        # commentaire équivalent dans launch(). L'id généré côté client
+        # (UUIDMixin.default) est déjà à jour après le commit.
+        return page
+
+    async def get_page(self, document_id: uuid.UUID, page_id: uuid.UUID) -> DocumentPage | None:
+        result = await self.db.execute(
+            select(DocumentPage)
+            .options(selectinload(DocumentPage.predictions).selectinload(DocumentPrediction.validations))
+            .where(DocumentPage.id == page_id, DocumentPage.dossier_document_id == document_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_page_by_id(self, page_id: uuid.UUID) -> DocumentPage | None:
+        result = await self.db.execute(
+            select(DocumentPage)
+            .options(selectinload(DocumentPage.predictions).selectinload(DocumentPrediction.validations))
+            .where(DocumentPage.id == page_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def add_prediction(
+        self,
+        page: DocumentPage,
+        *,
+        kind: PredictionKind,
+        name: str,
+        value: str,
+        confidence: float | None,
+        bbox: dict | None,
+    ) -> DocumentPrediction:
+        prediction = DocumentPrediction(
+            document_page_id=page.id,
+            kind=kind,
+            name=name,
+            value=value,
+            confidence=confidence,
+            validations=[],
+            **(bbox or {}),
+        )
+        self.db.add(prediction)
+        await self.db.commit()
+        # Pas de refresh(prediction) : même raison que pour add_page ci-dessus.
+        return prediction
+
+    async def get_prediction(self, page_id: uuid.UUID, prediction_id: uuid.UUID) -> DocumentPrediction | None:
+        result = await self.db.execute(
+            select(DocumentPrediction)
+            .options(selectinload(DocumentPrediction.validations))
+            .where(DocumentPrediction.id == prediction_id, DocumentPrediction.document_page_id == page_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_prediction_by_id(self, prediction_id: uuid.UUID) -> DocumentPrediction | None:
+        result = await self.db.execute(
+            select(DocumentPrediction)
+            .options(selectinload(DocumentPrediction.validations))
+            .where(DocumentPrediction.id == prediction_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def add_prediction_validation(
+        self,
+        prediction: DocumentPrediction,
+        *,
+        validator_user_id: str,
+        status: PredictionValidationStatus,
+        corrected_value: str | None,
+        bbox: dict | None,
+    ) -> DocumentPrediction:
+        self.db.add(
+            PredictionValidation(
+                prediction_id=prediction.id,
+                validator_user_id=validator_user_id,
+                status=status,
+                corrected_value=corrected_value,
+                **(bbox or {}),
+            )
+        )
+        await self.db.commit()
+        return await self.get_prediction(prediction.document_page_id, prediction.id)
 
     async def launch(self, dossier: Dossier, analyse: Analyse) -> None:
         """Marks the dossier as running and lays down one execution step per
@@ -124,6 +317,7 @@ class DossierRepository:
                 label="Classification documentaire",
                 status=ExecutionStepStatus.EN_COURS,
                 started_at=now,
+                logs=[],
             ),
             ExecutionStep(
                 dossier_id=dossier.id,
@@ -131,6 +325,7 @@ class DossierRepository:
                 label="Extraction d'entités nommées",
                 status=ExecutionStepStatus.EN_COURS,
                 started_at=now,
+                logs=[],
             ),
         ]
         for agent in analyse.agents:
@@ -141,6 +336,7 @@ class DossierRepository:
                     label=agent.name,
                     status=ExecutionStepStatus.EN_COURS,
                     started_at=now,
+                    logs=[],
                 )
             )
 
@@ -150,7 +346,12 @@ class DossierRepository:
         dossier.started_at = now
         dossier.ended_at = None
         await self.db.commit()
-        await self.db.refresh(dossier)
+        # Pas de refresh(dossier) ici : ça re-déclencherait un lazy-load des
+        # nouvelles execution_steps (et de leur relation `logs`, vide mais
+        # non chargée) en dehors du contexte async - MissingGreenlet. Les
+        # objets Python déjà en mémoire (avec logs=[] posé plus haut) et
+        # leurs id générés côté client (UUIDMixin.default) sont à jour après
+        # le commit (expire_on_commit=False sur la session).
 
     async def stop(self, dossier: Dossier) -> None:
         if dossier.status != DossierStatus.EN_COURS:
