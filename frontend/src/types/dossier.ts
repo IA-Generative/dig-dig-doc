@@ -16,12 +16,21 @@ export const EXECUTION_STEP_STATUS_LABELS: Record<ExecutionStepStatus, string> =
   échec: "Échec",
 };
 
+export type ExecutionStepKind = "classification" | "extraction" | "agent";
+
 export interface ExecutionStep {
   id: string;
+  kind: ExecutionStepKind;
   label: string;
   status: ExecutionStepStatus;
   startedAt: string;
   endedAt?: string;
+  /**
+   * Résultat produit par l'étape, présenté dans la page de résultat.
+   * Absent tant que l'étape n'est pas terminée, ou pour un agent dont la
+   * sortie n'est pas activée (Agent.output === false).
+   */
+  output?: string;
 }
 
 export interface DossierDocument {

@@ -7,7 +7,7 @@ import type { Agent } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const { updateAgentPrompt, restoreAgentPromptVersion } = useAnalyses();
+const { updateAgentPrompt, restoreAgentPromptVersion, updateAgentOutput } = useAnalyses();
 
 function savePrompt(prompt: string) {
   updateAgentPrompt(props.analyseId, props.agent.id, prompt);
@@ -16,13 +16,27 @@ function savePrompt(prompt: string) {
 function restorePromptVersion(versionId: string) {
   restoreAgentPromptVersion(props.analyseId, props.agent.id, versionId);
 }
+
+function toggleOutput(output: boolean) {
+  updateAgentOutput(props.analyseId, props.agent.id, output);
+}
 </script>
 
 <template>
   <div class="agent-card">
     <div class="agent-card__header">
-      <span class="agent-card__icon"><VIcon name="ri-robot-line" /></span>
-      <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
+      <div class="agent-card__identity">
+        <span class="agent-card__icon"><VIcon name="ri-robot-line" /></span>
+        <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
+      </div>
+      <DsfrToggleSwitch
+        :model-value="agent.output"
+        label="Sortie"
+        no-text
+        label-left
+        class="agent-card__output-toggle"
+        @update:model-value="toggleOutput"
+      />
     </div>
 
     <PromptEditor
@@ -61,7 +75,19 @@ function restorePromptVersion(versionId: string) {
 .agent-card__header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
+}
+
+.agent-card__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.agent-card__output-toggle {
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .agent-card__icon {

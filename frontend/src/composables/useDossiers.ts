@@ -1,7 +1,8 @@
 import { computed, reactive } from "vue";
 
 import { useAnalyses } from "@/composables/useAnalyses";
-import type { Dossier, DossierDocument, ExecutionStep } from "@/types/dossier";
+import type { Agent, Analyse } from "@/types/analyse";
+import type { Dossier, DossierDocument, ExecutionStep, ExecutionStepKind } from "@/types/dossier";
 
 // In-memory mock store until the BFF/worker exposes a real /dossiers API.
 // A launch is simulated with a timeout instead of a real Celery run.
@@ -20,17 +21,21 @@ const dossiers = reactive<Dossier[]>([
     executionSteps: [
       {
         id: "step-1",
+        kind: "classification",
         label: "Classification documentaire",
         status: "terminé",
         startedAt: "2026-04-03T08:13:00Z",
         endedAt: "2026-04-03T08:13:20Z",
+        output: "CNI (confiance : 96%)",
       },
       {
         id: "step-2",
+        kind: "extraction",
         label: "Extraction d'entités nommées",
         status: "terminé",
         startedAt: "2026-04-03T08:13:20Z",
         endedAt: "2026-04-03T08:13:42Z",
+        output: "Aucune entité configurée pour cette analyse.",
       },
     ],
     documents: [{ id: "doc-1", name: "cni_recto.jpg", size: 482_000 }],
@@ -46,6 +51,22 @@ const dossiers = reactive<Dossier[]>([
     documents: [],
   },
 ]);
+
+function mockClassificationOutput(analyse: Analyse): string {
+  if (analyse.classification.labels.length === 0) return "Aucun label configuré pour cette analyse.";
+  const label = analyse.classification.labels[Math.floor(Math.random() * analyse.classification.labels.length)];
+  const confidence = 85 + Math.floor(Math.random() * 14);
+  return `${label.name} (confiance : ${confidence}%)`;
+}
+
+function mockExtractionOutput(analyse: Analyse): string {
+  if (analyse.extraction.entities.length === 0) return "Aucune entité configurée pour cette analyse.";
+  return analyse.extraction.entities.map((entity) => `${entity.name} : —`).join(" · ");
+}
+
+function mockAgentOutput(agent: Agent): string {
+  return `Résultat généré par « ${agent.name} » à partir des documents du dossier.`;
+}
 
 export function useDossiers() {
   const { getById: getAnalyseById, getAnalyseVersion } = useAnalyses();
@@ -87,19 +108,20 @@ export function useDossiers() {
     if (!dossier || !analyse || dossier.status === "en_cours") return;
 
     const now = new Date().toISOString();
-    const stepLabels = [
-      "Classification documentaire",
-      "Extraction d'entités nommées",
-      ...analyse.agents.map((agent) => agent.name),
+    const steps: { kind: ExecutionStepKind; label: string; agent?: Agent }[] = [
+      { kind: "classification", label: "Classification documentaire" },
+      { kind: "extraction", label: "Extraction d'entités nommées" },
+      ...analyse.agents.map((agent) => ({ kind: "agent" as const, label: agent.name, agent })),
     ];
 
     dossier.status = "en_cours";
     dossier.analyseVersion = getAnalyseVersion(dossier.analyseId);
     dossier.startedAt = now;
     dossier.endedAt = undefined;
-    dossier.executionSteps = stepLabels.map<ExecutionStep>((label, index) => ({
+    dossier.executionSteps = steps.map<ExecutionStep>((step, index) => ({
       id: `step-${Date.now()}-${index}`,
-      label,
+      kind: step.kind,
+      label: step.label,
       status: "en_cours",
       startedAt: now,
     }));
@@ -109,9 +131,13 @@ export function useDossiers() {
       const endedAt = new Date().toISOString();
       dossier.status = "terminé";
       dossier.endedAt = endedAt;
-      dossier.executionSteps.forEach((step) => {
+      dossier.executionSteps.forEach((step, index) => {
         step.status = "terminé";
         step.endedAt = endedAt;
+        const source = steps[index];
+        if (step.kind === "classification") step.output = mockClassificationOutput(analyse);
+        else if (step.kind === "extraction") step.output = mockExtractionOutput(analyse);
+        else if (step.kind === "agent" && source.agent?.output) step.output = mockAgentOutput(source.agent);
       });
     }, EXECUTION_DURATION_MS);
   };

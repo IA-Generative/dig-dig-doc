@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { RouterLink } from "vue-router";
 
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
-import ExecutionPanel from "@/components/dossiers/ExecutionPanel.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type Dossier, type DossierStatus } from "@/types/dossier";
@@ -11,10 +11,6 @@ const { list: dossiers, launch, stop } = useDossiers();
 const { getById: getAnalyseById } = useAnalyses();
 
 const isCreateModalOpened = ref(false);
-const isExecutionPanelOpened = ref(false);
-const selectedDossierId = ref<string | undefined>(undefined);
-
-const selectedDossier = computed(() => dossiers.value.find((d) => d.id === selectedDossierId.value));
 
 const pageSize = 10;
 const currentPage = ref(1);
@@ -46,11 +42,6 @@ function formatDateTime(iso?: string) {
   if (!iso) return "-";
   return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
 }
-
-function openExecution(dossier: Dossier) {
-  selectedDossierId.value = dossier.id;
-  isExecutionPanelOpened.value = true;
-}
 </script>
 
 <template>
@@ -81,7 +72,7 @@ function openExecution(dossier: Dossier) {
         </thead>
         <tbody>
           <tr v-for="dossier in paginatedDossiers" :key="dossier.id">
-            <td>{{ dossier.name }}</td>
+            <td><RouterLink :to="`/dossiers/${dossier.id}`">{{ dossier.name }}</RouterLink></td>
             <td>{{ analyseName(dossier) }}</td>
             <td>{{ dossier.analyseVersion }}</td>
             <td>{{ formatDateTime(dossier.createdAt) }}</td>
@@ -104,14 +95,7 @@ function openExecution(dossier: Dossier) {
                 size="sm"
                 @click="launch(dossier.id)"
               />
-              <DsfrButton
-                label="Voir l'exécution"
-                icon-only
-                tertiary
-                icon="ri-list-check-2"
-                size="sm"
-                @click="openExecution(dossier)"
-              />
+              <RouterLink :to="`/dossiers/${dossier.id}`" class="fr-btn fr-btn--tertiary fr-btn--sm fr-icon-file-text-line" title="Voir le résultat" />
             </td>
           </tr>
         </tbody>
@@ -126,7 +110,6 @@ function openExecution(dossier: Dossier) {
     />
 
     <CreateDossierModal v-model:opened="isCreateModalOpened" />
-    <ExecutionPanel v-model:opened="isExecutionPanelOpened" :dossier="selectedDossier" />
   </div>
 </template>
 
