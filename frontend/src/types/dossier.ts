@@ -1,0 +1,46 @@
+export type DossierStatus = "en_attente" | "en_cours" | "terminé" | "arrêté" | "échec";
+
+export const DOSSIER_STATUS_LABELS: Record<DossierStatus, string> = {
+  en_attente: "En attente",
+  en_cours: "En cours",
+  terminé: "Terminé",
+  arrêté: "Arrêté",
+  échec: "Échec",
+};
+
+export type ExecutionStepStatus = "en_cours" | "terminé" | "échec";
+
+export const EXECUTION_STEP_STATUS_LABELS: Record<ExecutionStepStatus, string> = {
+  en_cours: "En cours",
+  terminé: "Terminé",
+  échec: "Échec",
+};
+
+export interface ExecutionStep {
+  id: string;
+  label: string;
+  status: ExecutionStepStatus;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface DossierDocument {
+  id: string;
+  name: string;
+  size: number;
+}
+
+export interface Dossier {
+  id: string;
+  name: string;
+  /** Une analyse est obligatoire : un dossier ne peut pas exister sans être lié à une analyse. */
+  analyseId: string;
+  /** Version de l'analyse utilisée pour l'exécution (snapshot au lancement). */
+  analyseVersion: string;
+  createdAt: string;
+  status: DossierStatus;
+  startedAt?: string;
+  endedAt?: string;
+  executionSteps: ExecutionStep[];
+  documents: DossierDocument[];
+}
