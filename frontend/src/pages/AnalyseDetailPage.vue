@@ -4,7 +4,6 @@ import { RouterLink, useRoute } from "vue-router";
 
 import AddAgentModal from "@/components/analyses/AddAgentModal.vue";
 import AgentCard from "@/components/analyses/AgentCard.vue";
-import AnalyseSectionCard from "@/components/analyses/AnalyseSectionCard.vue";
 import EntitiesEditor from "@/components/analyses/EntitiesEditor.vue";
 import LabelsEditor from "@/components/analyses/LabelsEditor.vue";
 import PromptEditor from "@/components/analyses/PromptEditor.vue";
@@ -26,6 +25,13 @@ const {
 
 const analyse = computed(() => getById(String(route.params.id)));
 const isAddAgentModalOpened = ref(false);
+const activeTab = ref(0);
+
+const tabTitles = [
+  { title: "Classification documentaire", icon: "ri-price-tag-3-line", tabId: "tab-classification", panelId: "panel-classification" },
+  { title: "Extraction d'entités nommées", icon: "ri-braces-line", tabId: "tab-extraction", panelId: "panel-extraction" },
+  { title: "Agents", icon: "ri-robot-line", tabId: "tab-agents", panelId: "panel-agents" },
+];
 </script>
 
 <template>
@@ -41,8 +47,8 @@ const isAddAgentModalOpened = ref(false);
       </div>
     </div>
 
-    <div class="analyse-detail__sections">
-      <AnalyseSectionCard title="Classification documentaire" icon="ri-price-tag-3-line">
+    <DsfrTabs v-model="activeTab" tab-list-name="Sections de l'analyse" :tab-titles="tabTitles">
+      <DsfrTabContent panel-id="panel-classification" tab-id="tab-classification">
         <PromptEditor
           :prompt="analyse.classification.prompt"
           :versions="analyse.classification.promptVersions"
@@ -57,9 +63,9 @@ const isAddAgentModalOpened = ref(false);
           @save="(labels) => updateClassificationLabels(analyse!.id, labels)"
           @restore="(versionId) => restoreClassificationLabelsVersion(analyse!.id, versionId)"
         />
-      </AnalyseSectionCard>
+      </DsfrTabContent>
 
-      <AnalyseSectionCard title="Extraction d'entités nommées" icon="ri-braces-line">
+      <DsfrTabContent panel-id="panel-extraction" tab-id="tab-extraction">
         <PromptEditor
           :prompt="analyse.extraction.prompt"
           :versions="analyse.extraction.promptVersions"
@@ -74,26 +80,25 @@ const isAddAgentModalOpened = ref(false);
           @save="(entities) => updateExtractionEntities(analyse!.id, entities)"
           @restore="(versionId) => restoreExtractionEntitiesVersion(analyse!.id, versionId)"
         />
-      </AnalyseSectionCard>
+      </DsfrTabContent>
 
-      <section class="analyse-detail__agents-section">
-        <div class="analyse-detail__agents-header">
-          <div>
-            <h2 class="fr-h5">Agents</h2>
+      <DsfrTabContent panel-id="panel-agents" tab-id="tab-agents">
+        <div class="analyse-detail__agents-section">
+          <div class="analyse-detail__agents-header">
             <p class="fr-text--sm">
               Agents créés pour un but métier propre à cette analyse (cohérence, rédaction, timeline...).
             </p>
+            <DsfrButton label="Créer un agent" icon="ri-robot-line" @click="isAddAgentModalOpened = true" />
           </div>
-          <DsfrButton label="Créer un agent" icon="ri-robot-line" @click="isAddAgentModalOpened = true" />
-        </div>
 
-        <p v-if="analyse.agents.length === 0" class="fr-text--sm">Aucun agent créé pour cette analyse.</p>
+          <p v-if="analyse.agents.length === 0" class="fr-text--sm">Aucun agent créé pour cette analyse.</p>
 
-        <div v-else class="analyse-detail__agents">
-          <AgentCard v-for="agent in analyse.agents" :key="agent.id" :analyse-id="analyse.id" :agent="agent" />
+          <div v-else class="analyse-detail__agents">
+            <AgentCard v-for="agent in analyse.agents" :key="agent.id" :analyse-id="analyse.id" :agent="agent" />
+          </div>
         </div>
-      </section>
-    </div>
+      </DsfrTabContent>
+    </DsfrTabs>
 
     <AddAgentModal :analyse-id="analyse.id" v-model:opened="isAddAgentModalOpened" />
   </div>
@@ -113,16 +118,10 @@ const isAddAgentModalOpened = ref(false);
   margin-bottom: 2rem;
 }
 
-.analyse-detail__sections {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
 .analyse-detail__divider {
   border: none;
   border-top: 1px solid var(--border-default-grey);
-  margin: 0;
+  margin: 1.5rem 0;
 }
 
 .analyse-detail__agents-section {
