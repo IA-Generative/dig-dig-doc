@@ -8,6 +8,22 @@ services:
       - "8081:8080"
     restart: unless-stopped
 
+  # One-shot: runs Alembic migrations to head, then exits. The backend (and
+  # every worker that talks to it) depends on this completing successfully,
+  # so a fresh `docker compose down -v && up` never starts the app against an
+  # empty DB.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -33,6 +49,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   worker-document-process:
