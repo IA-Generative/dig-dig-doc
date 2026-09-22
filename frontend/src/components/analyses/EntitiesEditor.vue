@@ -2,13 +2,14 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
+import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestEntities, suggestEntityDefinition } from "@/composables/useLlmAssist";
 import type { Agent, EntityDefinition, EntityType } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const { updateAgentEntities } = useAnalyses();
+const { updateAgentEntities, restoreAgentEntitiesVersion } = useAnalyses();
 
 const entityTypes: EntityType[] = ["texte", "date", "nombre", "booléen", "identifiant"];
 const pageSize = 3;
@@ -73,6 +74,16 @@ function applyDefinitionSuggestion(entity: EntityDefinition) {
 function save() {
   updateAgentEntities(props.analyseId, props.agent.id, draftEntities.value);
 }
+
+function restoreVersion(versionId: string) {
+  restoreAgentEntitiesVersion(props.analyseId, props.agent.id, versionId);
+}
+
+function formatVersionContent(entities: EntityDefinition[]) {
+  return entities.length > 0
+    ? entities.map((entity) => `${entity.name || "(sans nom)"} (${entity.type})`).join(", ")
+    : "(aucune entité)";
+}
 </script>
 
 <template>
@@ -121,6 +132,12 @@ function save() {
       <LlmAssistButton @click="applySuggestions" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
+
+    <VersionHistory
+      :versions="agent.entitiesVersions"
+      :format-content="formatVersionContent"
+      @restore="restoreVersion"
+    />
   </div>
 </template>
 

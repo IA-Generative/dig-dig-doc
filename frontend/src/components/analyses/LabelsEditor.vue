@@ -2,13 +2,14 @@
 import { computed, nextTick, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
+import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestLabelDefinition, suggestLabels } from "@/composables/useLlmAssist";
 import type { Agent, LabelDefinition } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const { updateAgentLabels } = useAnalyses();
+const { updateAgentLabels, restoreAgentLabelsVersion } = useAnalyses();
 
 const pageSize = 3;
 
@@ -70,6 +71,14 @@ function applyDefinitionSuggestion(label: LabelDefinition) {
 function save() {
   updateAgentLabels(props.analyseId, props.agent.id, draftLabels.value);
 }
+
+function restoreVersion(versionId: string) {
+  restoreAgentLabelsVersion(props.analyseId, props.agent.id, versionId);
+}
+
+function formatVersionContent(labels: LabelDefinition[]) {
+  return labels.length > 0 ? labels.map((label) => label.name || "(sans nom)").join(", ") : "(aucun label)";
+}
 </script>
 
 <template>
@@ -112,6 +121,8 @@ function save() {
       <LlmAssistButton @click="applySuggestions" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
+
+    <VersionHistory :versions="agent.labelsVersions" :format-content="formatVersionContent" @restore="restoreVersion" />
   </div>
 </template>
 

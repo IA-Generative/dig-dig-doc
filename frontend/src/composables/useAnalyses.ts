@@ -20,7 +20,9 @@ const analyses = reactive<Analyse[]>([
         promptVersions: [],
         tools: ["lecture_document"],
         labels: [],
+        labelsVersions: [],
         entities: [],
+        entitiesVersions: [],
       },
     ],
   },
@@ -76,7 +78,9 @@ export function useAnalyses() {
       promptVersions: [],
       tools,
       labels: [],
+      labelsVersions: [],
       entities: [],
+      entitiesVersions: [],
     };
     analyse.agents.push(agent);
     return agent;
@@ -110,14 +114,38 @@ export function useAnalyses() {
 
   const updateAgentLabels = (analyseId: string, agentId: string, labels: LabelDefinition[]) => {
     const agent = getAgent(analyseId, agentId);
-    if (!agent) return;
+    if (!agent || JSON.stringify(agent.labels) === JSON.stringify(labels)) return;
+    agent.labelsVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: agent.labels,
+      createdAt: new Date().toISOString(),
+    });
     agent.labels = labels;
+  };
+
+  const restoreAgentLabelsVersion = (analyseId: string, agentId: string, versionId: string) => {
+    const agent = getAgent(analyseId, agentId);
+    const version = agent?.labelsVersions.find((v) => v.id === versionId);
+    if (!agent || !version) return;
+    updateAgentLabels(analyseId, agentId, version.content);
   };
 
   const updateAgentEntities = (analyseId: string, agentId: string, entities: EntityDefinition[]) => {
     const agent = getAgent(analyseId, agentId);
-    if (!agent) return;
+    if (!agent || JSON.stringify(agent.entities) === JSON.stringify(entities)) return;
+    agent.entitiesVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: agent.entities,
+      createdAt: new Date().toISOString(),
+    });
     agent.entities = entities;
+  };
+
+  const restoreAgentEntitiesVersion = (analyseId: string, agentId: string, versionId: string) => {
+    const agent = getAgent(analyseId, agentId);
+    const version = agent?.entitiesVersions.find((v) => v.id === versionId);
+    if (!agent || !version) return;
+    updateAgentEntities(analyseId, agentId, version.content);
   };
 
   return {
@@ -129,6 +157,8 @@ export function useAnalyses() {
     restoreAgentPromptVersion,
     updateAgentTools,
     updateAgentLabels,
+    restoreAgentLabelsVersion,
     updateAgentEntities,
+    restoreAgentEntitiesVersion,
   };
 }
