@@ -8,7 +8,7 @@ import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type Dossier, type DossierStatus } from "@/types/dossier";
 
 const { list: dossiers, launch, stop } = useDossiers();
-const { getById: getAnalyseById } = useAnalyses();
+const { list: analyses } = useAnalyses();
 
 const isCreateModalOpened = ref(false);
 
@@ -35,7 +35,7 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
 };
 
 function analyseName(dossier: Dossier) {
-  return getAnalyseById(dossier.analyseId)?.name ?? "Analyse introuvable";
+  return analyses.value.find((a) => a.id === dossier.analyseId)?.name ?? "Analyse introuvable";
 }
 
 function formatDateTime(iso?: string) {

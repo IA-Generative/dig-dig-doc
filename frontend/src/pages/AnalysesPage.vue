@@ -77,7 +77,7 @@ function onAnalyseCreated() {
         :link="{ name: 'analyse-detail', params: { id: analyse.id } }"
         :detail="formatDate(analyse.createdAt)"
         detail-icon="ri-calendar-line"
-        :end-detail="`${analyse.agents.length} agent${analyse.agents.length > 1 ? 's' : ''}`"
+        :end-detail="`${analyse.agentCount} agent${analyse.agentCount > 1 ? 's' : ''}`"
         end-detail-icon="ri-robot-line"
       />
     </div>

@@ -18,9 +18,9 @@ watch(opened, (isOpened) => {
   }
 });
 
-function submit() {
+async function submit() {
   if (!name.value.trim()) return;
-  create(name.value.trim(), description.value.trim());
+  await create(name.value.trim(), description.value.trim());
   opened.value = false;
   emit("created");
 }

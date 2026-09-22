@@ -9,6 +9,7 @@ from .analyse import (
     VersionedField,
 )
 from .base import Base
+from .conversation import Conversation, Message, MessageRole
 from .dossier import Dossier, DossierDocument, DossierStatus, ExecutionStep, ExecutionStepKind, ExecutionStepStatus
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "AgentTool",
     "Analyse",
     "Base",
+    "Conversation",
     "Dossier",
     "DossierDocument",
     "DossierStatus",
@@ -26,5 +28,7 @@ __all__ = [
     "ExecutionStepStatus",
     "FieldVersion",
     "LabelDefinition",
+    "Message",
+    "MessageRole",
     "VersionedField",
 ]

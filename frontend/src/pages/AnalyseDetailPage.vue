@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import AddAgentModal from "@/components/analyses/AddAgentModal.vue";
@@ -13,6 +13,7 @@ import { suggestClassificationPrompt, suggestExtractionPrompt } from "@/composab
 const route = useRoute();
 const {
   getById,
+  fetchAnalyse,
   updateClassificationPrompt,
   restoreClassificationPromptVersion,
   updateClassificationLabels,
@@ -24,6 +25,8 @@ const {
 } = useAnalyses();
 
 const analyse = computed(() => getById(String(route.params.id)));
+
+onMounted(() => fetchAnalyse(String(route.params.id)));
 const isAddAgentModalOpened = ref(false);
 const activeTab = ref(0);
 

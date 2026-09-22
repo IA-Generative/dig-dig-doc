@@ -3,13 +3,12 @@ import { computed, ref, watch } from "vue";
 
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
-import type { DossierDocument } from "@/types/dossier";
 
 const opened = defineModel<boolean>("opened", { default: false });
 const emit = defineEmits<{ created: [] }>();
 
 const { list: analyses } = useAnalyses();
-const { create } = useDossiers();
+const { create, addDocuments } = useDossiers();
 
 const analyseOptions = computed(() => analyses.value.map((analyse) => ({ value: analyse.id, text: analyse.name })));
 
@@ -37,14 +36,10 @@ function formatSize(bytes: number) {
   return bytes < 1_000_000 ? `${Math.round(bytes / 1000)} Ko` : `${(bytes / 1_000_000).toFixed(1)} Mo`;
 }
 
-function submit() {
+async function submit() {
   if (!name.value.trim() || !analyseId.value) return;
-  const documents: DossierDocument[] = files.value.map((file, index) => ({
-    id: `doc-${Date.now()}-${index}`,
-    name: file.name,
-    size: file.size,
-  }));
-  create(name.value.trim(), analyseId.value, documents);
+  const dossier = await create(name.value.trim(), analyseId.value);
+  if (files.value.length > 0) await addDocuments(dossier.id, files.value);
   opened.value = false;
   emit("created");
 }
