@@ -9,4 +9,5 @@ def test_health(client: TestClient) -> None:
 
 def test_health_ready(client: TestClient) -> None:
     response = client.get("/api/health/ready")
-    assert response.json()["dependencies"][0]["name"] == "redis"
+    body = response.json()
+    assert {dep["name"] for dep in body["dependencies"]} == {"postgres", "redis", "s3"}
