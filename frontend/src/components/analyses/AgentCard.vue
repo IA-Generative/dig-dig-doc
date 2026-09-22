@@ -11,32 +11,59 @@ const props = defineProps<{ analyseId: string; agent: Agent }>();
 
 const NER_CAPABILITY: AgentCapability = "Extraction d'entités nommées";
 const isNerAgent = computed(() => props.agent.capability === NER_CAPABILITY);
+
+const capabilityIcons: Record<AgentCapability, string> = {
+  "Classification documentaire": "ri-price-tag-3-line",
+  "Extraction d'entités nommées": "ri-braces-line",
+  "Contrôle de cohérence": "ri-shield-check-line",
+  "Agent généraliste": "ri-robot-line",
+};
+const icon = computed(() => capabilityIcons[props.agent.capability]);
 </script>
 
 <template>
   <div class="agent-card">
     <div class="agent-card__header">
-      <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
+      <div class="agent-card__identity">
+        <span class="agent-card__icon"><VIcon :name="icon" /></span>
+        <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
+      </div>
       <DsfrBadge :label="agent.capability" type="info" small />
     </div>
 
     <AgentPromptEditor :analyse-id="analyseId" :agent="agent" />
 
-    <LabelsEditor v-if="agent.capability === 'Classification documentaire'" :analyse-id="analyseId" :agent="agent" />
-    <EntitiesEditor v-if="isNerAgent" :analyse-id="analyseId" :agent="agent" />
+    <template v-if="agent.capability === 'Classification documentaire' || isNerAgent">
+      <hr class="agent-card__divider" />
+      <LabelsEditor v-if="agent.capability === 'Classification documentaire'" :analyse-id="analyseId" :agent="agent" />
+      <EntitiesEditor v-if="isNerAgent" :analyse-id="analyseId" :agent="agent" />
+    </template>
 
-    <AgentVersionHistory :analyse-id="analyseId" :agent="agent" />
+    <template v-if="agent.promptVersions.length > 0">
+      <hr class="agent-card__divider" />
+      <AgentVersionHistory :analyse-id="analyseId" :agent="agent" />
+    </template>
   </div>
 </template>
 
 <style scoped>
 .agent-card {
+  background: var(--background-default-grey);
   border: 1px solid var(--border-default-grey);
-  border-radius: 0.25rem;
-  padding: 1.5rem;
+  border-radius: 1rem;
+  padding: 1.75rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.agent-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .agent-card__header {
@@ -46,7 +73,31 @@ const isNerAgent = computed(() => props.agent.capability === NER_CAPABILITY);
   gap: 1rem;
 }
 
+.agent-card__identity {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.agent-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #6a5cff1a 0%, #ff6ca01a 100%);
+  color: #4b3fd9;
+  flex-shrink: 0;
+}
+
 .agent-card__title {
+  margin: 0;
+}
+
+.agent-card__divider {
+  border: none;
+  border-top: 1px solid var(--border-default-grey);
   margin: 0;
 }
 </style>

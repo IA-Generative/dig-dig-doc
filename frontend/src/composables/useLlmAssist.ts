@@ -1,7 +1,7 @@
 // Mocked "aide LLM" suggestions until a real LLM-backed endpoint exists on
 // the BFF. Kept separate from useAnalyses (the data store) so the two
 // concerns - persistence vs. suggestion content - don't mix.
-import type { AgentCapability, EntityDefinition, LabelDefinition } from "@/types/analyse";
+import type { AgentCapability, EntityDefinition, EntityType, LabelDefinition } from "@/types/analyse";
 
 const promptTemplates: Record<AgentCapability, string> = {
   "Classification documentaire":
@@ -42,4 +42,20 @@ export function suggestLabels(): LabelDefinition[] {
 
 export function suggestEntities(): EntityDefinition[] {
   return suggestedEntities.map((entity, index) => ({ ...entity, id: `entity-suggestion-${index}` }));
+}
+
+/** Suggère une définition pour un label déjà nommé, à partir de son nom. */
+export function suggestLabelDefinition(name: string): string {
+  const match = suggestedLabels.find((label) => label.name.toLowerCase() === name.trim().toLowerCase());
+  if (match) return match.definition;
+  if (!name.trim()) return "Décris précisément ce que recouvre ce label.";
+  return `Document de type "${name.trim()}", à préciser (contenu attendu, mentions obligatoires...).`;
+}
+
+/** Suggère une définition et un type pour une entité déjà nommée, à partir de son nom. */
+export function suggestEntityDefinition(name: string): { definition: string; type: EntityType } {
+  const match = suggestedEntities.find((entity) => entity.name.toLowerCase() === name.trim().toLowerCase());
+  if (match) return { definition: match.definition, type: match.type };
+  if (!name.trim()) return { definition: "Décris précisément la valeur à extraire pour cette entité.", type: "texte" };
+  return { definition: `Valeur de "${name.trim()}" telle qu'elle apparaît sur le document.`, type: "texte" };
 }
