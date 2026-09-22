@@ -2,13 +2,13 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import DossierResults from "@/components/dossiers/DossierResults.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 interface FeedMessage {
   id: string;
-  role: "user" | "system";
   sender: string;
   content: string;
   timestamp: string;
@@ -29,27 +29,10 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
   échec: "error",
 };
 
-const classificationStep = computed(() => dossier.value?.executionSteps.find((s) => s.kind === "classification"));
-const detectedLabelName = computed(() => classificationStep.value?.output?.split(" (")[0]);
-
-// Fil de discussion : les résultats produits par l'exécution (côté "système",
-// aligné à gauche, sans bulle - comme les réponses de l'assistant sur
-// Muffin) et les messages ajoutés localement en alimentant l'analyse (côté
-// "vous", bulle grise alignée à droite).
-const localMessages = ref<FeedMessage[]>([]);
-
-const messages = computed<FeedMessage[]>(() => {
-  const stepMessages: FeedMessage[] = (dossier.value?.executionSteps ?? [])
-    .filter((s) => !!s.output)
-    .map((s) => ({
-      id: s.id,
-      role: "system",
-      sender: s.label,
-      content: s.output!,
-      timestamp: s.endedAt ?? s.startedAt,
-    }));
-  return [...stepMessages, ...localMessages.value].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-});
+// Fil d'échange pour alimenter l'analyse (documents, notes) : les résultats
+// eux-mêmes sont présentés directement dans DossierResults, pas ici, pour
+// rester visibles sans avoir à remonter la conversation.
+const messages = ref<FeedMessage[]>([]);
 
 const messagesEndRef = ref<HTMLElement | null>(null);
 watch(messages, () => {
@@ -98,9 +81,8 @@ function submit() {
     ...(content ? [content] : []),
   ];
 
-  localMessages.value.push({
+  messages.value.push({
     id: `feed-${Date.now()}`,
-    role: "user",
     sender: "Vous",
     content: parts.join("\n"),
     timestamp: new Date().toISOString(),
@@ -129,51 +111,21 @@ function submit() {
       <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
     </div>
 
-    <div v-if="analyse" class="dossier-detail__tags">
-      <div class="dossier-detail__tags-group">
-        <span class="fr-text--sm dossier-detail__tags-label">Classification</span>
-        <span v-if="analyse.classification.labels.length === 0" class="fr-text--sm">Aucun label configuré.</span>
-        <DsfrTag
-          v-for="label in analyse.classification.labels"
-          :key="label.id"
-          :label="label.name"
-          :icon="label.name === detectedLabelName ? 'ri-check-line' : undefined"
-          :link="`/analyses/${dossier.analyseId}`"
-          small
-        />
-      </div>
-      <div class="dossier-detail__tags-group">
-        <span class="fr-text--sm dossier-detail__tags-label">Entités</span>
-        <span v-if="analyse.extraction.entities.length === 0" class="fr-text--sm">Aucune entité configurée.</span>
-        <DsfrTag
-          v-for="entity in analyse.extraction.entities"
-          :key="entity.id"
-          :label="entity.name"
-          :link="`/analyses/${dossier.analyseId}`"
-          small
-        />
-      </div>
-    </div>
+    <DossierResults :dossier="dossier" :analyse="analyse" />
 
     <section class="chat-window">
       <div v-if="messages.length === 0" class="chat-window__intro">
-        <h2>En attente des résultats</h2>
+        <h2>Alimenter l'analyse</h2>
         <p class="fr-text--sm">
-          Les résultats de la classification, de l'extraction et des agents apparaîtront ici dès que l'analyse aura
-          tourné. Vous pouvez déjà alimenter l'analyse avec un document ou une note ci-dessous.
+          Ajoutez un document, une image ou une note pour compléter ce dossier. Les résultats de l'analyse
+          s'affichent ci-dessus.
         </p>
       </div>
 
       <div v-else class="chat-window__messages">
         <div class="chat-window__inner">
-          <div
-            v-for="message in messages"
-            :key="message.id"
-            class="chat-message"
-            :class="`chat-message--${message.role}`"
-          >
+          <div v-for="message in messages" :key="message.id" class="chat-message">
             <div class="chat-message__bubble">
-              <span v-if="message.role === 'system'" class="chat-message__sender">{{ message.sender }}</span>
               <p class="chat-message__text">{{ message.content }}</p>
             </div>
           </div>
@@ -244,7 +196,7 @@ function submit() {
 .dossier-detail {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 8rem);
+  min-height: calc(100vh - 8rem);
 }
 
 .dossier-detail__back {
@@ -262,35 +214,12 @@ function submit() {
   flex-shrink: 0;
 }
 
-.dossier-detail__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2rem;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-default-grey);
-  flex-shrink: 0;
-}
-
-.dossier-detail__tags-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.dossier-detail__tags-label {
-  font-weight: bold;
-  margin-right: 0.25rem;
-}
-
 /* Style repris de Muffin (frontend/src/components/ChatWindow.vue et
-   ChatMessage.vue) : colonne centrée, messages "système" à gauche sans
-   bulle, messages "vous" en bulle grise à droite, composer en pilule
-   arrondie avec textarea auto-agrandissante. */
+   ChatMessage.vue) : colonne centrée, bulle grise arrondie à droite,
+   composer en pilule arrondie avec textarea auto-agrandissante. */
 .chat-window {
   flex: 1;
-  min-height: 0;
+  min-height: 16rem;
   display: flex;
   flex-direction: column;
 }
@@ -299,6 +228,7 @@ function submit() {
   max-width: 48rem;
   margin: 0 auto;
   padding: 0 0.5rem;
+  width: 100%;
 }
 
 .chat-window__intro {
@@ -330,34 +260,15 @@ function submit() {
 
 .chat-message {
   display: flex;
+  justify-content: flex-end;
   padding: 0.5rem 0;
 }
 
-.chat-message--system {
-  justify-content: flex-start;
-}
-
-.chat-message--user {
-  justify-content: flex-end;
-}
-
-.chat-message--user .chat-message__bubble {
+.chat-message__bubble {
   max-width: 75%;
   padding: 0.75rem 1.125rem;
   border-radius: 1.25rem;
   background: var(--background-alt-grey);
-}
-
-.chat-message--system .chat-message__bubble {
-  max-width: 100%;
-}
-
-.chat-message__sender {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: bold;
-  margin-bottom: 0.25rem;
-  color: var(--text-mention-grey);
 }
 
 .chat-message__text {

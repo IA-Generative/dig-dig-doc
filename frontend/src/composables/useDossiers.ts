@@ -1,7 +1,7 @@
 import { computed, reactive } from "vue";
 
 import { useAnalyses } from "@/composables/useAnalyses";
-import type { Agent, Analyse } from "@/types/analyse";
+import type { Agent, Analyse, EntityType } from "@/types/analyse";
 import type { Dossier, DossierDocument, ExecutionStep, ExecutionStepKind } from "@/types/dossier";
 
 // In-memory mock store until the BFF/worker exposes a real /dossiers API.
@@ -59,9 +59,22 @@ function mockClassificationOutput(analyse: Analyse): string {
   return `${label.name} (confiance : ${confidence}%)`;
 }
 
+const MOCK_VALUES_BY_TYPE: Record<EntityType, string[]> = {
+  texte: ["Dupont", "12 rue de la République, 75011 Paris"],
+  date: ["15/03/1985", "02/09/2026"],
+  nombre: ["42", "1 284"],
+  booléen: ["Oui", "Non"],
+  identifiant: ["FR-284910-B", "2026-0417-CNI"],
+};
+
+function mockValueForType(type: EntityType): string {
+  const values = MOCK_VALUES_BY_TYPE[type];
+  return values[Math.floor(Math.random() * values.length)];
+}
+
 function mockExtractionOutput(analyse: Analyse): string {
   if (analyse.extraction.entities.length === 0) return "Aucune entité configurée pour cette analyse.";
-  return analyse.extraction.entities.map((entity) => `${entity.name} : —`).join(" · ");
+  return analyse.extraction.entities.map((entity) => `${entity.name} : ${mockValueForType(entity.type)}`).join(" · ");
 }
 
 function mockAgentOutput(agent: Agent): string {
