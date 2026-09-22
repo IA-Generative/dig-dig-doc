@@ -53,6 +53,43 @@ def test_labels_round_trip_and_version(client: TestClient) -> None:
     assert len(body["classification"]["labels_versions"]) == 2
 
 
+def test_share_by_email_returns_working_link(client: TestClient) -> None:
+    analyse = client.post("/api/analyses", json={"name": "Analyse partagée"}).json()
+
+    share = client.post(
+        f"/api/analyses/{analyse['id']}/shares",
+        json={"kind": "email", "email": "instructeur.externe@example.com"},
+    ).json()
+    assert share["kind"] == "email"
+    assert share["email"] == "instructeur.externe@example.com"
+    assert share["share_url"] is not None
+    token = share["share_url"].rsplit("/", 1)[-1]
+
+    # Le jeton en clair n'est jamais renvoyé une seconde fois.
+    listed = client.get(f"/api/analyses/{analyse['id']}/shares").json()
+    assert listed[0]["share_url"] is None
+
+    shared = client.get(f"/api/analyses/shared/{token}").json()
+    assert shared["id"] == analyse["id"]
+
+    # Un jeton invalide ne donne accès à rien.
+    assert client.get("/api/analyses/shared/not-a-real-token").status_code == 404
+
+    client.delete(f"/api/analyses/{analyse['id']}/shares/{share['id']}")
+    assert client.get(f"/api/analyses/shared/{token}").status_code == 404
+
+
+def test_share_by_keycloak_group(client: TestClient) -> None:
+    analyse = client.post("/api/analyses", json={"name": "Analyse partagée par groupe"}).json()
+
+    share = client.post(
+        f"/api/analyses/{analyse['id']}/shares", json={"kind": "keycloak_group", "keycloak_group": "prefecture-75"}
+    ).json()
+    assert share["kind"] == "keycloak_group"
+    assert share["keycloak_group"] == "prefecture-75"
+    assert share["share_url"] is None
+
+
 def test_agent_lifecycle_and_output_versioning(client: TestClient) -> None:
     analyse = client.post("/api/analyses", json={"name": "Agents test"}).json()
     analyse_id = analyse["id"]

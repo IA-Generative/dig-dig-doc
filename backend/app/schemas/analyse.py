@@ -4,6 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 from app.models.analyse import AgentTool, EntityType
+from app.models.analyse_share import AnalyseShareKind
 
 
 class Version[T](BaseModel):
@@ -114,3 +115,27 @@ class ToolsUpdate(BaseModel):
 
 class OutputUpdate(BaseModel):
     output: bool
+
+
+class AnalyseShareCreate(BaseModel):
+    kind: AnalyseShareKind
+    # kind == email :
+    email: str | None = None
+    expires_in_hours: int | None = None
+    # kind == keycloak_group :
+    keycloak_group: str | None = None
+
+
+class AnalyseShareOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: AnalyseShareKind
+    email: str | None
+    keycloak_group: str | None
+    expires_at: datetime | None
+    created_by: str
+    created_at: datetime
+    # Uniquement renvoyé à la création d'un partage par email : le jeton en
+    # clair n'est jamais stocké, donc jamais renvoyé ensuite.
+    share_url: str | None = None

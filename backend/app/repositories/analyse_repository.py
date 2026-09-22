@@ -1,11 +1,13 @@
 import uuid
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.security.share_token import generate_token, hash_token
 from app.models.analyse import (
     Agent,
     AgentTool,
@@ -15,6 +17,7 @@ from app.models.analyse import (
     LabelDefinition,
     VersionedField,
 )
+from app.models.analyse_share import AnalyseShare, AnalyseShareKind
 
 if TYPE_CHECKING:
     from app.schemas.analyse import AgentOut, AnalyseOut
@@ -30,6 +33,7 @@ class AnalyseRepository:
             selectinload(Analyse.entities),
             selectinload(Analyse.agents),
             selectinload(Analyse.field_versions),
+            selectinload(Analyse.shares),
         )
 
     async def list_all(self) -> Sequence[Analyse]:
@@ -256,3 +260,51 @@ class AnalyseRepository:
             extraction=extraction,
             agents=[self.to_agent_schema(analyse, agent) for agent in analyse.agents],
         )
+
+    # --- Partage ---
+
+    async def create_email_share(
+        self, analyse: Analyse, *, email: str, expires_in_hours: int, created_by: str
+    ) -> tuple[AnalyseShare, str]:
+        token = generate_token()
+        share = AnalyseShare(
+            analyse_id=analyse.id,
+            kind=AnalyseShareKind.EMAIL,
+            email=email,
+            token_hash=hash_token(token),
+            expires_at=datetime.now(UTC) + timedelta(hours=expires_in_hours),
+            created_by=created_by,
+        )
+        self.db.add(share)
+        await self.db.commit()
+        await self.db.refresh(share)
+        return share, token
+
+    async def create_group_share(self, analyse: Analyse, *, keycloak_group: str, created_by: str) -> AnalyseShare:
+        share = AnalyseShare(
+            analyse_id=analyse.id,
+            kind=AnalyseShareKind.KEYCLOAK_GROUP,
+            keycloak_group=keycloak_group,
+            created_by=created_by,
+        )
+        self.db.add(share)
+        await self.db.commit()
+        await self.db.refresh(share)
+        return share
+
+    async def revoke_share(self, share: AnalyseShare) -> None:
+        await self.db.delete(share)
+        await self.db.commit()
+
+    async def get_share_by_id(self, analyse_id: uuid.UUID, share_id: uuid.UUID) -> AnalyseShare | None:
+        result = await self.db.execute(
+            select(AnalyseShare).where(AnalyseShare.id == share_id, AnalyseShare.analyse_id == analyse_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_share_token(self, token: str) -> Analyse | None:
+        result = await self.db.execute(select(AnalyseShare).where(AnalyseShare.token_hash == hash_token(token)))
+        share = result.scalar_one_or_none()
+        if share is None or (share.expires_at and share.expires_at < datetime.now(UTC)):
+            return None
+        return await self.get(share.analyse_id)

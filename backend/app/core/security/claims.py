@@ -16,4 +16,5 @@ def extract_identity(claims: dict, client_id: str) -> dict | None:
         "last_name": claims.get("family_name", ""),
         "roles": roles,
         "is_admin": "admin" in roles or "realm-admin" in roles,
+        "groups": claims.get("groups", []),
     }
