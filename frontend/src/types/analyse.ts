@@ -23,11 +23,14 @@ export const AGENT_TOOL_LABELS: Record<AgentTool, string> = {
   verification_coherence: "Vérification de cohérence",
 };
 
-export interface PromptVersion {
+/** Un instantané d'une valeur passée, horodaté, pour permettre une restauration. */
+export interface Version<T> {
   id: string;
-  content: string;
+  content: T;
   createdAt: string;
 }
+
+export type PromptVersion = Version<string>;
 
 export interface LabelDefinition {
   id: string;
@@ -51,8 +54,10 @@ export interface Agent {
   tools: AgentTool[];
   /** Utilisé quand capability === "Classification documentaire". */
   labels: LabelDefinition[];
+  labelsVersions: Version<LabelDefinition[]>[];
   /** Utilisé quand capability === "Extraction d'entités nommées". */
   entities: EntityDefinition[];
+  entitiesVersions: Version<EntityDefinition[]>[];
 }
 
 export interface Analyse {
