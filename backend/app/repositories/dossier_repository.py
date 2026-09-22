@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.analyse import Analyse
+from app.models.conversation import Conversation, Message, MessageRole
 from app.models.dossier import (
     Dossier,
     DossierDocument,
@@ -48,9 +49,61 @@ class DossierRepository:
 
     async def add_documents(self, dossier: Dossier, documents: list[dict]) -> None:
         for document in documents:
-            self.db.add(DossierDocument(dossier_id=dossier.id, name=document["name"], size=document["size"]))
+            self.db.add(
+                DossierDocument(
+                    dossier_id=dossier.id,
+                    name=document["name"],
+                    size=document["size"],
+                    s3_key=document["s3_key"],
+                    mimetype=document["mimetype"],
+                )
+            )
         await self.db.commit()
         await self.db.refresh(dossier)
+
+    async def set_document_label(self, document: DossierDocument, label: str | None) -> None:
+        document.label = label
+        await self.db.commit()
+        await self.db.refresh(document)
+
+    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
+        result = await self.db.execute(
+            select(DossierDocument).where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
+        )
+        return result.scalar_one_or_none()
+
+    def _conversation_query(self):
+        # populate_existing: without it, re-querying a Conversation already in
+        # the identity map (e.g. right after adding a message to it) would
+        # keep the stale, already-loaded `messages` collection instead of
+        # picking up the row just committed.
+        return (
+            select(Conversation).options(selectinload(Conversation.messages)).execution_options(populate_existing=True)
+        )
+
+    async def list_conversations(self, dossier_id: uuid.UUID, user_id: str) -> Sequence[Conversation]:
+        result = await self.db.execute(
+            self._conversation_query()
+            .where(Conversation.dossier_id == dossier_id, Conversation.user_id == user_id)
+            .order_by(Conversation.created_at)
+        )
+        return result.scalars().all()
+
+    async def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:
+        result = await self.db.execute(self._conversation_query().where(Conversation.id == conversation_id))
+        return result.scalar_one_or_none()
+
+    async def create_conversation(self, dossier_id: uuid.UUID, user_id: str) -> Conversation:
+        conversation = Conversation(dossier_id=dossier_id, user_id=user_id)
+        self.db.add(conversation)
+        await self.db.commit()
+        await self.db.refresh(conversation)
+        return await self.get_conversation(conversation.id)
+
+    async def add_message(self, conversation: Conversation, role: MessageRole, content: str) -> Conversation:
+        self.db.add(Message(conversation_id=conversation.id, role=role, content=content))
+        await self.db.commit()
+        return await self.get_conversation(conversation.id)
 
     async def launch(self, dossier: Dossier, analyse: Analyse) -> None:
         """Marks the dossier as running and lays down one execution step per

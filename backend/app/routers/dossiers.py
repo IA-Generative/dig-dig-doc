@@ -4,12 +4,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.factory import get_current_user
+from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
+from app.models.conversation import MessageRole
 from app.models.dossier import Dossier
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
-from app.schemas.dossier import DossierCreate, DossierOut
+from app.schemas.dossier import (
+    ConversationOut,
+    DossierCreate,
+    DossierDocumentLabelIn,
+    DossierDocumentOut,
+    DossierOut,
+    MessageIn,
+)
 
 router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
 
@@ -49,9 +57,32 @@ async def add_documents(
 ) -> Dossier:
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id)
-    documents = [{"name": f.filename or "document", "size": f.size or 0} for f in files]
+    documents = [
+        {
+            "name": f.filename or "document",
+            "size": f.size or 0,
+            "s3_key": f"dossiers/{dossier_id}/{uuid.uuid4()}-{f.filename or 'document'}",
+            "mimetype": f.content_type or "application/octet-stream",
+        }
+        for f in files
+    ]
     await repository.add_documents(dossier, documents)
     return dossier
+
+
+@router.put("/{dossier_id}/documents/{document_id}/label", response_model=DossierDocumentOut)
+async def set_document_label(
+    dossier_id: uuid.UUID,
+    document_id: uuid.UUID,
+    body: DossierDocumentLabelIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    repository = DossierRepository(db)
+    document = await repository.get_document(dossier_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    await repository.set_document_label(document, body.label)
+    return document
 
 
 @router.post("/{dossier_id}/launch", response_model=DossierOut)
@@ -71,3 +102,41 @@ async def stop_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depend
     dossier = await _get_or_404(repository, dossier_id)
     await repository.stop(dossier)
     return dossier
+
+
+@router.get("/{dossier_id}/conversations", response_model=list[ConversationOut])
+async def list_conversations(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    return await repository.list_conversations(dossier_id, user.user_id)
+
+
+@router.post("/{dossier_id}/conversations", response_model=ConversationOut, status_code=status.HTTP_201_CREATED)
+async def create_conversation(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    return await repository.create_conversation(dossier_id, user.user_id)
+
+
+@router.post("/{dossier_id}/conversations/{conversation_id}/messages", response_model=ConversationOut)
+async def add_message(
+    dossier_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    body: MessageIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
+    return await repository.add_message(conversation, MessageRole.USER, body.content)

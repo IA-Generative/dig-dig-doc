@@ -1,25 +1,32 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
+import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
-interface FeedMessage {
-  id: string;
-  sender: string;
-  content: string;
-  timestamp: string;
-}
-
 const route = useRoute();
+const dossierId = String(route.params.id);
 const { list: dossiers, addDocuments } = useDossiers();
-const { getById: getAnalyseById } = useAnalyses();
+const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
+const { conversation, ensureConversation, sendMessage } = useConversations(dossierId);
 
-const dossier = computed(() => dossiers.value.find((d) => d.id === String(route.params.id)));
+const dossier = computed(() => dossiers.value.find((d) => d.id === dossierId));
 const analyse = computed(() => (dossier.value ? getAnalyseById(dossier.value.analyseId) : undefined));
+
+onMounted(() => {
+  ensureConversation();
+  if (dossier.value) fetchAnalyse(dossier.value.analyseId);
+});
+watch(
+  () => dossier.value?.analyseId,
+  (analyseId) => {
+    if (analyseId) fetchAnalyse(analyseId);
+  },
+);
 
 const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warning" | "error"> = {
   en_attente: "new",
@@ -32,7 +39,7 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
 // Fil d'échange pour alimenter l'analyse (documents, notes) : les résultats
 // eux-mêmes sont présentés directement dans DossierResults, pas ici, pour
 // rester visibles sans avoir à remonter la conversation.
-const messages = ref<FeedMessage[]>([]);
+const messages = computed(() => conversation.value?.messages ?? []);
 
 const messagesEndRef = ref<HTMLElement | null>(null);
 watch(messages, () => {
@@ -65,13 +72,13 @@ function removePendingFile(index: number) {
   pendingFiles.value.splice(index, 1);
 }
 
-function submit() {
+async function submit() {
   if (!dossier.value) return;
   const content = draft.value.trim();
   if (!content && pendingFiles.value.length === 0) return;
 
   if (pendingFiles.value.length > 0) {
-    addDocuments(dossier.value.id, pendingFiles.value);
+    await addDocuments(dossier.value.id, pendingFiles.value);
   }
 
   const parts = [
@@ -81,16 +88,11 @@ function submit() {
     ...(content ? [content] : []),
   ];
 
-  messages.value.push({
-    id: `feed-${Date.now()}`,
-    sender: "Vous",
-    content: parts.join("\n"),
-    timestamp: new Date().toISOString(),
-  });
-
   draft.value = "";
   pendingFiles.value = [];
   nextTick(resizeTextarea);
+
+  await sendMessage(parts.join("\n"));
 }
 </script>
 

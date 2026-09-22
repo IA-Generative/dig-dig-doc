@@ -89,3 +89,12 @@ export interface Analyse {
   extraction: Extraction;
   agents: Agent[];
 }
+
+/** Version allégée renvoyée par la liste des analyses (GET /api/analyses). */
+export interface AnalyseSummary {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  agentCount: number;
+}
