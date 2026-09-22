@@ -1,17 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
+import CreateAnalyseModal from "@/components/analyses/CreateAnalyseModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 
-const { list, create } = useAnalyses();
+const { list } = useAnalyses();
 
 const searchQuery = ref("");
 const currentPage = ref(1);
 const pageSize = 6;
-
 const isCreateModalOpened = ref(false);
-const newAnalyseName = ref("");
-const newAnalyseDescription = ref("");
 
 const filteredAnalyses = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
@@ -44,16 +42,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-function openCreateModal() {
-  newAnalyseName.value = "";
-  newAnalyseDescription.value = "";
-  isCreateModalOpened.value = true;
-}
-
-function submitCreateAnalyse() {
-  if (!newAnalyseName.value.trim()) return;
-  create(newAnalyseName.value.trim(), newAnalyseDescription.value.trim());
-  isCreateModalOpened.value = false;
+function onAnalyseCreated() {
   currentPage.value = 1;
 }
 </script>
@@ -65,7 +54,7 @@ function submitCreateAnalyse() {
         <h1 class="fr-h2">Analyses</h1>
         <p class="fr-text--lead">Retrouvez vos analyses ou créez-en une nouvelle.</p>
       </div>
-      <DsfrButton label="Créer une analyse" icon="ri-add-line" @click="openCreateModal" />
+      <DsfrButton label="Créer une analyse" icon="ri-add-line" @click="isCreateModalOpened = true" />
     </div>
 
     <DsfrSearchBar
@@ -100,23 +89,7 @@ function submitCreateAnalyse() {
       class="analyses-page__pagination"
     />
 
-    <DsfrModal
-      v-model:opened="isCreateModalOpened"
-      title="Créer une analyse"
-      :actions="[
-        { label: 'Annuler', secondary: true, onClick: () => (isCreateModalOpened = false) },
-        { label: 'Créer', onClick: submitCreateAnalyse },
-      ]"
-    >
-      <DsfrInput v-model="newAnalyseName" label="Nom de l'analyse" label-visible required />
-      <DsfrInput
-        v-model="newAnalyseDescription"
-        label="Description"
-        label-visible
-        is-textarea
-        class="fr-mt-2w"
-      />
-    </DsfrModal>
+    <CreateAnalyseModal v-model:opened="isCreateModalOpened" @created="onAnalyseCreated" />
   </div>
 </template>
 
