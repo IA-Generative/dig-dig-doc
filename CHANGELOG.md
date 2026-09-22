@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.2.0...v0.3.0-rc) (2026-09-22)
+
+
+### Features
+
+* **backend:** authentification Keycloak du BFF, comme Muffin ([87bba53](https://github.com/IA-Generative/dig-dig-doc/commit/87bba53a09533295e0a35226d2fa674553904385))
+
 ## [0.2.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.1.0...v0.2.0) (2026-09-22)
 
 
