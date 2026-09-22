@@ -1,60 +1,40 @@
 <script setup lang="ts">
-import { computed } from "vue";
-
-import AgentPromptEditor from "@/components/analyses/AgentPromptEditor.vue";
 import AgentToolsEditor from "@/components/analyses/AgentToolsEditor.vue";
-import AgentVersionHistory from "@/components/analyses/AgentVersionHistory.vue";
-import EntitiesEditor from "@/components/analyses/EntitiesEditor.vue";
-import LabelsEditor from "@/components/analyses/LabelsEditor.vue";
-import type { Agent, AgentCapability } from "@/types/analyse";
+import PromptEditor from "@/components/analyses/PromptEditor.vue";
+import { useAnalyses } from "@/composables/useAnalyses";
+import { suggestAgentPrompt } from "@/composables/useLlmAssist";
+import type { Agent } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const NER_CAPABILITY: AgentCapability = "Extraction d'entités nommées";
-const AGENT_CAPABILITY: AgentCapability = "Agent généraliste";
-const isNerAgent = computed(() => props.agent.capability === NER_CAPABILITY);
-// Seul "Agent généraliste" est un vrai agent capable d'utiliser des outils.
-// Classification, extraction d'entités et contrôle de cohérence sont des
-// analyses simples : un prompt appliqué systématiquement, pas un agent
-// autonome avec des outils.
-const isRealAgent = computed(() => props.agent.capability === AGENT_CAPABILITY);
+const { updateAgentPrompt, restoreAgentPromptVersion } = useAnalyses();
 
-const capabilityIcons: Record<AgentCapability, string> = {
-  "Classification documentaire": "ri-price-tag-3-line",
-  "Extraction d'entités nommées": "ri-braces-line",
-  "Contrôle de cohérence": "ri-shield-check-line",
-  "Agent généraliste": "ri-robot-line",
-};
-const icon = computed(() => capabilityIcons[props.agent.capability]);
+function savePrompt(prompt: string) {
+  updateAgentPrompt(props.analyseId, props.agent.id, prompt);
+}
+
+function restorePromptVersion(versionId: string) {
+  restoreAgentPromptVersion(props.analyseId, props.agent.id, versionId);
+}
 </script>
 
 <template>
   <div class="agent-card">
     <div class="agent-card__header">
-      <div class="agent-card__identity">
-        <span class="agent-card__icon"><VIcon :name="icon" /></span>
-        <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
-      </div>
-      <DsfrBadge :label="agent.capability" type="info" small />
+      <span class="agent-card__icon"><VIcon name="ri-robot-line" /></span>
+      <h3 class="fr-h5 agent-card__title">{{ agent.name }}</h3>
     </div>
 
-    <AgentPromptEditor :analyse-id="analyseId" :agent="agent" />
+    <PromptEditor
+      :prompt="agent.prompt"
+      :versions="agent.promptVersions"
+      :suggest-prompt="suggestAgentPrompt"
+      @save="savePrompt"
+      @restore="restorePromptVersion"
+    />
 
-    <template v-if="isRealAgent">
-      <hr class="agent-card__divider" />
-      <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
-    </template>
-
-    <template v-if="agent.capability === 'Classification documentaire' || isNerAgent">
-      <hr class="agent-card__divider" />
-      <LabelsEditor v-if="agent.capability === 'Classification documentaire'" :analyse-id="analyseId" :agent="agent" />
-      <EntitiesEditor v-if="isNerAgent" :analyse-id="analyseId" :agent="agent" />
-    </template>
-
-    <template v-if="agent.promptVersions.length > 0">
-      <hr class="agent-card__divider" />
-      <AgentVersionHistory :analyse-id="analyseId" :agent="agent" />
-    </template>
+    <hr class="agent-card__divider" />
+    <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
   </div>
 </template>
 
@@ -79,13 +59,6 @@ const icon = computed(() => capabilityIcons[props.agent.capability]);
 }
 
 .agent-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.agent-card__identity {
   display: flex;
   align-items: center;
   gap: 0.75rem;

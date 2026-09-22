@@ -3,17 +3,15 @@ import { computed, nextTick, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
-import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestLabelDefinition, suggestLabels } from "@/composables/useLlmAssist";
-import type { Agent, LabelDefinition } from "@/types/analyse";
+import type { LabelDefinition, Version } from "@/types/analyse";
 
-const props = defineProps<{ analyseId: string; agent: Agent }>();
-
-const { updateAgentLabels, restoreAgentLabelsVersion } = useAnalyses();
+const props = defineProps<{ labels: LabelDefinition[]; versions: Version<LabelDefinition[]>[] }>();
+const emit = defineEmits<{ save: [LabelDefinition[]]; restore: [string] }>();
 
 const pageSize = 3;
 
-const draftLabels = ref<LabelDefinition[]>(cloneLabels(props.agent.labels));
+const draftLabels = ref<LabelDefinition[]>(cloneLabels(props.labels));
 const isDirty = ref(false);
 const currentPage = ref(1);
 
@@ -22,7 +20,7 @@ function cloneLabels(labels: LabelDefinition[]): LabelDefinition[] {
 }
 
 watch(
-  () => props.agent.labels,
+  () => props.labels,
   (labels) => {
     draftLabels.value = cloneLabels(labels);
     isDirty.value = false;
@@ -33,7 +31,7 @@ watch(
 watch(
   draftLabels,
   (labels) => {
-    isDirty.value = JSON.stringify(labels) !== JSON.stringify(props.agent.labels);
+    isDirty.value = JSON.stringify(labels) !== JSON.stringify(props.labels);
   },
   { deep: true },
 );
@@ -69,11 +67,7 @@ function applyDefinitionSuggestion(label: LabelDefinition) {
 }
 
 function save() {
-  updateAgentLabels(props.analyseId, props.agent.id, draftLabels.value);
-}
-
-function restoreVersion(versionId: string) {
-  restoreAgentLabelsVersion(props.analyseId, props.agent.id, versionId);
+  emit("save", draftLabels.value);
 }
 
 function formatVersionContent(labels: LabelDefinition[]) {
@@ -85,7 +79,7 @@ function formatVersionContent(labels: LabelDefinition[]) {
   <div class="labels-editor">
     <h4 class="fr-h6 labels-editor__title">Labels de classification</h4>
 
-    <p v-if="draftLabels.length === 0" class="fr-text--sm">Aucun label défini pour cet agent.</p>
+    <p v-if="draftLabels.length === 0" class="fr-text--sm">Aucun label défini.</p>
 
     <template v-else>
       <ul class="labels-editor__list">
@@ -122,7 +116,7 @@ function formatVersionContent(labels: LabelDefinition[]) {
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
 
-    <VersionHistory :versions="agent.labelsVersions" :format-content="formatVersionContent" @restore="restoreVersion" />
+    <VersionHistory :versions="versions" :format-content="formatVersionContent" @restore="emit('restore', $event)" />
   </div>
 </template>
 

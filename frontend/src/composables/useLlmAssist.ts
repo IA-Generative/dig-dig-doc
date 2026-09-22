@@ -1,20 +1,18 @@
 // Mocked "aide LLM" suggestions until a real LLM-backed endpoint exists on
 // the BFF. Kept separate from useAnalyses (the data store) so the two
 // concerns - persistence vs. suggestion content - don't mix.
-import type { AgentCapability, EntityDefinition, EntityType, LabelDefinition } from "@/types/analyse";
+import type { EntityDefinition, EntityType, LabelDefinition } from "@/types/analyse";
 
-const promptTemplates: Record<AgentCapability, string> = {
-  "Classification documentaire":
-    "Tu es un agent de classification documentaire. Analyse le document fourni et retourne une catégorie " +
-    "normalisée parmi les labels définis, avec un score de confiance.",
-  "Extraction d'entités nommées":
-    "Tu es un agent d'extraction d'entités nommées. Extrait les entités définies au format JSON strict, " +
-    "sans inventer de champ absent du document.",
-  "Contrôle de cohérence":
-    "Tu es un agent de contrôle de cohérence. Compare les entités extraites entre les pièces du dossier et signale " +
-    "les incohérences (valide / incohérence_détectée / vérification_manuelle_requise) en citant les champs divergents.",
-  "Agent généraliste": "Tu es un agent généraliste. Décris précisément la tâche que tu dois accomplir sur le dossier.",
-};
+const CLASSIFICATION_PROMPT_TEMPLATE =
+  "Analyse le document fourni et retourne une catégorie normalisée parmi les labels définis, " +
+  "avec un score de confiance.";
+
+const EXTRACTION_PROMPT_TEMPLATE =
+  "Extrait les entités définies au format JSON strict, sans inventer de champ absent du document.";
+
+const AGENT_PROMPT_TEMPLATE =
+  "Décris précisément le but métier de cet agent (ex : contrôle de cohérence entre pièces, rédaction d'une " +
+  "synthèse, construction d'une timeline des événements du dossier...) et le résultat attendu.";
 
 const suggestedLabels: Omit<LabelDefinition, "id">[] = [
   { name: "CNI", definition: "Carte nationale d'identité française, recto ou verso." },
@@ -32,8 +30,16 @@ const suggestedEntities: Omit<EntityDefinition, "id">[] = [
   { name: "Numéro de pièce", definition: "Numéro d'identification unique du document.", type: "identifiant" },
 ];
 
-export function suggestPrompt(capability: AgentCapability): string {
-  return promptTemplates[capability];
+export function suggestClassificationPrompt(): string {
+  return CLASSIFICATION_PROMPT_TEMPLATE;
+}
+
+export function suggestExtractionPrompt(): string {
+  return EXTRACTION_PROMPT_TEMPLATE;
+}
+
+export function suggestAgentPrompt(): string {
+  return AGENT_PROMPT_TEMPLATE;
 }
 
 export function suggestLabels(): LabelDefinition[] {
