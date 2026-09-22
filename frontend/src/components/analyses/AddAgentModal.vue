@@ -4,7 +4,7 @@ import { ref, watch } from "vue";
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestPrompt } from "@/composables/useLlmAssist";
-import type { AgentCapability } from "@/types/analyse";
+import { AGENT_TOOL_LABELS, type AgentCapability, type AgentTool } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string }>();
 const opened = defineModel<boolean>("opened", { default: false });
@@ -19,15 +19,23 @@ const capabilities: AgentCapability[] = [
   "Agent généraliste",
 ];
 
+const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) => ({
+  name: tool,
+  value: tool,
+  label: AGENT_TOOL_LABELS[tool],
+}));
+
 const name = ref("");
 const capability = ref<AgentCapability>(capabilities[0]);
 const prompt = ref("");
+const tools = ref<AgentTool[]>([]);
 
 watch(opened, (isOpened) => {
   if (isOpened) {
     name.value = "";
     capability.value = capabilities[0];
     prompt.value = "";
+    tools.value = [];
   }
 });
 
@@ -37,7 +45,7 @@ function applySuggestion() {
 
 function submit() {
   if (!name.value.trim() || !prompt.value.trim()) return;
-  addAgent(props.analyseId, name.value.trim(), capability.value, prompt.value.trim());
+  addAgent(props.analyseId, name.value.trim(), capability.value, prompt.value.trim(), tools.value);
   opened.value = false;
   emit("created");
 }
@@ -57,5 +65,13 @@ function submit() {
     <DsfrSelect v-model="capability" label="Capacité" class="fr-mt-2w" :options="capabilities" />
     <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
     <LlmAssistButton label="Aide à la rédaction du prompt" class="fr-mt-2w" @click="applySuggestion" />
+    <DsfrCheckboxSet
+      v-model="tools"
+      legend="Outils disponibles"
+      :options="toolOptions"
+      inline
+      small
+      class="fr-mt-2w"
+    />
   </DsfrModal>
 </template>

@@ -6,6 +6,23 @@ export type AgentCapability =
 
 export type EntityType = "texte" | "date" | "nombre" | "booléen" | "identifiant";
 
+export type AgentTool =
+  | "lecture_document"
+  | "recherche_web"
+  | "base_connaissances"
+  | "appel_agent"
+  | "calculatrice"
+  | "verification_coherence";
+
+export const AGENT_TOOL_LABELS: Record<AgentTool, string> = {
+  lecture_document: "Lecture de document",
+  recherche_web: "Recherche web",
+  base_connaissances: "Base de connaissances",
+  appel_agent: "Appel à un autre agent",
+  calculatrice: "Calculatrice",
+  verification_coherence: "Vérification de cohérence",
+};
+
 export interface PromptVersion {
   id: string;
   content: string;
@@ -31,6 +48,7 @@ export interface Agent {
   capability: AgentCapability;
   prompt: string;
   promptVersions: PromptVersion[];
+  tools: AgentTool[];
   /** Utilisé quand capability === "Classification documentaire". */
   labels: LabelDefinition[];
   /** Utilisé quand capability === "Extraction d'entités nommées". */

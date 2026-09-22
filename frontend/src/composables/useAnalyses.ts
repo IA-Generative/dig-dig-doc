@@ -1,6 +1,6 @@
 import { computed, reactive } from "vue";
 
-import type { Agent, AgentCapability, Analyse, EntityDefinition, LabelDefinition } from "@/types/analyse";
+import type { Agent, AgentCapability, AgentTool, Analyse, EntityDefinition, LabelDefinition } from "@/types/analyse";
 
 // In-memory mock store until the BFF exposes a real /analyses API (issue #2).
 // Shape and operations (create, addAgent, updatePrompt with versioning) are
@@ -18,6 +18,7 @@ const analyses = reactive<Analyse[]>([
         capability: "Classification documentaire",
         prompt: "Identifie la nature du document (CNI, passeport, justificatif de domicile, avis d'imposition).",
         promptVersions: [],
+        tools: ["lecture_document"],
         labels: [],
         entities: [],
       },
@@ -58,7 +59,13 @@ export function useAnalyses() {
     return analyse;
   };
 
-  const addAgent = (analyseId: string, name: string, capability: AgentCapability, prompt: string) => {
+  const addAgent = (
+    analyseId: string,
+    name: string,
+    capability: AgentCapability,
+    prompt: string,
+    tools: AgentTool[] = [],
+  ) => {
     const analyse = getById(analyseId);
     if (!analyse) return;
     const agent: Agent = {
@@ -67,6 +74,7 @@ export function useAnalyses() {
       capability,
       prompt,
       promptVersions: [],
+      tools,
       labels: [],
       entities: [],
     };
@@ -94,6 +102,12 @@ export function useAnalyses() {
     updateAgentPrompt(analyseId, agentId, version.content);
   };
 
+  const updateAgentTools = (analyseId: string, agentId: string, tools: AgentTool[]) => {
+    const agent = getAgent(analyseId, agentId);
+    if (!agent) return;
+    agent.tools = tools;
+  };
+
   const updateAgentLabels = (analyseId: string, agentId: string, labels: LabelDefinition[]) => {
     const agent = getAgent(analyseId, agentId);
     if (!agent) return;
@@ -113,6 +127,7 @@ export function useAnalyses() {
     addAgent,
     updateAgentPrompt,
     restoreAgentPromptVersion,
+    updateAgentTools,
     updateAgentLabels,
     updateAgentEntities,
   };

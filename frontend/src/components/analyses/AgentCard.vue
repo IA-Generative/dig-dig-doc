@@ -2,6 +2,7 @@
 import { computed } from "vue";
 
 import AgentPromptEditor from "@/components/analyses/AgentPromptEditor.vue";
+import AgentToolsEditor from "@/components/analyses/AgentToolsEditor.vue";
 import AgentVersionHistory from "@/components/analyses/AgentVersionHistory.vue";
 import EntitiesEditor from "@/components/analyses/EntitiesEditor.vue";
 import LabelsEditor from "@/components/analyses/LabelsEditor.vue";
@@ -32,6 +33,9 @@ const icon = computed(() => capabilityIcons[props.agent.capability]);
     </div>
 
     <AgentPromptEditor :analyse-id="analyseId" :agent="agent" />
+
+    <hr class="agent-card__divider" />
+    <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
 
     <template v-if="agent.capability === 'Classification documentaire' || isNerAgent">
       <hr class="agent-card__divider" />
