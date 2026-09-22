@@ -1,242 +1,244 @@
 import { computed, reactive } from "vue";
 
-import type { Agent, AgentTool, Analyse, EntityDefinition, LabelDefinition } from "@/types/analyse";
+import { apiFetch } from "@/utils/api";
+import type {
+  Agent,
+  AgentTool,
+  Analyse,
+  AnalyseSummary,
+  EntityDefinition,
+  LabelDefinition,
+  Version,
+} from "@/types/analyse";
 
-function emptyClassification() {
-  return { prompt: "", promptVersions: [], labels: [], labelsVersions: [] };
+function mapVersion<TApi, T>(v: { id: string; content: TApi; created_at: string }, mapContent: (c: TApi) => T): Version<T> {
+  return { id: v.id, content: mapContent(v.content), createdAt: v.created_at };
 }
 
-function emptyExtraction() {
-  return { prompt: "", promptVersions: [], entities: [], entitiesVersions: [] };
+const identity = <T,>(value: T) => value;
+
+function mapLabel(api: { id: string; name: string; definition: string }): LabelDefinition {
+  return { id: api.id, name: api.name, definition: api.definition };
 }
 
-// In-memory mock store until the BFF exposes a real /analyses API (issue #2).
-// Shape and operations (create, addAgent, update*/restore* with versioning)
-// are meant to map 1:1 onto future REST calls.
-const analyses = reactive<Analyse[]>([
-  {
-    id: "cni-2026-04",
-    name: "Contrôle CNI - lot avril",
-    description: "Vérification des cartes nationales d'identité déposées en avril.",
-    createdAt: "2026-04-02T09:00:00Z",
+function mapEntity(api: { id: string; name: string; definition: string; type: EntityDefinition["type"] }): EntityDefinition {
+  return { id: api.id, name: api.name, definition: api.definition, type: api.type };
+}
+
+function mapAgent(api: any): Agent {
+  return {
+    id: api.id,
+    name: api.name,
+    prompt: api.prompt,
+    promptVersions: api.prompt_versions.map((v: any) => mapVersion(v, identity<string>)),
+    tools: api.tools,
+    toolsVersions: api.tools_versions.map((v: any) => mapVersion(v, identity<AgentTool[]>)),
+    output: api.output,
+    outputVersions: api.output_versions.map((v: any) => mapVersion(v, identity<boolean>)),
+  };
+}
+
+function mapAnalyse(api: any): Analyse {
+  return {
+    id: api.id,
+    name: api.name,
+    description: api.description,
+    createdAt: api.created_at,
     classification: {
-      prompt: "Identifie la nature du document (CNI, passeport, justificatif de domicile, avis d'imposition).",
-      promptVersions: [],
-      labels: [],
-      labelsVersions: [],
+      prompt: api.classification.prompt,
+      promptVersions: api.classification.prompt_versions.map((v: any) => mapVersion(v, identity<string>)),
+      labels: api.classification.labels.map(mapLabel),
+      labelsVersions: api.classification.labels_versions.map((v: any) =>
+        mapVersion(v, (content: any[]) => content.map(mapLabel)),
+      ),
     },
-    extraction: emptyExtraction(),
-    agents: [],
-  },
-  {
-    id: "avis-imposition-2026",
-    name: "Avis d'imposition 2026",
-    description: "Extraction des données fiscales des avis d'imposition déposés.",
-    createdAt: "2026-03-18T14:30:00Z",
-    classification: emptyClassification(),
-    extraction: emptyExtraction(),
-    agents: [],
-  },
-  {
-    id: "coherence-domicile",
-    name: "Cohérence justificatif de domicile",
-    description: "Recoupement entre justificatif de domicile et formulaire usager.",
-    createdAt: "2026-02-27T11:15:00Z",
-    classification: emptyClassification(),
-    extraction: emptyExtraction(),
-    agents: [],
-  },
-]);
+    extraction: {
+      prompt: api.extraction.prompt,
+      promptVersions: api.extraction.prompt_versions.map((v: any) => mapVersion(v, identity<string>)),
+      entities: api.extraction.entities.map(mapEntity),
+      entitiesVersions: api.extraction.entities_versions.map((v: any) =>
+        mapVersion(v, (content: any[]) => content.map(mapEntity)),
+      ),
+    },
+    agents: api.agents.map(mapAgent),
+  };
+}
 
-let nextAnalyseId = analyses.length + 1;
+function mapSummary(api: any): AnalyseSummary {
+  return { id: api.id, name: api.name, description: api.description, createdAt: api.created_at, agentCount: api.agent_count };
+}
+
+// Store partagé par toute l'application : `summaries` alimente les listes
+// (GET /analyses, léger), `cache` les analyses complètes une fois ouvertes
+// (GET /analyses/:id ou réponse d'une mutation).
+const summaries = reactive<AnalyseSummary[]>([]);
+const cache = reactive<Record<string, Analyse>>({});
+
+async function fetchList() {
+  const data = await apiFetch<any[]>("/api/analyses");
+  summaries.splice(0, summaries.length, ...data.map(mapSummary));
+}
+
+fetchList();
+
+function replaceAgent(analyseId: string, agent: Agent) {
+  const analyse = cache[analyseId];
+  if (!analyse) return;
+  const index = analyse.agents.findIndex((a) => a.id === agent.id);
+  if (index === -1) analyse.agents.push(agent);
+  else analyse.agents[index] = agent;
+}
 
 export function useAnalyses() {
-  const list = computed(() => analyses);
+  const list = computed(() => summaries);
 
-  const getById = (id: string) => analyses.find((a) => a.id === id);
+  const getById = (id: string) => cache[id];
 
-  const create = (name: string, description: string) => {
-    const analyse: Analyse = {
-      id: `analyse-${nextAnalyseId++}`,
-      name,
-      description,
-      createdAt: new Date().toISOString(),
-      classification: emptyClassification(),
-      extraction: emptyExtraction(),
-      agents: [],
-    };
-    analyses.unshift(analyse);
+  const fetchAnalyse = async (id: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${id}`);
+    cache[id] = mapAnalyse(data);
+    return cache[id];
+  };
+
+  const create = async (name: string, description: string) => {
+    const data = await apiFetch<any>("/api/analyses", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    });
+    const analyse = mapAnalyse(data);
+    cache[analyse.id] = analyse;
+    summaries.unshift({ id: analyse.id, name: analyse.name, description: analyse.description, createdAt: analyse.createdAt, agentCount: 0 });
     return analyse;
   };
 
   // --- Classification ---
 
-  const updateClassificationPrompt = (analyseId: string, prompt: string) => {
-    const analyse = getById(analyseId);
-    if (!analyse || analyse.classification.prompt === prompt) return;
-    analyse.classification.promptVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: analyse.classification.prompt,
-      createdAt: new Date().toISOString(),
+  const updateClassificationPrompt = async (analyseId: string, prompt: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/classification/prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt }),
     });
-    analyse.classification.prompt = prompt;
+    cache[analyseId] = mapAnalyse(data);
   };
 
-  const restoreClassificationPromptVersion = (analyseId: string, versionId: string) => {
-    const analyse = getById(analyseId);
-    const version = analyse?.classification.promptVersions.find((v) => v.id === versionId);
-    if (!analyse || !version) return;
-    updateClassificationPrompt(analyseId, version.content);
-  };
-
-  const updateClassificationLabels = (analyseId: string, labels: LabelDefinition[]) => {
-    const analyse = getById(analyseId);
-    if (!analyse || JSON.stringify(analyse.classification.labels) === JSON.stringify(labels)) return;
-    analyse.classification.labelsVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: analyse.classification.labels,
-      createdAt: new Date().toISOString(),
+  const restoreClassificationPromptVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/classification/prompt/restore/${versionId}`, {
+      method: "POST",
     });
-    analyse.classification.labels = labels;
+    cache[analyseId] = mapAnalyse(data);
   };
 
-  const restoreClassificationLabelsVersion = (analyseId: string, versionId: string) => {
-    const analyse = getById(analyseId);
-    const version = analyse?.classification.labelsVersions.find((v) => v.id === versionId);
-    if (!analyse || !version) return;
-    updateClassificationLabels(analyseId, version.content);
+  const updateClassificationLabels = async (analyseId: string, labels: LabelDefinition[]) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/classification/labels`, {
+      method: "PUT",
+      body: JSON.stringify({ labels: labels.map(({ name, definition }) => ({ name, definition })) }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
+  const restoreClassificationLabelsVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/classification/labels/restore/${versionId}`, {
+      method: "POST",
+    });
+    cache[analyseId] = mapAnalyse(data);
   };
 
   // --- Extraction ---
 
-  const updateExtractionPrompt = (analyseId: string, prompt: string) => {
-    const analyse = getById(analyseId);
-    if (!analyse || analyse.extraction.prompt === prompt) return;
-    analyse.extraction.promptVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: analyse.extraction.prompt,
-      createdAt: new Date().toISOString(),
+  const updateExtractionPrompt = async (analyseId: string, prompt: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/extraction/prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt }),
     });
-    analyse.extraction.prompt = prompt;
+    cache[analyseId] = mapAnalyse(data);
   };
 
-  const restoreExtractionPromptVersion = (analyseId: string, versionId: string) => {
-    const analyse = getById(analyseId);
-    const version = analyse?.extraction.promptVersions.find((v) => v.id === versionId);
-    if (!analyse || !version) return;
-    updateExtractionPrompt(analyseId, version.content);
-  };
-
-  const updateExtractionEntities = (analyseId: string, entities: EntityDefinition[]) => {
-    const analyse = getById(analyseId);
-    if (!analyse || JSON.stringify(analyse.extraction.entities) === JSON.stringify(entities)) return;
-    analyse.extraction.entitiesVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: analyse.extraction.entities,
-      createdAt: new Date().toISOString(),
+  const restoreExtractionPromptVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/extraction/prompt/restore/${versionId}`, {
+      method: "POST",
     });
-    analyse.extraction.entities = entities;
+    cache[analyseId] = mapAnalyse(data);
   };
 
-  const restoreExtractionEntitiesVersion = (analyseId: string, versionId: string) => {
-    const analyse = getById(analyseId);
-    const version = analyse?.extraction.entitiesVersions.find((v) => v.id === versionId);
-    if (!analyse || !version) return;
-    updateExtractionEntities(analyseId, version.content);
+  const updateExtractionEntities = async (analyseId: string, entities: EntityDefinition[]) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/extraction/entities`, {
+      method: "PUT",
+      body: JSON.stringify({ entities: entities.map(({ name, definition, type }) => ({ name, definition, type })) }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
+  const restoreExtractionEntitiesVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/extraction/entities/restore/${versionId}`, {
+      method: "POST",
+    });
+    cache[analyseId] = mapAnalyse(data);
   };
 
   // --- Agents (créés librement par l'utilisateur pour un but métier) ---
 
-  const addAgent = (
-    analyseId: string,
-    name: string,
-    prompt: string,
-    tools: AgentTool[] = [],
-    output = true,
-  ) => {
-    const analyse = getById(analyseId);
-    if (!analyse) return;
-    const agent: Agent = {
-      id: `agent-${Date.now()}`,
-      name,
-      prompt,
-      promptVersions: [],
-      tools,
-      toolsVersions: [],
-      output,
-      outputVersions: [],
-    };
-    analyse.agents.push(agent);
+  const addAgent = async (analyseId: string, name: string, prompt: string, tools: AgentTool[] = [], output = true) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents`, {
+      method: "POST",
+      body: JSON.stringify({ name, prompt, tools, output }),
+    });
+    const agent = mapAgent(data);
+    replaceAgent(analyseId, agent);
+    const summary = summaries.find((s) => s.id === analyseId);
+    if (summary) summary.agentCount += 1;
     return agent;
   };
 
-  const getAgent = (analyseId: string, agentId: string) => getById(analyseId)?.agents.find((a) => a.id === agentId);
-
-  const updateAgentPrompt = (analyseId: string, agentId: string, newPrompt: string) => {
-    const agent = getAgent(analyseId, agentId);
-    if (!agent || agent.prompt === newPrompt) return;
-    agent.promptVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: agent.prompt,
-      createdAt: new Date().toISOString(),
+  const updateAgentPrompt = async (analyseId: string, agentId: string, newPrompt: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt: newPrompt }),
     });
-    agent.prompt = newPrompt;
+    replaceAgent(analyseId, mapAgent(data));
   };
 
-  const restoreAgentPromptVersion = (analyseId: string, agentId: string, versionId: string) => {
-    const agent = getAgent(analyseId, agentId);
-    const version = agent?.promptVersions.find((v) => v.id === versionId);
-    if (!agent || !version) return;
-    updateAgentPrompt(analyseId, agentId, version.content);
+  const restoreAgentPromptVersion = async (analyseId: string, agentId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/prompt/restore/${versionId}`, {
+      method: "POST",
+    });
+    replaceAgent(analyseId, mapAgent(data));
   };
 
-  const updateAgentTools = (analyseId: string, agentId: string, tools: AgentTool[]) => {
-    const agent = getAgent(analyseId, agentId);
-    const sortTools = (t: AgentTool[]) => [...t].sort((a, b) => a.localeCompare(b));
-    if (!agent || JSON.stringify(sortTools(agent.tools)) === JSON.stringify(sortTools(tools))) return;
-    agent.toolsVersions.unshift({ id: `v-${Date.now()}`, content: agent.tools, createdAt: new Date().toISOString() });
-    agent.tools = tools;
+  const updateAgentTools = async (analyseId: string, agentId: string, tools: AgentTool[]) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/tools`, {
+      method: "PUT",
+      body: JSON.stringify({ tools }),
+    });
+    replaceAgent(analyseId, mapAgent(data));
   };
 
-  const restoreAgentToolsVersion = (analyseId: string, agentId: string, versionId: string) => {
-    const agent = getAgent(analyseId, agentId);
-    const version = agent?.toolsVersions.find((v) => v.id === versionId);
-    if (!agent || !version) return;
-    updateAgentTools(analyseId, agentId, version.content);
+  const restoreAgentToolsVersion = async (analyseId: string, agentId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/tools/restore/${versionId}`, {
+      method: "POST",
+    });
+    replaceAgent(analyseId, mapAgent(data));
   };
 
-  const updateAgentOutput = (analyseId: string, agentId: string, output: boolean) => {
-    const agent = getAgent(analyseId, agentId);
-    if (!agent || agent.output === output) return;
-    agent.outputVersions.unshift({ id: `v-${Date.now()}`, content: agent.output, createdAt: new Date().toISOString() });
-    agent.output = output;
+  const updateAgentOutput = async (analyseId: string, agentId: string, output: boolean) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/output`, {
+      method: "PUT",
+      body: JSON.stringify({ output }),
+    });
+    replaceAgent(analyseId, mapAgent(data));
   };
 
-  const restoreAgentOutputVersion = (analyseId: string, agentId: string, versionId: string) => {
-    const agent = getAgent(analyseId, agentId);
-    const version = agent?.outputVersions.find((v) => v.id === versionId);
-    if (!agent || !version) return;
-    updateAgentOutput(analyseId, agentId, version.content);
-  };
-
-  // La version d'une analyse est dérivée du nombre total de modifications
-  // enregistrées (chaque entrée d'historique, prompt/labels/entités/agents
-  // confondus) : v1 au départ, +1 à chaque changement sauvegardé.
-  const getAnalyseVersion = (analyseId: string): string => {
-    const analyse = getById(analyseId);
-    if (!analyse) return "v1";
-    const editCount =
-      analyse.classification.promptVersions.length +
-      analyse.classification.labelsVersions.length +
-      analyse.extraction.promptVersions.length +
-      analyse.extraction.entitiesVersions.length +
-      analyse.agents.reduce((sum, agent) => sum + agent.promptVersions.length, 0);
-    return `v${editCount + 1}`;
+  const restoreAgentOutputVersion = async (analyseId: string, agentId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/output/restore/${versionId}`, {
+      method: "POST",
+    });
+    replaceAgent(analyseId, mapAgent(data));
   };
 
   return {
     list,
     getById,
+    fetchAnalyse,
+    fetchList,
     create,
     updateClassificationPrompt,
     restoreClassificationPromptVersion,
@@ -253,6 +255,5 @@ export function useAnalyses() {
     restoreAgentToolsVersion,
     updateAgentOutput,
     restoreAgentOutputVersion,
-    getAnalyseVersion,
   };
 }

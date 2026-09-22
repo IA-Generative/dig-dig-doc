@@ -37,6 +37,10 @@ export interface DossierDocument {
   id: string;
   name: string;
   size: number;
+  s3Key: string;
+  mimetype: string;
+  /** Nature du document (ex: "CNI") : posée par la classification ou corrigée manuellement. */
+  label?: string;
 }
 
 export interface Dossier {

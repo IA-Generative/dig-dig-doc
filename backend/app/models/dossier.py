@@ -1,12 +1,16 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.conversation import Conversation
 
 
 class DossierStatus(enum.StrEnum):
@@ -52,6 +56,9 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     documents: Mapped[list["DossierDocument"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="DossierDocument.created_at"
     )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="dossier", cascade="all, delete-orphan", order_by="Conversation.created_at"
+    )
 
 
 class ExecutionStep(UUIDMixin, Base):
@@ -83,5 +90,12 @@ class DossierDocument(UUIDMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Clé de l'objet dans le bucket S3 (le contenu du fichier n'est jamais
+    # stocké en base) et type MIME déclaré à l'upload.
+    s3_key: Mapped[str] = mapped_column(String, nullable=False)
+    mimetype: Mapped[str] = mapped_column(String, nullable=False)
+    # Nature du document (ex: "CNI", "avis d'imposition") : posée par la
+    # classification documentaire de l'analyse, ou corrigée manuellement.
+    label: Mapped[str | None] = mapped_column(String, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="documents")

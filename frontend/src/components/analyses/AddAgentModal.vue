@@ -36,9 +36,9 @@ function applySuggestion() {
   prompt.value = suggestAgentPrompt();
 }
 
-function submit() {
+async function submit() {
   if (!name.value.trim() || !prompt.value.trim()) return;
-  addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value, output.value);
+  await addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value, output.value);
   opened.value = false;
   emit("created");
 }
