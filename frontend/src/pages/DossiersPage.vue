@@ -16,6 +16,20 @@ const selectedDossierId = ref<string | undefined>(undefined);
 
 const selectedDossier = computed(() => dossiers.value.find((d) => d.id === selectedDossierId.value));
 
+const pageSize = 10;
+const currentPage = ref(1);
+
+const pageCount = computed(() => Math.max(1, Math.ceil(dossiers.value.length / pageSize)));
+
+const paginatedDossiers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return dossiers.value.slice(start, start + pageSize);
+});
+
+const pages = computed(() =>
+  Array.from({ length: pageCount.value }, (_, i) => ({ label: String(i + 1), title: `Page ${i + 1}` })),
+);
+
 const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warning" | "error"> = {
   en_attente: "new",
   en_cours: "info",
@@ -66,7 +80,7 @@ function openExecution(dossier: Dossier) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="dossier in dossiers" :key="dossier.id">
+          <tr v-for="dossier in paginatedDossiers" :key="dossier.id">
             <td>{{ dossier.name }}</td>
             <td>{{ analyseName(dossier) }}</td>
             <td>{{ dossier.analyseVersion }}</td>
@@ -104,6 +118,13 @@ function openExecution(dossier: Dossier) {
       </table>
     </div>
 
+    <DsfrPagination
+      v-if="pageCount > 1"
+      :pages="pages"
+      v-model:current-page="currentPage"
+      class="dossiers-page__pagination"
+    />
+
     <CreateDossierModal v-model:opened="isCreateModalOpened" />
     <ExecutionPanel v-model:opened="isExecutionPanelOpened" :dossier="selectedDossier" />
   </div>
@@ -135,5 +156,11 @@ function openExecution(dossier: Dossier) {
   align-items: center;
   gap: 0.5rem;
   white-space: nowrap;
+}
+
+.dossiers-page__pagination {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
 }
 </style>
