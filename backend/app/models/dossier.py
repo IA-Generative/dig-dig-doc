@@ -11,6 +11,8 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
+    from app.models.document_page import DocumentPage
+    from app.models.execution_log import ExecutionLog
 
 
 class DossierStatus(enum.StrEnum):
@@ -80,6 +82,9 @@ class ExecutionStep(UUIDMixin, Base):
     output: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="execution_steps")
+    logs: Mapped[list["ExecutionLog"]] = relationship(
+        back_populates="execution_step", cascade="all, delete-orphan", order_by="ExecutionLog.created_at"
+    )
 
 
 class DossierDocument(UUIDMixin, TimestampMixin, Base):
@@ -99,3 +104,6 @@ class DossierDocument(UUIDMixin, TimestampMixin, Base):
     label: Mapped[str | None] = mapped_column(String, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="documents")
+    pages: Mapped[list["DocumentPage"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="DocumentPage.page_number"
+    )

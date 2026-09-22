@@ -1,5 +1,6 @@
 import enum
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -7,6 +8,9 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.analyse_share import AnalyseShare
 
 
 class EntityType(enum.StrEnum):
@@ -64,6 +68,9 @@ class Analyse(UUIDMixin, TimestampMixin, Base):
     )
     field_versions: Mapped[list["FieldVersion"]] = relationship(
         back_populates="analyse", cascade="all, delete-orphan", order_by="FieldVersion.created_at.desc()"
+    )
+    shares: Mapped[list["AnalyseShare"]] = relationship(
+        back_populates="analyse", cascade="all, delete-orphan", order_by="AnalyseShare.created_at.desc()"
     )
 
 

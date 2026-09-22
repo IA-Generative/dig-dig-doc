@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
-    from app.models.dossier import Dossier
+    from app.models.dossier import Dossier, DossierDocument, ExecutionStep
 
 
 class MessageRole(enum.StrEnum):
@@ -43,3 +43,29 @@ class Message(UUIDMixin, TimestampMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    sources: Mapped[list["MessageSource"]] = relationship(
+        back_populates="message", cascade="all, delete-orphan", order_by="MessageSource.created_at"
+    )
+
+
+class MessageSource(UUIDMixin, TimestampMixin, Base):
+    """Référence utilisée par l'agent pour construire une réponse : un
+    document (et éventuellement une étape d'exécution), avec un court
+    extrait pour donner le contexte sans rouvrir le document entier."""
+
+    __tablename__ = "message_sources"
+
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    dossier_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("dossier_documents.id", ondelete="SET NULL"), nullable=True
+    )
+    execution_step_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("execution_steps.id", ondelete="SET NULL"), nullable=True
+    )
+    excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    message: Mapped["Message"] = relationship(back_populates="sources")
+    document: Mapped["DossierDocument | None"] = relationship()
+    execution_step: Mapped["ExecutionStep | None"] = relationship()

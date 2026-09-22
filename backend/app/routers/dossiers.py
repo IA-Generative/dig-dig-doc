@@ -1,13 +1,17 @@
+import asyncio
+import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.conversation import MessageRole
-from app.models.dossier import Dossier
+from app.models.dossier import Dossier, DossierStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
@@ -17,6 +21,8 @@ from app.schemas.dossier import (
     DossierDocumentOut,
     DossierOut,
     MessageIn,
+    PredictionValidationIn,
+    PredictionValidationOut,
 )
 
 router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
@@ -140,3 +146,68 @@ async def add_message(
     if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
     return await repository.add_message(conversation, MessageRole.USER, body.content)
+
+
+@router.put(
+    "/{dossier_id}/documents/{document_id}/pages/{page_id}/predictions/{prediction_id}/validations",
+    response_model=PredictionValidationOut,
+)
+async def validate_prediction(
+    dossier_id: uuid.UUID,
+    document_id: uuid.UUID,
+    page_id: uuid.UUID,
+    prediction_id: uuid.UUID,
+    body: PredictionValidationIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    repository = DossierRepository(db)
+    document = await repository.get_document(dossier_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    page = await repository.get_page(document_id, page_id)
+    prediction = await repository.get_prediction(page_id, prediction_id) if page else None
+    if page is None or prediction is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prédiction introuvable")
+    updated = await repository.add_prediction_validation(
+        prediction,
+        validator_user_id=user.user_id,
+        status=body.status,
+        corrected_value=body.corrected_value,
+        bbox=body.bbox.model_dump() if body.bbox else None,
+    )
+    return updated.validations[-1]
+
+
+_TERMINAL_STATUSES = {DossierStatus.TERMINE, DossierStatus.ARRETE, DossierStatus.ECHEC}
+
+
+async def _execution_events(repository: DossierRepository, dossier_id: uuid.UUID) -> AsyncIterator[str]:
+    """Un événement SSE par changement d'état, jusqu'à ce que le dossier
+    atteigne un statut terminal - pas de bus de messages (Redis pub/sub,
+    etc), juste un polling DB léger : suffisant pour un état affiché dans
+    l'UI, pas conçu pour du temps réel à grande échelle."""
+    last_payload: str | None = None
+    while True:
+        dossier = await repository.get(dossier_id)
+        if dossier is None:
+            yield 'event: error\ndata: {"detail": "Dossier introuvable"}\n\n'
+            return
+        payload = json.dumps(DossierOut.model_validate(dossier).model_dump(mode="json"))
+        if payload != last_payload:
+            yield f"event: execution-update\ndata: {payload}\n\n"
+            last_payload = payload
+        if dossier.status in _TERMINAL_STATUSES:
+            return
+        await asyncio.sleep(1)
+
+
+@router.get("/{dossier_id}/stream")
+async def stream_dossier_execution(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    return StreamingResponse(
+        _execution_events(repository, dossier_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

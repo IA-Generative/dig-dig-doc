@@ -1,0 +1,93 @@
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security.internal import verify_worker_token
+from app.db import get_db
+from app.models.conversation import MessageRole
+from app.repositories.dossier_repository import DossierRepository
+from app.schemas.dossier import (
+    ConversationOut,
+    DocumentPageIn,
+    DocumentPageOut,
+    DocumentPredictionIn,
+    DocumentPredictionOut,
+    ExecutionLogIn,
+    ExecutionStepCompleteIn,
+    ExecutionStepOut,
+    InternalMessageIn,
+)
+
+# Routes appelées par les workers Celery (pas par le navigateur) : le worker
+# dépose ici le résultat de son travail - logs en cours d'exécution, étape
+# terminée, pages/prédictions extraites d'un document, réponse de l'agent.
+router = APIRouter(prefix="/internal", tags=["Internal"], dependencies=[Depends(verify_worker_token)])
+
+
+@router.post("/execution-steps/{step_id}/logs", response_model=ExecutionStepOut)
+async def add_execution_log(step_id: uuid.UUID, body: ExecutionLogIn, db: Annotated[AsyncSession, Depends(get_db)]):
+    repository = DossierRepository(db)
+    step = await repository.get_execution_step_by_id(step_id)
+    if step is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
+    return await repository.add_log(step, body.level, body.message)
+
+
+@router.post("/execution-steps/{step_id}/complete", response_model=ExecutionStepOut)
+async def complete_execution_step(
+    step_id: uuid.UUID, body: ExecutionStepCompleteIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    repository = DossierRepository(db)
+    step = await repository.get_execution_step_by_id(step_id)
+    if step is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
+    return await repository.complete_execution_step(step, body.status, body.output)
+
+
+@router.post("/documents/{document_id}/pages", response_model=DocumentPageOut, status_code=status.HTTP_201_CREATED)
+async def add_document_page(document_id: uuid.UUID, body: DocumentPageIn, db: Annotated[AsyncSession, Depends(get_db)]):
+    repository = DossierRepository(db)
+    document = await repository.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    return await repository.add_page(
+        document,
+        page_number=body.page_number,
+        width=body.width,
+        height=body.height,
+        bbox=body.bbox.model_dump() if body.bbox else None,
+        content=body.content,
+    )
+
+
+@router.post("/pages/{page_id}/predictions", response_model=DocumentPredictionOut, status_code=status.HTTP_201_CREATED)
+async def add_document_prediction(
+    page_id: uuid.UUID, body: DocumentPredictionIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    repository = DossierRepository(db)
+    page = await repository.get_page_by_id(page_id)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
+    return await repository.add_prediction(
+        page,
+        kind=body.kind,
+        name=body.name,
+        value=body.value,
+        confidence=body.confidence,
+        bbox=body.bbox.model_dump() if body.bbox else None,
+    )
+
+
+@router.post("/conversations/{conversation_id}/messages", response_model=ConversationOut)
+async def add_assistant_message(
+    conversation_id: uuid.UUID, body: InternalMessageIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    repository = DossierRepository(db)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
+    return await repository.add_message(
+        conversation, MessageRole.ASSISTANT, body.content, sources=[s.model_dump() for s in body.sources]
+    )

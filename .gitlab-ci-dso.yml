@@ -1,0 +1,133 @@
+include:
+  - project: $CATALOG_PATH
+    file:
+      - vault-ci.yml
+      - kaniko-ci.yml
+    ref: main
+
+default:
+  image: alpine:latest
+
+variables:
+  TAG: "${CI_COMMIT_REF_SLUG}"
+  REGISTRY_URL: "${REGISTRY_HOST}/${PROJECT_PATH}"
+
+stages:
+  - read-secret
+  - docker-build
+
+read_secret:
+  stage: read-secret
+  extends:
+    - .vault:read_secret
+
+.docker-build-common:
+  stage: docker-build
+  extends:
+    - .kaniko:build-push
+  variables:
+    IMAGE_NAMES: ""  # Overridden in before_script
+    EXTRA_BUILD_ARGS: "--build-arg DOCKERHUB_MIRROR_URL=${DOCKERHUB_MIRROR_URL}"
+  rules:
+    - when: always
+
+# Pas de Helm/appVersion ici (contrairement à Muffin) : le chart n'existe pas
+# encore (voir issue Helm, différée). La version vient donc directement de
+# backend/pyproject.toml, seule source de vérité que release-please tient à
+# jour - synchronisée sur tous les services du monorepo (release-type
+# "simple", voir .github/releases/release-please-config-*.json). Extraction
+# dupliquée dans chaque job ci-dessous plutôt que factorisée : un ancrage
+# YAML ne se résout pas à l'intérieur d'un bloc littéral `before_script: |`,
+# ça resterait le texte "*app-version" dans le script shell.
+
+docker-build-backend:
+  extends:
+    - .docker-build-common
+  variables:
+    DOCKERFILE: "backend/Dockerfile"
+    WORKING_DIR: "backend"
+  before_script:
+    - |
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
+      APP_VERSION=$(grep '^version' backend/pyproject.toml | head -1 | cut -d'"' -f2)
+      if [ -z "$APP_VERSION" ]; then
+        echo "Error: Could not extract version from backend/pyproject.toml"
+        exit 1
+      fi
+      TAGS="dig-dig-doc-backend:$SHORT_SHA"
+      TAGS="$TAGS dig-dig-doc-backend:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS dig-dig-doc-backend:$APP_VERSION"
+      if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        TAGS="$TAGS dig-dig-doc-backend:latest"
+      fi
+      export IMAGE_NAMES="$TAGS"
+      echo "Building with tags: $IMAGE_NAMES"
+
+docker-build-frontend:
+  extends:
+    - .docker-build-common
+  variables:
+    DOCKERFILE: "frontend/Dockerfile"
+    WORKING_DIR: "frontend"
+  before_script:
+    - |
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
+      APP_VERSION=$(grep '^version' backend/pyproject.toml | head -1 | cut -d'"' -f2)
+      if [ -z "$APP_VERSION" ]; then
+        echo "Error: Could not extract version from backend/pyproject.toml"
+        exit 1
+      fi
+      TAGS="dig-dig-doc-frontend:$SHORT_SHA"
+      TAGS="$TAGS dig-dig-doc-frontend:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS dig-dig-doc-frontend:$APP_VERSION"
+      if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        TAGS="$TAGS dig-dig-doc-frontend:latest"
+      fi
+      export IMAGE_NAMES="$TAGS"
+      echo "Building with tags: $IMAGE_NAMES"
+
+docker-build-worker-document-process:
+  extends:
+    - .docker-build-common
+  variables:
+    DOCKERFILE: "worker/document_process/Dockerfile"
+    WORKING_DIR: "worker/document_process"
+  before_script:
+    - |
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
+      APP_VERSION=$(grep '^version' backend/pyproject.toml | head -1 | cut -d'"' -f2)
+      if [ -z "$APP_VERSION" ]; then
+        echo "Error: Could not extract version from backend/pyproject.toml"
+        exit 1
+      fi
+      TAGS="dig-dig-doc-worker-document-process:$SHORT_SHA"
+      TAGS="$TAGS dig-dig-doc-worker-document-process:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS dig-dig-doc-worker-document-process:$APP_VERSION"
+      if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        TAGS="$TAGS dig-dig-doc-worker-document-process:latest"
+      fi
+      export IMAGE_NAMES="$TAGS"
+      echo "Building with tags: $IMAGE_NAMES"
+
+docker-build-worker-agent-execution:
+  extends:
+    - .docker-build-common
+  variables:
+    DOCKERFILE: "worker/agent_execution/Dockerfile"
+    WORKING_DIR: "worker/agent_execution"
+  before_script:
+    - |
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
+      APP_VERSION=$(grep '^version' backend/pyproject.toml | head -1 | cut -d'"' -f2)
+      if [ -z "$APP_VERSION" ]; then
+        echo "Error: Could not extract version from backend/pyproject.toml"
+        exit 1
+      fi
+      TAGS="dig-dig-doc-worker-agent-execution:$SHORT_SHA"
+      TAGS="$TAGS dig-dig-doc-worker-agent-execution:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS dig-dig-doc-worker-agent-execution:$APP_VERSION"
+      if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        TAGS="$TAGS dig-dig-doc-worker-agent-execution:latest"
+      fi
+      export IMAGE_NAMES="$TAGS"
+      echo "Building with tags: $IMAGE_NAMES"
