@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 
+import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestPrompt } from "@/composables/useLlmAssist";
 import type { Agent } from "@/types/analyse";
@@ -43,13 +44,7 @@ function save() {
       :hint="`Version actuelle. ${agent.promptVersions.length} version(s) précédente(s).`"
     />
     <div class="agent-prompt-editor__actions">
-      <DsfrButton
-        label="Aide à la rédaction du prompt"
-        secondary
-        icon="ri-magic-line"
-        size="sm"
-        @click="applySuggestion"
-      />
+      <LlmAssistButton label="Aide à la rédaction du prompt" @click="applySuggestion" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
   </div>

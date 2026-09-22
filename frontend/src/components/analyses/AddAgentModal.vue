@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 
+import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestPrompt } from "@/composables/useLlmAssist";
 import type { AgentCapability } from "@/types/analyse";
@@ -55,13 +56,6 @@ function submit() {
     <DsfrInput v-model="name" label="Nom de l'agent" label-visible required />
     <DsfrSelect v-model="capability" label="Capacité" class="fr-mt-2w" :options="capabilities" />
     <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
-    <DsfrButton
-      label="Aide à la rédaction du prompt"
-      secondary
-      icon="ri-magic-line"
-      size="sm"
-      class="fr-mt-2w"
-      @click="applySuggestion"
-    />
+    <LlmAssistButton label="Aide à la rédaction du prompt" class="fr-mt-2w" @click="applySuggestion" />
   </DsfrModal>
 </template>
