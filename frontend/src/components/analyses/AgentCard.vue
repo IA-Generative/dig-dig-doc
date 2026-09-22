@@ -11,7 +11,13 @@ import type { Agent, AgentCapability } from "@/types/analyse";
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
 const NER_CAPABILITY: AgentCapability = "Extraction d'entités nommées";
+const AGENT_CAPABILITY: AgentCapability = "Agent généraliste";
 const isNerAgent = computed(() => props.agent.capability === NER_CAPABILITY);
+// Seul "Agent généraliste" est un vrai agent capable d'utiliser des outils.
+// Classification, extraction d'entités et contrôle de cohérence sont des
+// analyses simples : un prompt appliqué systématiquement, pas un agent
+// autonome avec des outils.
+const isRealAgent = computed(() => props.agent.capability === AGENT_CAPABILITY);
 
 const capabilityIcons: Record<AgentCapability, string> = {
   "Classification documentaire": "ri-price-tag-3-line",
@@ -34,8 +40,10 @@ const icon = computed(() => capabilityIcons[props.agent.capability]);
 
     <AgentPromptEditor :analyse-id="analyseId" :agent="agent" />
 
-    <hr class="agent-card__divider" />
-    <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
+    <template v-if="isRealAgent">
+      <hr class="agent-card__divider" />
+      <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
+    </template>
 
     <template v-if="agent.capability === 'Classification documentaire' || isNerAgent">
       <hr class="agent-card__divider" />

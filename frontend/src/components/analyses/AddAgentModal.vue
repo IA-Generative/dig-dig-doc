@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
@@ -30,6 +30,11 @@ const capability = ref<AgentCapability>(capabilities[0]);
 const prompt = ref("");
 const tools = ref<AgentTool[]>([]);
 
+// Seul "Agent généraliste" est un vrai agent avec des outils : la
+// classification, l'extraction d'entités et le contrôle de cohérence sont
+// des analyses simples, appliquées systématiquement, pas des agents outillés.
+const isRealAgent = computed(() => capability.value === "Agent généraliste");
+
 watch(opened, (isOpened) => {
   if (isOpened) {
     name.value = "";
@@ -37,6 +42,10 @@ watch(opened, (isOpened) => {
     prompt.value = "";
     tools.value = [];
   }
+});
+
+watch(isRealAgent, (value) => {
+  if (!value) tools.value = [];
 });
 
 function applySuggestion() {
@@ -66,6 +75,7 @@ function submit() {
     <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
     <LlmAssistButton label="Aide à la rédaction du prompt" class="fr-mt-2w" @click="applySuggestion" />
     <DsfrCheckboxSet
+      v-if="isRealAgent"
       v-model="tools"
       legend="Outils disponibles"
       :options="toolOptions"
