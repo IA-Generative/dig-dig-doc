@@ -1,0 +1,5 @@
+# Trivy config-scan findings accepted as noise. Empty for now; add entries
+# here with a comment explaining why each one is a false positive rather than
+# a real misconfiguration to fix.
+
+misconfigurations: []

@@ -1,0 +1,7 @@
+title = "dig-dig-doc gitleaks config"
+
+# `targetRules` on a global allowlist needs v8.25.0; CI pins a newer version.
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true
