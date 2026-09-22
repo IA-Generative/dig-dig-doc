@@ -3,18 +3,16 @@ import { computed, nextTick, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
-import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestEntities, suggestEntityDefinition } from "@/composables/useLlmAssist";
-import type { Agent, EntityDefinition, EntityType } from "@/types/analyse";
+import type { EntityDefinition, EntityType, Version } from "@/types/analyse";
 
-const props = defineProps<{ analyseId: string; agent: Agent }>();
-
-const { updateAgentEntities, restoreAgentEntitiesVersion } = useAnalyses();
+const props = defineProps<{ entities: EntityDefinition[]; versions: Version<EntityDefinition[]>[] }>();
+const emit = defineEmits<{ save: [EntityDefinition[]]; restore: [string] }>();
 
 const entityTypes: EntityType[] = ["texte", "date", "nombre", "booléen", "identifiant"];
 const pageSize = 3;
 
-const draftEntities = ref<EntityDefinition[]>(cloneEntities(props.agent.entities));
+const draftEntities = ref<EntityDefinition[]>(cloneEntities(props.entities));
 const isDirty = ref(false);
 const currentPage = ref(1);
 
@@ -23,7 +21,7 @@ function cloneEntities(entities: EntityDefinition[]): EntityDefinition[] {
 }
 
 watch(
-  () => props.agent.entities,
+  () => props.entities,
   (entities) => {
     draftEntities.value = cloneEntities(entities);
     isDirty.value = false;
@@ -34,7 +32,7 @@ watch(
 watch(
   draftEntities,
   (entities) => {
-    isDirty.value = JSON.stringify(entities) !== JSON.stringify(props.agent.entities);
+    isDirty.value = JSON.stringify(entities) !== JSON.stringify(props.entities);
   },
   { deep: true },
 );
@@ -72,11 +70,7 @@ function applyDefinitionSuggestion(entity: EntityDefinition) {
 }
 
 function save() {
-  updateAgentEntities(props.analyseId, props.agent.id, draftEntities.value);
-}
-
-function restoreVersion(versionId: string) {
-  restoreAgentEntitiesVersion(props.analyseId, props.agent.id, versionId);
+  emit("save", draftEntities.value);
 }
 
 function formatVersionContent(entities: EntityDefinition[]) {
@@ -90,7 +84,7 @@ function formatVersionContent(entities: EntityDefinition[]) {
   <div class="entities-editor">
     <h4 class="fr-h6 entities-editor__title">Entités à extraire</h4>
 
-    <p v-if="draftEntities.length === 0" class="fr-text--sm">Aucune entité définie pour cet agent.</p>
+    <p v-if="draftEntities.length === 0" class="fr-text--sm">Aucune entité définie.</p>
 
     <template v-else>
       <ul class="entities-editor__list">
@@ -133,11 +127,7 @@ function formatVersionContent(entities: EntityDefinition[]) {
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
 
-    <VersionHistory
-      :versions="agent.entitiesVersions"
-      :format-content="formatVersionContent"
-      @restore="restoreVersion"
-    />
+    <VersionHistory :versions="versions" :format-content="formatVersionContent" @restore="emit('restore', $event)" />
   </div>
 </template>
 

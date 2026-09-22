@@ -1,23 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
-import { suggestPrompt } from "@/composables/useLlmAssist";
-import { AGENT_TOOL_LABELS, type AgentCapability, type AgentTool } from "@/types/analyse";
+import { suggestAgentPrompt } from "@/composables/useLlmAssist";
+import { AGENT_TOOL_LABELS, type AgentTool } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string }>();
 const opened = defineModel<boolean>("opened", { default: false });
 const emit = defineEmits<{ created: [] }>();
 
 const { addAgent } = useAnalyses();
-
-const capabilities: AgentCapability[] = [
-  "Classification documentaire",
-  "Extraction d'entités nommées",
-  "Contrôle de cohérence",
-  "Agent généraliste",
-];
 
 const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) => ({
   name: tool,
@@ -26,35 +19,24 @@ const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) =
 }));
 
 const name = ref("");
-const capability = ref<AgentCapability>(capabilities[0]);
 const prompt = ref("");
 const tools = ref<AgentTool[]>([]);
-
-// Seul "Agent généraliste" est un vrai agent avec des outils : la
-// classification, l'extraction d'entités et le contrôle de cohérence sont
-// des analyses simples, appliquées systématiquement, pas des agents outillés.
-const isRealAgent = computed(() => capability.value === "Agent généraliste");
 
 watch(opened, (isOpened) => {
   if (isOpened) {
     name.value = "";
-    capability.value = capabilities[0];
     prompt.value = "";
     tools.value = [];
   }
 });
 
-watch(isRealAgent, (value) => {
-  if (!value) tools.value = [];
-});
-
 function applySuggestion() {
-  prompt.value = suggestPrompt(capability.value);
+  prompt.value = suggestAgentPrompt();
 }
 
 function submit() {
   if (!name.value.trim() || !prompt.value.trim()) return;
-  addAgent(props.analyseId, name.value.trim(), capability.value, prompt.value.trim(), tools.value);
+  addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value);
   opened.value = false;
   emit("created");
 }
@@ -63,19 +45,22 @@ function submit() {
 <template>
   <DsfrModal
     v-model:opened="opened"
-    title="Ajouter un agent"
+    title="Créer un agent"
     size="lg"
     :actions="[
       { label: 'Annuler', secondary: true, onClick: () => (opened = false) },
-      { label: 'Ajouter', onClick: submit },
+      { label: 'Créer', onClick: submit },
     ]"
   >
+    <p class="fr-text--sm">
+      Un agent réalise une tâche métier propre à cette analyse (contrôle de cohérence, rédaction d'une synthèse,
+      construction d'une timeline...), à la différence de la classification et de l'extraction d'entités qui sont
+      des analyses systématiques.
+    </p>
     <DsfrInput v-model="name" label="Nom de l'agent" label-visible required />
-    <DsfrSelect v-model="capability" label="Capacité" class="fr-mt-2w" :options="capabilities" />
     <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
     <LlmAssistButton label="Aide à la rédaction du prompt" class="fr-mt-2w" @click="applySuggestion" />
     <DsfrCheckboxSet
-      v-if="isRealAgent"
       v-model="tools"
       legend="Outils disponibles"
       :options="toolOptions"

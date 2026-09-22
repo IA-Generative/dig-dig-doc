@@ -40,13 +40,7 @@ function save() {
 
 <template>
   <div class="agent-tools-editor">
-    <DsfrCheckboxSet
-      v-model="draftTools"
-      legend="Outils disponibles"
-      :options="toolOptions"
-      inline
-      small
-    />
+    <DsfrCheckboxSet v-model="draftTools" legend="Outils disponibles" :options="toolOptions" inline small />
     <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
   </div>
 </template>

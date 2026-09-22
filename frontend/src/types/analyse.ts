@@ -1,9 +1,3 @@
-export type AgentCapability =
-  | "Classification documentaire"
-  | "Extraction d'entités nommées"
-  | "Contrôle de cohérence"
-  | "Agent généraliste";
-
 export type EntityType = "texte" | "date" | "nombre" | "booléen" | "identifiant";
 
 export type AgentTool =
@@ -45,19 +39,41 @@ export interface EntityDefinition {
   type: EntityType;
 }
 
+/**
+ * Classification documentaire : une analyse simple (un prompt appliqué
+ * systématiquement à tous les documents du dossier, pas un agent) qui
+ * retourne un label parmi ceux définis ici, avec un score de confiance.
+ * Un seul jeu de labels par analyse.
+ */
+export interface Classification {
+  prompt: string;
+  promptVersions: PromptVersion[];
+  labels: LabelDefinition[];
+  labelsVersions: Version<LabelDefinition[]>[];
+}
+
+/**
+ * Extraction d'entités nommées : même principe que la classification,
+ * un seul jeu d'entités à extraire par analyse.
+ */
+export interface Extraction {
+  prompt: string;
+  promptVersions: PromptVersion[];
+  entities: EntityDefinition[];
+  entitiesVersions: Version<EntityDefinition[]>[];
+}
+
+/**
+ * Un agent est créé librement par l'utilisateur pour un but métier propre
+ * à l'analyse (contrôle de cohérence, rédaction, construction d'une
+ * timeline...) : nom, prompt et outils, sans capacité prédéfinie.
+ */
 export interface Agent {
   id: string;
   name: string;
-  capability: AgentCapability;
   prompt: string;
   promptVersions: PromptVersion[];
   tools: AgentTool[];
-  /** Utilisé quand capability === "Classification documentaire". */
-  labels: LabelDefinition[];
-  labelsVersions: Version<LabelDefinition[]>[];
-  /** Utilisé quand capability === "Extraction d'entités nommées". */
-  entities: EntityDefinition[];
-  entitiesVersions: Version<EntityDefinition[]>[];
 }
 
 export interface Analyse {
@@ -65,5 +81,7 @@ export interface Analyse {
   name: string;
   description: string;
   createdAt: string;
+  classification: Classification;
+  extraction: Extraction;
   agents: Agent[];
 }

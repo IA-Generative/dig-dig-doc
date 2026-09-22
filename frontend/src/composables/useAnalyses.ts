@@ -1,36 +1,40 @@
 import { computed, reactive } from "vue";
 
-import type { Agent, AgentCapability, AgentTool, Analyse, EntityDefinition, LabelDefinition } from "@/types/analyse";
+import type { Agent, AgentTool, Analyse, EntityDefinition, LabelDefinition } from "@/types/analyse";
+
+function emptyClassification() {
+  return { prompt: "", promptVersions: [], labels: [], labelsVersions: [] };
+}
+
+function emptyExtraction() {
+  return { prompt: "", promptVersions: [], entities: [], entitiesVersions: [] };
+}
 
 // In-memory mock store until the BFF exposes a real /analyses API (issue #2).
-// Shape and operations (create, addAgent, updatePrompt with versioning) are
-// meant to map 1:1 onto future REST calls.
+// Shape and operations (create, addAgent, update*/restore* with versioning)
+// are meant to map 1:1 onto future REST calls.
 const analyses = reactive<Analyse[]>([
   {
     id: "cni-2026-04",
     name: "Contrôle CNI - lot avril",
     description: "Vérification des cartes nationales d'identité déposées en avril.",
     createdAt: "2026-04-02T09:00:00Z",
-    agents: [
-      {
-        id: "typage",
-        name: "Typage documentaire",
-        capability: "Classification documentaire",
-        prompt: "Identifie la nature du document (CNI, passeport, justificatif de domicile, avis d'imposition).",
-        promptVersions: [],
-        tools: ["lecture_document"],
-        labels: [],
-        labelsVersions: [],
-        entities: [],
-        entitiesVersions: [],
-      },
-    ],
+    classification: {
+      prompt: "Identifie la nature du document (CNI, passeport, justificatif de domicile, avis d'imposition).",
+      promptVersions: [],
+      labels: [],
+      labelsVersions: [],
+    },
+    extraction: emptyExtraction(),
+    agents: [],
   },
   {
     id: "avis-imposition-2026",
     name: "Avis d'imposition 2026",
     description: "Extraction des données fiscales des avis d'imposition déposés.",
     createdAt: "2026-03-18T14:30:00Z",
+    classification: emptyClassification(),
+    extraction: emptyExtraction(),
     agents: [],
   },
   {
@@ -38,6 +42,8 @@ const analyses = reactive<Analyse[]>([
     name: "Cohérence justificatif de domicile",
     description: "Recoupement entre justificatif de domicile et formulaire usager.",
     createdAt: "2026-02-27T11:15:00Z",
+    classification: emptyClassification(),
+    extraction: emptyExtraction(),
     agents: [],
   },
 ]);
@@ -55,33 +61,96 @@ export function useAnalyses() {
       name,
       description,
       createdAt: new Date().toISOString(),
+      classification: emptyClassification(),
+      extraction: emptyExtraction(),
       agents: [],
     };
     analyses.unshift(analyse);
     return analyse;
   };
 
-  const addAgent = (
-    analyseId: string,
-    name: string,
-    capability: AgentCapability,
-    prompt: string,
-    tools: AgentTool[] = [],
-  ) => {
+  // --- Classification ---
+
+  const updateClassificationPrompt = (analyseId: string, prompt: string) => {
+    const analyse = getById(analyseId);
+    if (!analyse || analyse.classification.prompt === prompt) return;
+    analyse.classification.promptVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: analyse.classification.prompt,
+      createdAt: new Date().toISOString(),
+    });
+    analyse.classification.prompt = prompt;
+  };
+
+  const restoreClassificationPromptVersion = (analyseId: string, versionId: string) => {
+    const analyse = getById(analyseId);
+    const version = analyse?.classification.promptVersions.find((v) => v.id === versionId);
+    if (!analyse || !version) return;
+    updateClassificationPrompt(analyseId, version.content);
+  };
+
+  const updateClassificationLabels = (analyseId: string, labels: LabelDefinition[]) => {
+    const analyse = getById(analyseId);
+    if (!analyse || JSON.stringify(analyse.classification.labels) === JSON.stringify(labels)) return;
+    analyse.classification.labelsVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: analyse.classification.labels,
+      createdAt: new Date().toISOString(),
+    });
+    analyse.classification.labels = labels;
+  };
+
+  const restoreClassificationLabelsVersion = (analyseId: string, versionId: string) => {
+    const analyse = getById(analyseId);
+    const version = analyse?.classification.labelsVersions.find((v) => v.id === versionId);
+    if (!analyse || !version) return;
+    updateClassificationLabels(analyseId, version.content);
+  };
+
+  // --- Extraction ---
+
+  const updateExtractionPrompt = (analyseId: string, prompt: string) => {
+    const analyse = getById(analyseId);
+    if (!analyse || analyse.extraction.prompt === prompt) return;
+    analyse.extraction.promptVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: analyse.extraction.prompt,
+      createdAt: new Date().toISOString(),
+    });
+    analyse.extraction.prompt = prompt;
+  };
+
+  const restoreExtractionPromptVersion = (analyseId: string, versionId: string) => {
+    const analyse = getById(analyseId);
+    const version = analyse?.extraction.promptVersions.find((v) => v.id === versionId);
+    if (!analyse || !version) return;
+    updateExtractionPrompt(analyseId, version.content);
+  };
+
+  const updateExtractionEntities = (analyseId: string, entities: EntityDefinition[]) => {
+    const analyse = getById(analyseId);
+    if (!analyse || JSON.stringify(analyse.extraction.entities) === JSON.stringify(entities)) return;
+    analyse.extraction.entitiesVersions.unshift({
+      id: `v-${Date.now()}`,
+      content: analyse.extraction.entities,
+      createdAt: new Date().toISOString(),
+    });
+    analyse.extraction.entities = entities;
+  };
+
+  const restoreExtractionEntitiesVersion = (analyseId: string, versionId: string) => {
+    const analyse = getById(analyseId);
+    const version = analyse?.extraction.entitiesVersions.find((v) => v.id === versionId);
+    if (!analyse || !version) return;
+    updateExtractionEntities(analyseId, version.content);
+  };
+
+  // --- Agents (créés librement par l'utilisateur pour un but métier) ---
+
+  const addAgent = (analyseId: string, name: string, prompt: string, tools: AgentTool[] = []) => {
     const analyse = getById(analyseId);
     if (!analyse) return;
-    const agent: Agent = {
-      id: `agent-${Date.now()}`,
-      name,
-      capability,
-      prompt,
-      promptVersions: [],
-      tools,
-      labels: [],
-      labelsVersions: [],
-      entities: [],
-      entitiesVersions: [],
-    };
+    const agent: Agent = { id: `agent-${Date.now()}`, name, prompt, promptVersions: [], tools };
     analyse.agents.push(agent);
     return agent;
   };
@@ -112,53 +181,21 @@ export function useAnalyses() {
     agent.tools = tools;
   };
 
-  const updateAgentLabels = (analyseId: string, agentId: string, labels: LabelDefinition[]) => {
-    const agent = getAgent(analyseId, agentId);
-    if (!agent || JSON.stringify(agent.labels) === JSON.stringify(labels)) return;
-    agent.labelsVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: agent.labels,
-      createdAt: new Date().toISOString(),
-    });
-    agent.labels = labels;
-  };
-
-  const restoreAgentLabelsVersion = (analyseId: string, agentId: string, versionId: string) => {
-    const agent = getAgent(analyseId, agentId);
-    const version = agent?.labelsVersions.find((v) => v.id === versionId);
-    if (!agent || !version) return;
-    updateAgentLabels(analyseId, agentId, version.content);
-  };
-
-  const updateAgentEntities = (analyseId: string, agentId: string, entities: EntityDefinition[]) => {
-    const agent = getAgent(analyseId, agentId);
-    if (!agent || JSON.stringify(agent.entities) === JSON.stringify(entities)) return;
-    agent.entitiesVersions.unshift({
-      id: `v-${Date.now()}`,
-      content: agent.entities,
-      createdAt: new Date().toISOString(),
-    });
-    agent.entities = entities;
-  };
-
-  const restoreAgentEntitiesVersion = (analyseId: string, agentId: string, versionId: string) => {
-    const agent = getAgent(analyseId, agentId);
-    const version = agent?.entitiesVersions.find((v) => v.id === versionId);
-    if (!agent || !version) return;
-    updateAgentEntities(analyseId, agentId, version.content);
-  };
-
   return {
     list,
     getById,
     create,
+    updateClassificationPrompt,
+    restoreClassificationPromptVersion,
+    updateClassificationLabels,
+    restoreClassificationLabelsVersion,
+    updateExtractionPrompt,
+    restoreExtractionPromptVersion,
+    updateExtractionEntities,
+    restoreExtractionEntitiesVersion,
     addAgent,
     updateAgentPrompt,
     restoreAgentPromptVersion,
     updateAgentTools,
-    updateAgentLabels,
-    restoreAgentLabelsVersion,
-    updateAgentEntities,
-    restoreAgentEntitiesVersion,
   };
 }
