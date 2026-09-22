@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { RouterLink, RouterView } from "vue-router";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import { useAuth } from "@/composables/useAuth";
 
+const route = useRoute();
 const { isAuthenticated, userName, login, logout } = useAuth();
 
 const isSidebarCollapsed = ref(false);
 const toggleSidebar = () => {
   isSidebarCollapsed.value = !isSidebarCollapsed.value;
 };
+
+const navItems = [
+  { to: "/", label: "Analyses", icon: "ri-add-line" },
+  { to: "/dossiers", label: "Dossiers", icon: "ri-folder-line" },
+];
 </script>
 
 <template>
@@ -37,9 +43,16 @@ const toggleSidebar = () => {
             <span class="app-shell__collapse-toggle-label">Réduire</span>
           </button>
 
-          <RouterLink to="/" class="app-shell__new-analysis" :title="isSidebarCollapsed ? 'Analyses' : undefined">
-            <VIcon name="ri-add-line" />
-            <span class="app-shell__label">Analyses</span>
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="app-shell__nav-pill"
+            :class="{ 'app-shell__nav-pill--active': route.path === item.to }"
+            :title="isSidebarCollapsed ? item.label : undefined"
+          >
+            <VIcon :name="item.icon" />
+            <span class="app-shell__label">{{ item.label }}</span>
           </RouterLink>
         </div>
 
@@ -114,8 +127,8 @@ const toggleSidebar = () => {
   align-self: center;
 }
 
-/* ChatGPT-style pill button: full width, rounded, sits above the nav list. */
-.app-shell__new-analysis {
+/* ChatGPT-style pill buttons: full width, rounded, stacked at the top. */
+.app-shell__nav-pill {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -129,13 +142,17 @@ const toggleSidebar = () => {
   white-space: nowrap;
 }
 
-.app-shell__sidebar--collapsed .app-shell__new-analysis {
+.app-shell__sidebar--collapsed .app-shell__nav-pill {
   justify-content: center;
   padding: 0.75rem;
 }
 
-.app-shell__new-analysis:hover {
+.app-shell__nav-pill:hover {
   background-color: var(--background-action-low-blue-france-hover);
+}
+
+.app-shell__nav-pill--active {
+  background-color: var(--background-action-selected-blue-france);
 }
 
 /* Profile / connexion, pinned bottom-left like ChatGPT's account menu. */
