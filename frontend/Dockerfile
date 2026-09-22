@@ -9,11 +9,14 @@ COPY . .
 RUN pnpm build
 
 # nginxinc/nginx-unprivileged already runs as the unprivileged `nginx` user
-# (uid 101) and listens on 8080 instead of 80, so no extra USER/port setup
-# is required to get a non-root container.
+# (uid 101) and listens on 8080 instead of 80, so no extra port setup is
+# required to get a non-root container. USER is repeated explicitly below
+# anyway: Trivy's Dockerfile config scan (DS-0002) reads the Dockerfile
+# text, not the base image's own config, and flags a missing USER line.
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 COPY --chown=nginx:nginx docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --chown=nginx:nginx --from=build /app/dist /usr/share/nginx/html
+USER nginx
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:8080/ >/dev/null || exit 1
