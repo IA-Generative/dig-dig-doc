@@ -21,12 +21,14 @@ const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) =
 const name = ref("");
 const prompt = ref("");
 const tools = ref<AgentTool[]>([]);
+const output = ref(true);
 
 watch(opened, (isOpened) => {
   if (isOpened) {
     name.value = "";
     prompt.value = "";
     tools.value = [];
+    output.value = true;
   }
 });
 
@@ -36,7 +38,7 @@ function applySuggestion() {
 
 function submit() {
   if (!name.value.trim() || !prompt.value.trim()) return;
-  addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value);
+  addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value, output.value);
   opened.value = false;
   emit("created");
 }
@@ -66,6 +68,11 @@ function submit() {
       :options="toolOptions"
       inline
       small
+      class="fr-mt-2w"
+    />
+    <DsfrToggleSwitch
+      v-model="output"
+      label="Présenter le résultat de cet agent dans la page de résultat du dossier"
       class="fr-mt-2w"
     />
   </DsfrModal>

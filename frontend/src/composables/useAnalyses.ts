@@ -147,10 +147,16 @@ export function useAnalyses() {
 
   // --- Agents (créés librement par l'utilisateur pour un but métier) ---
 
-  const addAgent = (analyseId: string, name: string, prompt: string, tools: AgentTool[] = []) => {
+  const addAgent = (
+    analyseId: string,
+    name: string,
+    prompt: string,
+    tools: AgentTool[] = [],
+    output = true,
+  ) => {
     const analyse = getById(analyseId);
     if (!analyse) return;
-    const agent: Agent = { id: `agent-${Date.now()}`, name, prompt, promptVersions: [], tools };
+    const agent: Agent = { id: `agent-${Date.now()}`, name, prompt, promptVersions: [], tools, output };
     analyse.agents.push(agent);
     return agent;
   };
@@ -179,6 +185,12 @@ export function useAnalyses() {
     const agent = getAgent(analyseId, agentId);
     if (!agent) return;
     agent.tools = tools;
+  };
+
+  const updateAgentOutput = (analyseId: string, agentId: string, output: boolean) => {
+    const agent = getAgent(analyseId, agentId);
+    if (!agent) return;
+    agent.output = output;
   };
 
   // La version d'une analyse est dérivée du nombre total de modifications
@@ -212,6 +224,7 @@ export function useAnalyses() {
     updateAgentPrompt,
     restoreAgentPromptVersion,
     updateAgentTools,
+    updateAgentOutput,
     getAnalyseVersion,
   };
 }
