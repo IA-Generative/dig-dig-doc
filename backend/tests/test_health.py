@@ -6,11 +6,11 @@ client = TestClient(app)
 
 
 def test_health() -> None:
-    response = client.get("/health")
+    response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
 def test_health_ready() -> None:
-    response = client.get("/health/ready")
-    assert response.status_code == 200
+    response = client.get("/api/health/ready")
+    assert response.json()["dependencies"][0]["name"] == "redis"
