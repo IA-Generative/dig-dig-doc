@@ -181,6 +181,21 @@ export function useAnalyses() {
     agent.tools = tools;
   };
 
+  // La version d'une analyse est dérivée du nombre total de modifications
+  // enregistrées (chaque entrée d'historique, prompt/labels/entités/agents
+  // confondus) : v1 au départ, +1 à chaque changement sauvegardé.
+  const getAnalyseVersion = (analyseId: string): string => {
+    const analyse = getById(analyseId);
+    if (!analyse) return "v1";
+    const editCount =
+      analyse.classification.promptVersions.length +
+      analyse.classification.labelsVersions.length +
+      analyse.extraction.promptVersions.length +
+      analyse.extraction.entitiesVersions.length +
+      analyse.agents.reduce((sum, agent) => sum + agent.promptVersions.length, 0);
+    return `v${editCount + 1}`;
+  };
+
   return {
     list,
     getById,
@@ -197,5 +212,6 @@ export function useAnalyses() {
     updateAgentPrompt,
     restoreAgentPromptVersion,
     updateAgentTools,
+    getAnalyseVersion,
   };
 }
