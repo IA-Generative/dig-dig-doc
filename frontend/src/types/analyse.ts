@@ -74,8 +74,10 @@ export interface Agent {
   prompt: string;
   promptVersions: PromptVersion[];
   tools: AgentTool[];
+  toolsVersions: Version<AgentTool[]>[];
   /** Si vrai, le résultat de cet agent est présenté comme une sortie visible dans la page de résultat du dossier. */
   output: boolean;
+  outputVersions: Version<boolean>[];
 }
 
 export interface Analyse {

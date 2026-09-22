@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import AgentToolsEditor from "@/components/analyses/AgentToolsEditor.vue";
 import PromptEditor from "@/components/analyses/PromptEditor.vue";
+import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestAgentPrompt } from "@/composables/useLlmAssist";
 import type { Agent } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const { updateAgentPrompt, restoreAgentPromptVersion, updateAgentOutput } = useAnalyses();
+const { updateAgentPrompt, restoreAgentPromptVersion, updateAgentOutput, restoreAgentOutputVersion } = useAnalyses();
 
 function savePrompt(prompt: string) {
   updateAgentPrompt(props.analyseId, props.agent.id, prompt);
@@ -19,6 +20,14 @@ function restorePromptVersion(versionId: string) {
 
 function toggleOutput(output: boolean) {
   updateAgentOutput(props.analyseId, props.agent.id, output);
+}
+
+function restoreOutputVersion(versionId: string) {
+  restoreAgentOutputVersion(props.analyseId, props.agent.id, versionId);
+}
+
+function formatOutputVersionContent(output: boolean) {
+  return output ? "Activé" : "Désactivé";
 }
 </script>
 
@@ -38,6 +47,13 @@ function toggleOutput(output: boolean) {
         @update:model-value="toggleOutput"
       />
     </div>
+
+    <VersionHistory
+      v-if="agent.outputVersions.length > 0"
+      :versions="agent.outputVersions"
+      :format-content="formatOutputVersionContent"
+      @restore="restoreOutputVersion"
+    />
 
     <PromptEditor
       :prompt="agent.prompt"
