@@ -156,7 +156,16 @@ export function useAnalyses() {
   ) => {
     const analyse = getById(analyseId);
     if (!analyse) return;
-    const agent: Agent = { id: `agent-${Date.now()}`, name, prompt, promptVersions: [], tools, output };
+    const agent: Agent = {
+      id: `agent-${Date.now()}`,
+      name,
+      prompt,
+      promptVersions: [],
+      tools,
+      toolsVersions: [],
+      output,
+      outputVersions: [],
+    };
     analyse.agents.push(agent);
     return agent;
   };
@@ -183,14 +192,31 @@ export function useAnalyses() {
 
   const updateAgentTools = (analyseId: string, agentId: string, tools: AgentTool[]) => {
     const agent = getAgent(analyseId, agentId);
-    if (!agent) return;
+    const sortTools = (t: AgentTool[]) => [...t].sort((a, b) => a.localeCompare(b));
+    if (!agent || JSON.stringify(sortTools(agent.tools)) === JSON.stringify(sortTools(tools))) return;
+    agent.toolsVersions.unshift({ id: `v-${Date.now()}`, content: agent.tools, createdAt: new Date().toISOString() });
     agent.tools = tools;
+  };
+
+  const restoreAgentToolsVersion = (analyseId: string, agentId: string, versionId: string) => {
+    const agent = getAgent(analyseId, agentId);
+    const version = agent?.toolsVersions.find((v) => v.id === versionId);
+    if (!agent || !version) return;
+    updateAgentTools(analyseId, agentId, version.content);
   };
 
   const updateAgentOutput = (analyseId: string, agentId: string, output: boolean) => {
     const agent = getAgent(analyseId, agentId);
-    if (!agent) return;
+    if (!agent || agent.output === output) return;
+    agent.outputVersions.unshift({ id: `v-${Date.now()}`, content: agent.output, createdAt: new Date().toISOString() });
     agent.output = output;
+  };
+
+  const restoreAgentOutputVersion = (analyseId: string, agentId: string, versionId: string) => {
+    const agent = getAgent(analyseId, agentId);
+    const version = agent?.outputVersions.find((v) => v.id === versionId);
+    if (!agent || !version) return;
+    updateAgentOutput(analyseId, agentId, version.content);
   };
 
   // La version d'une analyse est dérivée du nombre total de modifications
@@ -224,7 +250,9 @@ export function useAnalyses() {
     updateAgentPrompt,
     restoreAgentPromptVersion,
     updateAgentTools,
+    restoreAgentToolsVersion,
     updateAgentOutput,
+    restoreAgentOutputVersion,
     getAnalyseVersion,
   };
 }
