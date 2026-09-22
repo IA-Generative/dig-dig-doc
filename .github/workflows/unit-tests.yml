@@ -32,6 +32,21 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: digdigdoc
+          POSTGRES_PASSWORD: digdigdoc
+          POSTGRES_DB: digdigdoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U digdigdoc"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@localhost:5432/digdigdoc
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -45,7 +60,14 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv sync --group dev
+        # --group test, not --group dev: the dev group also pulls in eralchemy2
+        # (ER diagram generation), whose pygraphviz dependency needs system
+        # graphviz headers this runner doesn't have - CI only needs the tests.
+        run: uv sync --group test
+
+      - name: Apply database migrations
+        working-directory: backend
+        run: uv run alembic upgrade head
 
       - name: Run tests
         working-directory: backend

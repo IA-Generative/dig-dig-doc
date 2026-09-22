@@ -1,11 +1,7 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
 
-client = TestClient(app)
-
-
-def test_login_redirects_to_keycloak() -> None:
+def test_login_redirects_to_keycloak(client: TestClient) -> None:
     response = client.get("/api/auth/login", follow_redirects=False)
     assert response.status_code == 307
     location = response.headers["location"]
@@ -14,7 +10,7 @@ def test_login_redirects_to_keycloak() -> None:
     assert "code_challenge=" in location
 
 
-def test_login_rejects_unsafe_redirect() -> None:
+def test_login_rejects_unsafe_redirect(client: TestClient) -> None:
     response = client.get("/api/auth/login?redirect=//evil.example.com", follow_redirects=False)
     location = response.headers["location"]
     # The unsafe redirect target never reaches Keycloak's query string; the
@@ -23,7 +19,7 @@ def test_login_rejects_unsafe_redirect() -> None:
     assert "evil.example.com" not in location
 
 
-def test_me_returns_dev_identity_when_verification_is_bypassed() -> None:
+def test_me_returns_dev_identity_when_verification_is_bypassed(client: TestClient) -> None:
     # tests/.env.testing sets VERIFY_TOKEN_MODEL=full-access, so /me never
     # needs a real Keycloak or session cookie here.
     response = client.get("/api/auth/me")

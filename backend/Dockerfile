@@ -13,6 +13,11 @@ RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/app /app/app
+# Needed at runtime, not just build time: `alembic upgrade head` runs against
+# the deployed image (docker compose's migrate service, an init container),
+# so the migration scripts and alembic.ini have to travel with it.
+COPY --chown=app:app migrations ./migrations
+COPY --chown=app:app alembic.ini ./
 USER app
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000

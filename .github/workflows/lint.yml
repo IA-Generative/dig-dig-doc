@@ -74,7 +74,10 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv sync --group dev
+        # --group test, not --group dev: the dev group also pulls in eralchemy2
+        # (ER diagram generation), whose pygraphviz dependency needs system
+        # graphviz headers this runner doesn't have - CI only needs the tests.
+        run: uv sync --group test
 
       - name: Ruff check
         working-directory: backend
