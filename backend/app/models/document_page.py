@@ -23,25 +23,7 @@ class PredictionValidationStatus(enum.StrEnum):
     REJECTED = "rejeté"
 
 
-class BoundingBoxMixin:
-    """Bbox normalisée (0-1, origine en haut à gauche) sur une page ou un
-    document. Colonnes à plat plutôt que JSONB : reste filtrable/indexable,
-    et exposée aux schémas Pydantic comme un seul champ `bbox` via cette
-    property (from_attributes la lit comme un attribut normal)."""
-
-    x_min: Mapped[float | None] = mapped_column(Float, nullable=True)
-    y_min: Mapped[float | None] = mapped_column(Float, nullable=True)
-    x_max: Mapped[float | None] = mapped_column(Float, nullable=True)
-    y_max: Mapped[float | None] = mapped_column(Float, nullable=True)
-
-    @property
-    def bbox(self) -> dict[str, float] | None:
-        if self.x_min is None:
-            return None
-        return {"x_min": self.x_min, "y_min": self.y_min, "x_max": self.x_max, "y_max": self.y_max}
-
-
-class DocumentPage(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
+class DocumentPage(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "document_pages"
 
     dossier_document_id: Mapped[uuid.UUID] = mapped_column(
@@ -57,13 +39,41 @@ class DocumentPage(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
     predictions: Mapped[list["DocumentPrediction"]] = relationship(
         back_populates="page", cascade="all, delete-orphan", order_by="DocumentPrediction.created_at"
     )
+    # Une page peut porter plusieurs zones (une par prédiction, potentiellement
+    # d'autres plus tard) : la bbox est donc sa propre table rattachée à la
+    # page plutôt que des colonnes plates dupliquées sur chaque table qui en
+    # a besoin (prédiction, validation...).
+    bounding_boxes: Mapped[list["BoundingBox"]] = relationship(
+        back_populates="page", cascade="all, delete-orphan", order_by="BoundingBox.created_at"
+    )
 
 
-class DocumentPrediction(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
+class BoundingBox(UUIDMixin, TimestampMixin, Base):
+    """Zone normalisée (0-1, origine en haut à gauche) sur une page. Toujours
+    rattachée à une DocumentPage ; une prédiction ou une validation qui en a
+    une la référence par FK plutôt que d'en porter les coordonnées elle-même."""
+
+    __tablename__ = "bounding_boxes"
+
+    document_page_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("document_pages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    x_min: Mapped[float] = mapped_column(Float, nullable=False)
+    y_min: Mapped[float] = mapped_column(Float, nullable=False)
+    x_max: Mapped[float] = mapped_column(Float, nullable=False)
+    y_max: Mapped[float] = mapped_column(Float, nullable=False)
+
+    page: Mapped["DocumentPage"] = relationship(back_populates="bounding_boxes")
+
+
+class DocumentPrediction(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "document_predictions"
 
     document_page_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("document_pages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    bounding_box_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("bounding_boxes.id", ondelete="SET NULL"), nullable=True
     )
     kind: Mapped[PredictionKind] = mapped_column(Enum(PredictionKind, name="prediction_kind"), nullable=False)
     # Nom du label/de l'entité prédite (ex: "CNI", "nom") - texte libre
@@ -74,20 +84,26 @@ class DocumentPrediction(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     page: Mapped["DocumentPage"] = relationship(back_populates="predictions")
+    bounding_box: Mapped["BoundingBox | None"] = relationship(foreign_keys=[bounding_box_id])
     validations: Mapped[list["PredictionValidation"]] = relationship(
         back_populates="prediction", cascade="all, delete-orphan", order_by="PredictionValidation.created_at"
     )
 
 
-class PredictionValidation(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
+class PredictionValidation(UUIDMixin, TimestampMixin, Base):
     """Historique de validation humaine d'une prédiction : chaque ligne est un
     événement (validation, correction ou rejet), jamais modifiée après coup -
-    la dernière ligne fait foi, comme le versioning de FieldVersion."""
+    la dernière ligne fait foi, comme le versioning de FieldVersion. Une
+    correction de zone crée sa propre BoundingBox (jamais de mutation de
+    celle de la prédiction d'origine) pour garder l'historique intact."""
 
     __tablename__ = "prediction_validations"
 
     prediction_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("document_predictions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    bounding_box_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("bounding_boxes.id", ondelete="SET NULL"), nullable=True
     )
     validator_user_id: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[PredictionValidationStatus] = mapped_column(
@@ -96,3 +112,4 @@ class PredictionValidation(BoundingBoxMixin, UUIDMixin, TimestampMixin, Base):
     corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     prediction: Mapped["DocumentPrediction"] = relationship(back_populates="validations")
+    bounding_box: Mapped["BoundingBox | None"] = relationship(foreign_keys=[bounding_box_id])

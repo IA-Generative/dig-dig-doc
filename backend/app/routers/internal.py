@@ -57,7 +57,6 @@ async def add_document_page(document_id: uuid.UUID, body: DocumentPageIn, db: An
         page_number=body.page_number,
         width=body.width,
         height=body.height,
-        bbox=body.bbox.model_dump() if body.bbox else None,
         content=body.content,
     )
 
@@ -76,7 +75,7 @@ async def add_document_prediction(
         name=body.name,
         value=body.value,
         confidence=body.confidence,
-        bbox=body.bbox.model_dump() if body.bbox else None,
+        bounding_box=body.bounding_box.model_dump() if body.bounding_box else None,
     )
 
 

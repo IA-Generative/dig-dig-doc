@@ -145,26 +145,39 @@ def test_document_pages_predictions_and_validation(client: TestClient) -> None:
             "name": "CNI",
             "value": "CNI",
             "confidence": 0.96,
-            "bbox": {"x_min": 0.1, "y_min": 0.1, "x_max": 0.9, "y_max": 0.5},
+            "bounding_box": {"x_min": 0.1, "y_min": 0.1, "x_max": 0.9, "y_max": 0.5},
         },
         headers=INTERNAL_HEADERS,
     ).json()
     assert prediction["kind"] == "label"
-    assert prediction["bbox"]["x_max"] == 0.9
+    assert prediction["bounding_box"]["x_max"] == 0.9
+    assert prediction["bounding_box"]["id"] is not None
     assert prediction["validations"] == []
 
     dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
     fetched_page = dossier["documents"][0]["pages"][0]
     assert fetched_page["predictions"][0]["name"] == "CNI"
+    # La bbox de la prédiction est aussi rattachée à la page (nouvelle table
+    # dédiée) : même bbox visible aux deux endroits.
+    assert len(fetched_page["bounding_boxes"]) == 1
+    assert fetched_page["bounding_boxes"][0]["id"] == prediction["bounding_box"]["id"]
 
     validated = client.put(
         f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}"
         f"/predictions/{prediction['id']}/validations",
-        json={"status": "corrigé", "corrected_value": "Carte Nationale d'Identité"},
+        json={
+            "status": "corrigé",
+            "corrected_value": "Carte Nationale d'Identité",
+            "bounding_box": {"x_min": 0.12, "y_min": 0.1, "x_max": 0.9, "y_max": 0.5},
+        },
     ).json()
     assert validated["status"] == "corrigé"
     assert validated["corrected_value"] == "Carte Nationale d'Identité"
     assert validated["validator_user_id"] == "dev-user"
+    # La correction crée sa propre bbox, distincte de celle de la prédiction
+    # d'origine (l'historique reste intact).
+    assert validated["bounding_box"]["id"] != prediction["bounding_box"]["id"]
+    assert validated["bounding_box"]["x_min"] == 0.12
 
 
 def test_assistant_message_with_sources(client: TestClient) -> None:
