@@ -44,6 +44,15 @@ class ReportRepository:
         )
         return result.scalars().all()
 
+    async def list_mine_paginated(self, *, user_id: str, page: int, page_size: int) -> tuple[Sequence[Report], int]:
+        base = select(Report).where(Report.user_id == user_id)
+        count_query = select(func.count()).select_from(Report).where(Report.user_id == user_id)
+        total = await self.db.scalar(count_query)
+        result = await self.db.execute(
+            base.order_by(Report.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+        )
+        return result.scalars().all(), total or 0
+
     async def list_paginated(
         self,
         *,
@@ -68,7 +77,12 @@ class ReportRepository:
         return result.scalars().all(), total or 0
 
     async def update_status(
-        self, report: Report, *, status: ReportStatus, admin_response: str | None, responded_by: str | None
+        self,
+        report: Report,
+        *,
+        status: ReportStatus,
+        admin_response: str | None,
+        responded_by: str | None,
     ) -> Report:
         report.status = status
         if admin_response is not None:

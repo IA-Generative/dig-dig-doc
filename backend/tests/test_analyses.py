@@ -36,9 +36,13 @@ def test_classification_prompt_is_versioned(client: TestClient) -> None:
     analyse = client.post("/api/analyses", json={"name": "Avis d'imposition"}).json()
     analyse_id = analyse["id"]
 
-    client.put(f"/api/analyses/{analyse_id}/classification/prompt", json={"prompt": "Identifie le document."})
+    client.put(
+        f"/api/analyses/{analyse_id}/classification/prompt",
+        json={"prompt": "Identifie le document."},
+    )
     response = client.put(
-        f"/api/analyses/{analyse_id}/classification/prompt", json={"prompt": "Identifie le document (v2)."}
+        f"/api/analyses/{analyse_id}/classification/prompt",
+        json={"prompt": "Identifie le document (v2)."},
     )
 
     body = response.json()
@@ -84,7 +88,7 @@ def test_share_by_email_returns_working_link(client: TestClient) -> None:
     token = share["share_url"].rsplit("/", 1)[-1]
 
     # Le jeton en clair n'est jamais renvoyé une seconde fois.
-    listed = client.get(f"/api/analyses/{analyse['id']}/shares").json()
+    listed = client.get(f"/api/analyses/{analyse['id']}/shares").json()["items"]
     assert listed[0]["share_url"] is None
 
     shared = client.get(f"/api/analyses/shared/{token}").json()
@@ -101,7 +105,8 @@ def test_share_by_keycloak_group(client: TestClient) -> None:
     analyse = client.post("/api/analyses", json={"name": "Analyse partagée par groupe"}).json()
 
     share = client.post(
-        f"/api/analyses/{analyse['id']}/shares", json={"kind": "keycloak_group", "keycloak_group": "prefecture-75"}
+        f"/api/analyses/{analyse['id']}/shares",
+        json={"kind": "keycloak_group", "keycloak_group": "prefecture-75"},
     ).json()
     assert share["kind"] == "keycloak_group"
     assert share["keycloak_group"] == "prefecture-75"
@@ -114,12 +119,20 @@ def test_agent_lifecycle_and_output_versioning(client: TestClient) -> None:
 
     agent = client.post(
         f"/api/analyses/{analyse_id}/agents",
-        json={"name": "Synthèse", "prompt": "Rédige une synthèse.", "tools": ["lecture_document"], "output": True},
+        json={
+            "name": "Synthèse",
+            "prompt": "Rédige une synthèse.",
+            "tools": ["lecture_document"],
+            "output": True,
+        },
     ).json()
     assert agent["output"] is True
     assert agent["tools"] == ["lecture_document"]
 
-    agent = client.put(f"/api/analyses/{analyse_id}/agents/{agent['id']}/output", json={"output": False}).json()
+    agent = client.put(
+        f"/api/analyses/{analyse_id}/agents/{agent['id']}/output",
+        json={"output": False},
+    ).json()
     assert agent["output"] is False
     assert len(agent["output_versions"]) == 1
     assert agent["output_versions"][0]["content"] is True
@@ -137,7 +150,8 @@ def test_agent_model_is_stored_and_versioned(client: TestClient) -> None:
     assert agent["model_versions"] == []
 
     agent = client.put(
-        f"/api/analyses/{analyse_id}/agents/{agent['id']}/model", json={"model": "mistral-large"}
+        f"/api/analyses/{analyse_id}/agents/{agent['id']}/model",
+        json={"model": "mistral-large"},
     ).json()
     assert agent["model"] == "mistral-large"
     assert len(agent["model_versions"]) == 1

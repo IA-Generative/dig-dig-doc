@@ -7,7 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import KeycloakSettings, SharingSettings
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
-from app.models.analyse import Agent, Analyse, EntityDefinition, LabelDefinition, VersionedField
+from app.models.analyse import (
+    Agent,
+    Analyse,
+    EntityDefinition,
+    LabelDefinition,
+    VersionedField,
+)
 from app.models.analyse_share import AnalyseShareKind
 from app.repositories.analyse_repository import AnalyseRepository
 from app.schemas.analyse import (
@@ -61,7 +67,11 @@ async def list_analyses(
     analyses, total = await repository.list_paginated(page=page, page_size=page_size)
     items = [
         AnalyseListItem(
-            id=a.id, name=a.name, description=a.description, created_at=a.created_at, agent_count=len(a.agents)
+            id=a.id,
+            name=a.name,
+            description=a.description,
+            created_at=a.created_at,
+            agent_count=len(a.agents),
         )
         for a in analyses
     ]
@@ -85,7 +95,9 @@ async def get_analyse(analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends
 
 @router.put("/{analyse_id}/classification/prompt", response_model=AnalyseOut)
 async def update_classification_prompt(
-    analyse_id: uuid.UUID, body: PromptUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    body: PromptUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -93,9 +105,14 @@ async def update_classification_prompt(
     return repository.to_schema(analyse)
 
 
-@router.post("/{analyse_id}/classification/prompt/restore/{version_id}", response_model=AnalyseOut)
+@router.post(
+    "/{analyse_id}/classification/prompt/restore/{version_id}",
+    response_model=AnalyseOut,
+)
 async def restore_classification_prompt(
-    analyse_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -105,7 +122,9 @@ async def restore_classification_prompt(
 
 @router.put("/{analyse_id}/classification/labels", response_model=AnalyseOut)
 async def update_classification_labels(
-    analyse_id: uuid.UUID, body: LabelsUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    body: LabelsUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -114,9 +133,14 @@ async def update_classification_labels(
     return repository.to_schema(analyse)
 
 
-@router.post("/{analyse_id}/classification/labels/restore/{version_id}", response_model=AnalyseOut)
+@router.post(
+    "/{analyse_id}/classification/labels/restore/{version_id}",
+    response_model=AnalyseOut,
+)
 async def restore_classification_labels(
-    analyse_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -126,7 +150,9 @@ async def restore_classification_labels(
 
 @router.put("/{analyse_id}/extraction/prompt", response_model=AnalyseOut)
 async def update_extraction_prompt(
-    analyse_id: uuid.UUID, body: PromptUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    body: PromptUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -136,7 +162,9 @@ async def update_extraction_prompt(
 
 @router.post("/{analyse_id}/extraction/prompt/restore/{version_id}", response_model=AnalyseOut)
 async def restore_extraction_prompt(
-    analyse_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -146,7 +174,9 @@ async def restore_extraction_prompt(
 
 @router.put("/{analyse_id}/extraction/entities", response_model=AnalyseOut)
 async def update_extraction_entities(
-    analyse_id: uuid.UUID, body: EntitiesUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    body: EntitiesUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -157,7 +187,9 @@ async def update_extraction_entities(
 
 @router.post("/{analyse_id}/extraction/entities/restore/{version_id}", response_model=AnalyseOut)
 async def restore_extraction_entities(
-    analyse_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AnalyseOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -166,11 +198,20 @@ async def restore_extraction_entities(
 
 
 @router.post("/{analyse_id}/agents", response_model=AgentOut, status_code=status.HTTP_201_CREATED)
-async def add_agent(analyse_id: uuid.UUID, body: AgentCreate, db: Annotated[AsyncSession, Depends(get_db)]) -> AgentOut:
+async def add_agent(
+    analyse_id: uuid.UUID,
+    body: AgentCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
     agent = await repository.add_agent(
-        analyse, name=body.name, prompt=body.prompt, tools=body.tools, output=body.output, model=body.model
+        analyse,
+        name=body.name,
+        prompt=body.prompt,
+        tools=body.tools,
+        output=body.output,
+        model=body.model,
     )
     analyse = await _get_or_404(repository, analyse_id)
     return repository.to_agent_schema(analyse, repository.get_agent(analyse, agent.id))
@@ -178,7 +219,10 @@ async def add_agent(analyse_id: uuid.UUID, body: AgentCreate, db: Annotated[Asyn
 
 @router.put("/{analyse_id}/agents/{agent_id}/prompt", response_model=AgentOut)
 async def update_agent_prompt(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, body: PromptUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    body: PromptUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -187,9 +231,15 @@ async def update_agent_prompt(
     return repository.to_agent_schema(analyse, agent)
 
 
-@router.post("/{analyse_id}/agents/{agent_id}/prompt/restore/{version_id}", response_model=AgentOut)
+@router.post(
+    "/{analyse_id}/agents/{agent_id}/prompt/restore/{version_id}",
+    response_model=AgentOut,
+)
 async def restore_agent_prompt(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -200,7 +250,10 @@ async def restore_agent_prompt(
 
 @router.put("/{analyse_id}/agents/{agent_id}/tools", response_model=AgentOut)
 async def update_agent_tools(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, body: ToolsUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    body: ToolsUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -209,9 +262,15 @@ async def update_agent_tools(
     return repository.to_agent_schema(analyse, agent)
 
 
-@router.post("/{analyse_id}/agents/{agent_id}/tools/restore/{version_id}", response_model=AgentOut)
+@router.post(
+    "/{analyse_id}/agents/{agent_id}/tools/restore/{version_id}",
+    response_model=AgentOut,
+)
 async def restore_agent_tools(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -222,7 +281,10 @@ async def restore_agent_tools(
 
 @router.put("/{analyse_id}/agents/{agent_id}/output", response_model=AgentOut)
 async def update_agent_output(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, body: OutputUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    body: OutputUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -231,9 +293,15 @@ async def update_agent_output(
     return repository.to_agent_schema(analyse, agent)
 
 
-@router.post("/{analyse_id}/agents/{agent_id}/output/restore/{version_id}", response_model=AgentOut)
+@router.post(
+    "/{analyse_id}/agents/{agent_id}/output/restore/{version_id}",
+    response_model=AgentOut,
+)
 async def restore_agent_output(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -244,7 +312,10 @@ async def restore_agent_output(
 
 @router.put("/{analyse_id}/agents/{agent_id}/model", response_model=AgentOut)
 async def update_agent_model(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, body: ModelUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    body: ModelUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -253,9 +324,15 @@ async def update_agent_model(
     return repository.to_agent_schema(analyse, agent)
 
 
-@router.post("/{analyse_id}/agents/{agent_id}/model/restore/{version_id}", response_model=AgentOut)
+@router.post(
+    "/{analyse_id}/agents/{agent_id}/model/restore/{version_id}",
+    response_model=AgentOut,
+)
 async def restore_agent_model(
-    analyse_id: uuid.UUID, agent_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    analyse_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> AgentOut:
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
@@ -267,14 +344,24 @@ async def restore_agent_model(
 # --- Partage ---
 
 
-@router.get("/{analyse_id}/shares", response_model=list[AnalyseShareOut])
-async def list_shares(analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+@router.get("/{analyse_id}/shares", response_model=Page[AnalyseShareOut])
+async def list_shares(
+    analyse_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[AnalyseShareOut]:
     repository = AnalyseRepository(db)
-    analyse = await _get_or_404(repository, analyse_id)
-    return analyse.shares
+    await _get_or_404(repository, analyse_id)
+    shares, total = await repository.list_shares_paginated(analyse_id=analyse_id, page=page, page_size=page_size)
+    return Page.of(list(shares), total=total, page=page, page_size=page_size)
 
 
-@router.post("/{analyse_id}/shares", response_model=AnalyseShareOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{analyse_id}/shares",
+    response_model=AnalyseShareOut,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_share(
     analyse_id: uuid.UUID,
     body: AnalyseShareCreate,
@@ -303,7 +390,11 @@ async def create_share(
 
 
 @router.delete("/{analyse_id}/shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def revoke_share(analyse_id: uuid.UUID, share_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+async def revoke_share(
+    analyse_id: uuid.UUID,
+    share_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
     repository = AnalyseRepository(db)
     share = await repository.get_share_by_id(analyse_id, share_id)
     if share is None:
@@ -316,5 +407,8 @@ async def get_shared_analyse(token: str, db: Annotated[AsyncSession, Depends(get
     repository = AnalyseRepository(db)
     analyse = await repository.get_by_share_token(token)
     if analyse is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lien de partage invalide ou expiré")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lien de partage invalide ou expiré",
+        )
     return repository.to_schema(analyse)

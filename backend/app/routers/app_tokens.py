@@ -1,20 +1,26 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.repositories.app_token_repository import AppTokenRepository
 from app.schemas.app_token import AppTokenCreate, AppTokenCreated, AppTokenOut
+from app.schemas.pagination import Page
 
 router = APIRouter(prefix="/app-tokens", tags=["App tokens"], dependencies=[Depends(get_current_user)])
 
 
-@router.get("", response_model=list[AppTokenOut])
-async def list_app_tokens(db: Annotated[AsyncSession, Depends(get_db)]):
-    return await AppTokenRepository(db).list_all()
+@router.get("", response_model=Page[AppTokenOut])
+async def list_app_tokens(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[AppTokenOut]:
+    tokens, total = await AppTokenRepository(db).list_paginated(page=page, page_size=page_size)
+    return Page.of(list(tokens), total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=AppTokenCreated, status_code=status.HTTP_201_CREATED)

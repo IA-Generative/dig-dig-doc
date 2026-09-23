@@ -1,5 +1,6 @@
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Enum, ForeignKey, String, Table, Text, UniqueConstraint
@@ -11,6 +12,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.document_page import BoundingBox, DocumentPage
     from app.models.dossier import Dossier, DossierDocument, ExecutionStep
+    from app.models.feedback import Feedback
 
 # Granularité d'une source, du plus large au plus précis : au minimum le
 # document (dossier_document_id ci-dessous), éventuellement affinée à un
@@ -57,11 +59,7 @@ class MessageRole(enum.StrEnum):
 
 class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
-    __table_args__ = (
-        UniqueConstraint(
-            "dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"),)
 
     dossier_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -72,6 +70,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     # L'auteur de la conversation (identité Keycloak) : la page dossier est
     # un chat personnel à chaque instructeur qui l'ouvre.
     user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # Identifiant de modèle LLM tel que renvoyé par GET /models ; None = pas
+    # de préférence, le hub par défaut sera utilisé.
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(
@@ -79,6 +80,22 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
+
+    @property
+    def dossier_name(self) -> str:
+        return self.dossier.name if self.dossier else ""
+
+    @property
+    def last_message_preview(self) -> str | None:
+        if not self.messages:
+            return None
+        return self.messages[-1].content
+
+    @property
+    def last_activity_at(self) -> datetime:
+        if self.messages:
+            return self.messages[-1].created_at
+        return self.created_at
 
 
 class Message(UUIDMixin, TimestampMixin, Base):
@@ -90,9 +107,7 @@ class Message(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[MessageRole] = mapped_column(
-        Enum(MessageRole, name="message_role"), nullable=False
-    )
+    role: Mapped[MessageRole] = mapped_column(Enum(MessageRole, name="message_role"), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
@@ -101,6 +116,22 @@ class Message(UUIDMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="MessageSource.created_at",
     )
+    feedbacks: Mapped[list["Feedback"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="Feedback.created_at",
+    )
+
+    @property
+    def feedback(self) -> "Feedback | None":
+        """Le retour de l'utilisateur courant, positionne par le routeur
+        avant serialisation (MessageOut.feedback). None tant que le routeur
+        n'a pas filtre les feedbacks par user_id."""
+        return getattr(self, "_feedback", None)
+
+    @feedback.setter
+    def feedback(self, value: "Feedback | None") -> None:
+        self._feedback = value
 
 
 class MessageSource(UUIDMixin, TimestampMixin, Base):
