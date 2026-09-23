@@ -1,0 +1,49 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/zricethezav/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # Hooks locaux (pas de dépôt externe) : lancent les mêmes commandes que la
+  # CI (.github/workflows/lint.yml, unit-tests.yml), mais avant même le push.
+  - repo: local
+    hooks:
+      - id: frontend-typecheck
+        name: frontend - typecheck (vue-tsc)
+        entry: bash -c 'cd frontend && pnpm run typecheck'
+        language: system
+        files: ^frontend/
+        pass_filenames: false
+
+      # Nécessite postgres/redis locaux (voir backend/tests/.env.testing,
+      # docker-compose.yaml) - contrairement au lint, ce hook suppose
+      # l'environnement de dev déjà démarré (`docker compose up postgres
+      # redis`). Scoppé à backend/ pour ne pas ralentir les commits qui n'y
+      # touchent pas.
+      - id: backend-tests
+        name: backend - pytest
+        entry: bash -c 'cd backend && uv run pytest -q'
+        language: system
+        files: ^backend/
+        pass_filenames: false
+
+      # worker/document_process et worker/agent_execution n'ont pas encore
+      # de tests (issues #4/#5, pas construits) : pas de hook pytest pour
+      # eux tant qu'il n'y a rien à collecter, `pytest` sort en erreur sur
+      # une suite vide. Le lint (ruff, ci-dessus) les couvre déjà.
