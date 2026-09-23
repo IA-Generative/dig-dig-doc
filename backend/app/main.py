@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import KeycloakSettings
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
+from app.routers.app_tokens import router as app_tokens_router
 from app.routers.auth import router as auth_router
 from app.routers.dossiers import router as dossiers_router
 from app.routers.health import router as health_router
@@ -22,6 +23,7 @@ app = FastAPI(
         {"name": "Analyses", "description": "Classification, extraction et agents d'une analyse."},
         {"name": "Dossiers", "description": "Dossiers usagers liés à une analyse, et suivi de leur exécution."},
         {"name": "Internal", "description": "Callbacks des workers Celery (jeton partagé, pas d'auth Keycloak)."},
+        {"name": "App tokens", "description": "Jetons permettant à une application externe d'appeler l'API."},
     ],
 )
 
@@ -41,3 +43,4 @@ app.include_router(analyses_public_router, prefix="/api")
 app.include_router(analyses_router, prefix="/api")
 app.include_router(dossiers_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
+app.include_router(app_tokens_router, prefix="/api")

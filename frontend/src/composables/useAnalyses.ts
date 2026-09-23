@@ -1,4 +1,4 @@
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 
 import { apiFetch } from "@/utils/api";
 import type {
@@ -68,18 +68,27 @@ function mapSummary(api: any): AnalyseSummary {
   return { id: api.id, name: api.name, description: api.description, createdAt: api.created_at, agentCount: api.agent_count };
 }
 
-// Store partagé par toute l'application : `summaries` alimente les listes
-// (GET /analyses, léger), `cache` les analyses complètes une fois ouvertes
-// (GET /analyses/:id ou réponse d'une mutation).
+// Store partagé par toute l'application : `summaries` contient la page
+// actuellement chargée (pagination côté serveur, voir fetchList), `cache`
+// les analyses complètes une fois ouvertes (GET /analyses/:id ou réponse
+// d'une mutation).
 const summaries = reactive<AnalyseSummary[]>([]);
 const cache = reactive<Record<string, Analyse>>({});
+const total = ref(0);
+const pageCount = ref(1);
+const currentPage = ref(1);
+const pageSize = ref(20);
 
-async function fetchList() {
-  const data = await apiFetch<any[]>("/api/analyses");
-  summaries.splice(0, summaries.length, ...data.map(mapSummary));
+async function fetchList(page = currentPage.value, size = pageSize.value) {
+  const data = await apiFetch<{ items: any[]; total: number; page: number; page_size: number; pages: number }>(
+    `/api/analyses?page=${page}&page_size=${size}`,
+  );
+  summaries.splice(0, summaries.length, ...data.items.map(mapSummary));
+  total.value = data.total;
+  pageCount.value = data.pages;
+  currentPage.value = data.page;
+  pageSize.value = data.page_size;
 }
-
-fetchList();
 
 function replaceAgent(analyseId: string, agent: Agent) {
   const analyse = cache[analyseId];
@@ -107,7 +116,7 @@ export function useAnalyses() {
     });
     const analyse = mapAnalyse(data);
     cache[analyse.id] = analyse;
-    summaries.unshift({ id: analyse.id, name: analyse.name, description: analyse.description, createdAt: analyse.createdAt, agentCount: 0 });
+    await fetchList(1, pageSize.value);
     return analyse;
   };
 
@@ -236,6 +245,10 @@ export function useAnalyses() {
 
   return {
     list,
+    total,
+    pageCount,
+    currentPage,
+    pageSize,
     getById,
     fetchAnalyse,
     fetchList,

@@ -4,7 +4,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.schemas.dossier import (
     PredictionValidationIn,
     PredictionValidationOut,
 )
+from app.schemas.pagination import Page
 
 router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
 
@@ -35,9 +36,14 @@ async def _get_or_404(repository: DossierRepository, dossier_id: uuid.UUID) -> D
     return dossier
 
 
-@router.get("", response_model=list[DossierOut])
-async def list_dossiers(db: Annotated[AsyncSession, Depends(get_db)]) -> list[Dossier]:
-    return await DossierRepository(db).list_all()
+@router.get("", response_model=Page[DossierOut])
+async def list_dossiers(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[DossierOut]:
+    dossiers, total = await DossierRepository(db).list_paginated(page=page, page_size=page_size)
+    return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=DossierOut, status_code=status.HTTP_201_CREATED)

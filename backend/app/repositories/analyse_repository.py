@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +39,13 @@ class AnalyseRepository:
     async def list_all(self) -> Sequence[Analyse]:
         result = await self.db.execute(self._base_query().order_by(Analyse.created_at.desc()))
         return result.scalars().all()
+
+    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[Analyse], int]:
+        total = await self.db.scalar(select(func.count()).select_from(Analyse))
+        result = await self.db.execute(
+            self._base_query().order_by(Analyse.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+        )
+        return result.scalars().all(), total or 0
 
     async def get(self, analyse_id: uuid.UUID) -> Analyse | None:
         result = await self.db.execute(self._base_query().where(Analyse.id == analyse_id))

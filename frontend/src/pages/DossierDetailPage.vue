@@ -10,16 +10,19 @@ import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
-const { list: dossiers, addDocuments } = useDossiers();
+const { list: dossiers, addDocuments, fetchDossier } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const { conversation, ensureConversation, sendMessage } = useConversations(dossierId);
 
 const dossier = computed(() => dossiers.value.find((d) => d.id === dossierId));
 const analyse = computed(() => (dossier.value ? getAnalyseById(dossier.value.analyseId) : undefined));
 
-onMounted(() => {
+onMounted(async () => {
   ensureConversation();
-  if (dossier.value) fetchAnalyse(dossier.value.analyseId);
+  // Le dossier n'est pas forcément dans la page actuellement chargée par
+  // DossiersPage (pagination côté serveur) : on le charge directement.
+  const loaded = await fetchDossier(dossierId);
+  await fetchAnalyse(loaded.analyseId);
 });
 watch(
   () => dossier.value?.analyseId,
