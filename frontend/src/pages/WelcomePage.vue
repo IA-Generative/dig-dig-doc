@@ -6,55 +6,84 @@ const { isAuthenticated, loading, login } = useAuth();
 const features = [
   {
     icon: "ri-file-search-line",
-    title: "Analyse de documents",
-    description: "Importez vos dossiers usagers et laissez l'IA extraire et structurer automatiquement les informations clés.",
+    title: "Classification documentaire",
+    description:
+      "Identification automatique de la nature de chaque pièce téléversée (CNI, passeport, justificatif de domicile, avis d'imposition…) avec un score de confiance.",
+  },
+  {
+    icon: "ri-text-snippet",
+    title: "Extraction d'entités",
+    description:
+      "Extraction des informations clés (nom, prénom, date de naissance, adresse, numéros) structurées en JSON, sans saisie manuelle.",
   },
   {
     icon: "ri-shield-check-line",
-    title: "Vérification de cohérence",
-    description: "Croisez les données entre documents pour détecter les incohérences et les informations manquantes.",
+    title: "Contrôles de cohérence",
+    description:
+      "Croisement des données entre pièces d'un même dossier pour détecter incohérences, fraudes ou informations manquantes.",
   },
   {
     icon: "ri-chat-3-line",
     title: "Assistant conversationnel",
-    description: "Posez des questions sur vos dossiers et obtenez des réponses contextualisées grâce à l'IA générative.",
+    description:
+      "Posez des questions sur vos dossiers et obtenez des réponses contextualisées, avec citation des sources consultées.",
   },
   {
     icon: "ri-folder-shield-2-line",
-    title: "Sécurité & souveraineté",
-    description: "Authentification Keycloak, stockage souverain et chiffrement. Vos données restent en France.",
+    title: "Souveraineté des données",
+    description:
+      "Authentification Keycloak, stockage souverain et chiffrement. Vos données restent en France, rien n'est réutilisé pour le réentraînement.",
+  },
+  {
+    icon: "ri-flow-chart",
+    title: "Pipelines d'agents",
+    description:
+      "Configurez des agents IA spécialisés par analyse, avec des outils et des prompts personnalisés pour chaque cas d'usage.",
   },
 ];
 
 const steps = [
   {
     num: 1,
+    icon: "ri-upload-2-line",
     title: "Importez vos documents",
     description: "Déposez vos fichiers (PDF, images, tableurs) dans un dossier usager.",
   },
   {
     num: 2,
+    icon: "ri-cpu-line",
     title: "L'IA analyse le contenu",
-    description: "Extraction de texte, classification et reconnaissance d'entités automatiques.",
+    description: "Classification, extraction d'entités et contrôles de cohérence automatiques.",
   },
   {
     num: 3,
-    title: "Vérifiez et validez",
-    description: "Consultez les résultats, corrigez si besoin et exportez votre dossier.",
+    icon: "ri-chat-check-line",
+    title: "Discutez avec l'assistant",
+    description: "Posez des questions, enrichissez les synthèses et validez les résultats.",
+  },
+  {
+    num: 4,
+    icon: "ri-check-double-line",
+    title: "Vérifiez et exportez",
+    description: "Consultez les résultats, corrigez si besoin et finalisez votre dossier.",
   },
 ];
 </script>
 
 <template>
   <div class="welcome">
-    <!-- En-tête plein écran avec l'accroche -->
+    <!-- Hero -->
     <section class="welcome__hero">
-      <div class="welcome__hero-content">
-        <p class="welcome__badge">Plateforme d'instruction assistée</p>
-        <h1 class="welcome__title">dig-dig-doc</h1>
+      <div class="fr-container welcome__hero-inner">
+        <p class="welcome__badge">Plateforme d'instruction assistée par IA</p>
+        <h1 class="welcome__title">
+          Accélérez l'instruction<br />de vos dossiers usagers
+        </h1>
         <p class="welcome__subtitle">
-          Instruction assistée des dossiers usagers.
-          Importez, analysez et vérifiez vos documents grâce à l'intelligence artificielle.
+          Importez vos documents, laissez l'IA extraire et structurer les
+          informations clés, vérifiez la cohérence entre pièces et échangez
+          avec un assistant conversationnel — le tout sur une infrastructure
+          souveraine.
         </p>
         <div class="welcome__actions">
           <button
@@ -72,63 +101,93 @@ const steps = [
           >
             Accéder à l'application
           </RouterLink>
-          <a
-            href="#features"
-            class="fr-btn fr-btn--secondary fr-btn--lg"
-          >
-            En savoir plus
+          <a href="#features" class="fr-btn fr-btn--secondary fr-btn--lg">
+            Découvrir les fonctionnalités
           </a>
         </div>
       </div>
     </section>
 
-    <!-- Section fonctionnalités -->
-    <section id="features" class="welcome__features">
-      <h2 class="welcome__section-title">Ce que dig-dig-doc vous apporte</h2>
-      <div class="welcome__feature-grid">
-        <div v-for="feature in features" :key="feature.title" class="welcome__feature-card">
-          <VIcon :name="feature.icon" class="welcome__feature-icon" />
-          <h3 class="welcome__feature-title">{{ feature.title }}</h3>
-          <p class="welcome__feature-desc">{{ feature.description }}</p>
+    <!-- Fonctionnalités -->
+    <section id="features" class="welcome__section">
+      <div class="fr-container">
+        <h2 class="welcome__section-title">Ce que dig-dig-doc vous apporte</h2>
+        <p class="welcome__section-subtitle">
+          Une suite d'outils d'IA pour fiabiliser et accélérer le traitement
+          documentaire, de l'import à la validation.
+        </p>
+        <div class="welcome__feature-grid">
+          <div
+            v-for="feature in features"
+            :key="feature.title"
+            class="welcome__feature-card"
+          >
+            <span class="welcome__feature-icon-wrapper">
+              <VIcon :name="feature.icon" class="welcome__feature-icon" />
+            </span>
+            <h3 class="welcome__feature-title">{{ feature.title }}</h3>
+            <p class="welcome__feature-desc">{{ feature.description }}</p>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Section étapes -->
-    <section class="welcome__steps">
-      <h2 class="welcome__section-title">Comment ça marche ?</h2>
-      <div class="welcome__step-grid">
-        <div v-for="step in steps" :key="step.num" class="welcome__step">
-          <span class="welcome__step-num">{{ step.num }}</span>
-          <h3 class="welcome__step-title">{{ step.title }}</h3>
-          <p class="welcome__step-desc">{{ step.description }}</p>
+    <!-- Étapes -->
+    <section class="welcome__section welcome__section--alt">
+      <div class="fr-container">
+        <h2 class="welcome__section-title">Comment ça marche ?</h2>
+        <p class="welcome__section-subtitle">
+          Quatre étapes, de l'import du document à l'export du dossier validé.
+        </p>
+        <div class="welcome__step-grid">
+          <div
+            v-for="step in steps"
+            :key="step.num"
+            class="welcome__step"
+          >
+            <div class="welcome__step-header">
+              <span class="welcome__step-num">{{ step.num }}</span>
+              <VIcon :name="step.icon" class="welcome__step-icon" />
+            </div>
+            <h3 class="welcome__step-title">{{ step.title }}</h3>
+            <p class="welcome__step-desc">{{ step.description }}</p>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- CTA final -->
+    <!-- CTA -->
     <section class="welcome__cta">
-      <h2 class="welcome__cta-title">Prêt à commencer ?</h2>
-      <p class="welcome__cta-text">Connectez-vous pour accéder à votre espace de travail.</p>
-      <button
-        v-if="!isAuthenticated && !loading"
-        type="button"
-        class="fr-btn fr-btn--lg"
-        @click="login()"
-      >
-        Se connecter
-      </button>
-      <RouterLink
-        v-if="isAuthenticated"
-        to="/analyses"
-        class="fr-btn fr-btn--lg"
-      >
-        Accéder à l'application
-      </RouterLink>
+      <div class="fr-container welcome__cta-inner">
+        <h2 class="welcome__cta-title">Prêt à commencer ?</h2>
+        <p class="welcome__cta-text">
+          Connectez-vous pour accéder à votre espace de travail et créer vos
+          premières analyses.
+        </p>
+        <div class="welcome__actions">
+          <button
+            v-if="!isAuthenticated && !loading"
+            type="button"
+            class="fr-btn fr-btn--lg"
+            @click="login()"
+          >
+            Se connecter
+          </button>
+          <RouterLink
+            v-if="isAuthenticated"
+            to="/analyses"
+            class="fr-btn fr-btn--lg"
+          >
+            Accéder à l'application
+          </RouterLink>
+        </div>
+      </div>
     </section>
 
     <footer class="welcome__footer">
-      <p>dig-dig-doc — Instruction assistée des dossiers usagers</p>
+      <div class="fr-container welcome__footer-inner">
+        <p>dig-dig-doc — Instruction assistée des dossiers usagers</p>
+      </div>
     </footer>
   </div>
 </template>
@@ -136,21 +195,21 @@ const steps = [
 <style scoped>
 .welcome {
   min-height: 100vh;
-  background: var(--background-alt-blue-france);
+  background: var(--background-default-grey);
 }
 
-/* Hero plein écran */
+/* ── Hero ─────────────────────────────────────────────── */
 .welcome__hero {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 70vh;
-  padding: 3rem 1.5rem;
-  background: linear-gradient(135deg, var(--background-alt-blue-france) 0%, var(--background-alt-grey) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--background-alt-blue-france) 0%,
+    var(--background-alt-grey) 100%
+  );
+  padding: 4rem 0 5rem;
 }
 
-.welcome__hero-content {
-  max-width: 48rem;
+.welcome__hero-inner {
+  max-width: 50rem;
   text-align: center;
 }
 
@@ -166,19 +225,19 @@ const steps = [
 }
 
 .welcome__title {
-  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-size: clamp(2rem, 5vw, 3.25rem);
   font-weight: 700;
   color: var(--text-action-high-blue-france);
-  margin: 0 0 1rem;
-  line-height: 1.1;
+  margin: 0 0 1.25rem;
+  line-height: 1.15;
 }
 
 .welcome__subtitle {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   color: var(--text-default-grey);
   line-height: 1.6;
   margin: 0 auto 2.5rem;
-  max-width: 36rem;
+  max-width: 38rem;
 }
 
 .welcome__actions {
@@ -188,11 +247,13 @@ const steps = [
   flex-wrap: wrap;
 }
 
-/* Section fonctionnalités */
-.welcome__features {
-  padding: 4rem 1.5rem;
-  max-width: 72rem;
-  margin: 0 auto;
+/* ── Sections génériques ──────────────────────────────── */
+.welcome__section {
+  padding: 4rem 0;
+}
+
+.welcome__section--alt {
+  background: var(--background-alt-grey);
 }
 
 .welcome__section-title {
@@ -200,35 +261,57 @@ const steps = [
   font-weight: 700;
   color: var(--text-title-grey);
   text-align: center;
-  margin: 0 0 2.5rem;
+  margin: 0 0 0.75rem;
 }
 
+.welcome__section-subtitle {
+  font-size: 1.0625rem;
+  color: var(--text-mention-grey);
+  text-align: center;
+  margin: 0 auto 3rem;
+  max-width: 36rem;
+  line-height: 1.5;
+}
+
+/* ── Cartes fonctionnalités ───────────────────────────── */
 .welcome__feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: 1.5rem;
 }
 
 .welcome__feature-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 2rem 1.5rem;
+  align-items: flex-start;
+  padding: 2rem 1.75rem;
   background: var(--background-default-grey);
   border: 1px solid var(--border-default-grey);
   border-radius: 0.5rem;
-  transition: box-shadow 0.2s ease;
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .welcome__feature-card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-action-high-blue-france);
+}
+
+.welcome__feature-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.5rem;
+  background: var(--background-action-low-blue-france);
+  margin-bottom: 1.25rem;
 }
 
 .welcome__feature-icon {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   color: var(--text-action-high-blue-france);
-  margin-bottom: 1rem;
 }
 
 .welcome__feature-title {
@@ -241,44 +324,48 @@ const steps = [
 .welcome__feature-desc {
   font-size: 0.9375rem;
   color: var(--text-mention-grey);
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
-/* Section étapes */
-.welcome__steps {
-  padding: 4rem 1.5rem;
-  background: var(--background-default-grey);
-}
-
+/* ── Étapes ───────────────────────────────────────────── */
 .welcome__step-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 2rem;
-  max-width: 72rem;
-  margin: 0 auto;
 }
 
 .welcome__step {
   text-align: center;
 }
 
+.welcome__step-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 .welcome__step-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3rem;
-  height: 3rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 50%;
   background: var(--background-action-high-blue-france);
   color: var(--text-inverted-blue-france);
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+}
+
+.welcome__step-icon {
+  font-size: 1.5rem;
+  color: var(--text-action-high-blue-france);
 }
 
 .welcome__step-title {
-  font-size: 1.125rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   color: var(--text-title-grey);
   margin: 0 0 0.5rem;
@@ -287,15 +374,23 @@ const steps = [
 .welcome__step-desc {
   font-size: 0.9375rem;
   color: var(--text-mention-grey);
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
-/* CTA final */
+/* ── CTA ──────────────────────────────────────────────── */
 .welcome__cta {
-  padding: 4rem 1.5rem;
+  padding: 4rem 0;
   text-align: center;
-  background: var(--background-alt-blue-france);
+  background: linear-gradient(
+    135deg,
+    var(--background-alt-blue-france) 0%,
+    var(--background-alt-grey) 100%
+  );
+}
+
+.welcome__cta-inner {
+  max-width: 40rem;
 }
 
 .welcome__cta-title {
@@ -311,17 +406,35 @@ const steps = [
   margin: 0 0 2rem;
 }
 
-/* Footer */
+/* ── Footer ───────────────────────────────────────────── */
 .welcome__footer {
-  padding: 1.5rem;
-  text-align: center;
+  padding: 1.5rem 0;
   background: var(--background-default-grey);
   border-top: 1px solid var(--border-default-grey);
+}
+
+.welcome__footer-inner {
+  text-align: center;
 }
 
 .welcome__footer p {
   font-size: 0.875rem;
   color: var(--text-mention-grey);
   margin: 0;
+}
+
+/* ── Responsive ───────────────────────────────────────── */
+@media (max-width: 768px) {
+  .welcome__hero {
+    padding: 2.5rem 0 3.5rem;
+  }
+
+  .welcome__section {
+    padding: 2.5rem 0;
+  }
+
+  .welcome__cta {
+    padding: 2.5rem 0;
+  }
 }
 </style>
