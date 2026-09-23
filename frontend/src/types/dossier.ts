@@ -33,6 +33,15 @@ export interface ExecutionStep {
   output?: string;
 }
 
+export type TextExtractionStatus = "en_attente" | "en_cours" | "terminé" | "échec";
+
+export const TEXT_EXTRACTION_STATUS_LABELS: Record<TextExtractionStatus, string> = {
+  en_attente: "En attente",
+  en_cours: "Extraction en cours",
+  terminé: "Texte extrait",
+  échec: "Échec de l'extraction",
+};
+
 export interface DossierDocument {
   id: string;
   name: string;
@@ -41,6 +50,9 @@ export interface DossierDocument {
   mimetype: string;
   /** Nature du document (ex: "CNI") : posée par la classification ou corrigée manuellement. */
   label?: string;
+  /** Suivi du run du worker document_process (extract_document_text). */
+  textExtractionStatus: TextExtractionStatus;
+  textExtractionError?: string;
 }
 
 export interface Dossier {

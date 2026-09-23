@@ -40,6 +40,11 @@ services:
       KEYCLOAK_REALM: dig-dig-doc
       KEYCLOAK_CLIENT_ID: dig-dig-doc-backend
       KEYCLOAK_CLIENT_SECRET: dev-only-secret-not-for-prod
+      BACKEND_PUBLIC_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:8081
+      # HTTP en dev local : le cookie de session ne serait jamais posé par le
+      # navigateur si Secure=True (il l'ignore sur les connexions non-HTTPS).
+      SESSION_COOKIE_SECURE: "false"
       S3_ENDPOINT_URL: http://rustfs:9000
       S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
@@ -149,9 +154,10 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
-    # No realm to import yet (see issue #3, authent BFF/Keycloak): starts
-    # with an empty instance, realm/client set up by hand until then.
-    command: start-dev
+    # Importe le realm dig-dig-doc (client + utilisateurs de dev) au premier
+    # démarrage. --import-realm ne réimporte pas si le realm existe déjà, ce
+    # qui évite d'écraser les modifs faites à la main ensuite.
+    command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -159,6 +165,10 @@ services:
       KC_HOSTNAME: localhost
       KC_HOSTNAME_PORT: 8080
       KC_HOSTNAME_STRICT: "false"
+    volumes:
+      # Monté dans /opt/keycloak/data/import : Keycloak y cherche les *.json
+      # au démarrage quand --import-revalm est passé.
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
     ports:
       - "8080:8080"
     healthcheck:
@@ -176,6 +186,11 @@ services:
   # que le S3 réel utilisé en prod, seul S3_ENDPOINT_URL change.
   rustfs:
     image: rustfs/rustfs:latest
+    # L'image tourne par défaut avec l'utilisateur non-root `rustfs` (uid
+    # 10001), mais le volume Docker appartient à root : RustFS ne peut pas
+    # écrire dans /data/rustfs0 et s'arrête en "Permission denied". On force
+    # root le temps que l'image corrige ça (ou qu'on chown le volume).
+    user: root
     environment:
       RUSTFS_VOLUMES: /data/rustfs0
       RUSTFS_ADDRESS: 0.0.0.0:9000

@@ -9,11 +9,12 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_client import dispatch_text_extraction
 from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.conversation import MessageRole
-from app.models.dossier import Dossier, DossierStatus
+from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
@@ -80,8 +81,14 @@ async def add_documents(
         # boucle asyncio le temps de l'upload.
         await run_in_threadpool(s3_connector.upload, s3_key, data, mimetype)
         documents.append({"name": f.filename or "document", "size": len(data), "s3_key": s3_key, "mimetype": mimetype})
-    await repository.add_documents(dossier, documents)
-    return dossier
+    created = await repository.add_documents(dossier, documents)
+    for document in created:
+        dispatch_text_extraction(str(document.id))
+    # Pas `return dossier` : refresh(dossier) (dans add_documents) réexpire
+    # `documents`, dont les nouveaux DossierDocument n'ont pas `pages` chargée
+    # (MissingGreenlet à la sérialisation) - une requête fraîche via
+    # _get_or_404 a le eager loading complet de _base_query.
+    return await _get_or_404(repository, dossier_id)
 
 
 @router.put("/{dossier_id}/documents/{document_id}/label", response_model=DossierDocumentOut)
@@ -206,13 +213,24 @@ async def validate_prediction(
 
 
 _TERMINAL_STATUSES = {DossierStatus.TERMINE, DossierStatus.ARRETE, DossierStatus.ECHEC}
+_EXTRACTION_IN_PROGRESS = {TextExtractionStatus.EN_ATTENTE, TextExtractionStatus.EN_COURS}
+
+
+def _has_active_work(dossier: Dossier) -> bool:
+    """True tant qu'il y a du travail en cours : le dossier est lancé
+    (classification/extraction/agents) ou au moins un document est en cours
+    d'extraction de texte (qui démarre dès l'upload, avant tout lancement)."""
+    if dossier.status == DossierStatus.EN_COURS:
+        return True
+    return any(doc.text_extraction_status in _EXTRACTION_IN_PROGRESS for doc in dossier.documents)
 
 
 async def _execution_events(repository: DossierRepository, dossier_id: uuid.UUID) -> AsyncIterator[str]:
-    """Un événement SSE par changement d'état, jusqu'à ce que le dossier
-    atteigne un statut terminal - pas de bus de messages (Redis pub/sub,
-    etc), juste un polling DB léger : suffisant pour un état affiché dans
-    l'UI, pas conçu pour du temps réel à grande échelle."""
+    """Un événement SSE par changement d'état, jusqu'à ce qu'il n'y ait plus
+    de travail actif (dossier terminal ou extraction de texte terminée) -
+    pas de bus de messages (Redis pub/sub, etc), juste un polling DB léger :
+    suffisant pour un état affiché dans l'UI, pas conçu pour du temps réel à
+    grande échelle."""
     last_payload: str | None = None
     while True:
         dossier = await repository.get(dossier_id)
@@ -223,7 +241,8 @@ async def _execution_events(repository: DossierRepository, dossier_id: uuid.UUID
         if payload != last_payload:
             yield f"event: execution-update\ndata: {payload}\n\n"
             last_payload = payload
-        if dossier.status in _TERMINAL_STATUSES:
+        if dossier.status in _TERMINAL_STATUSES or not _has_active_work(dossier):
+            yield "event: done\ndata: {}\n\n"
             return
         await asyncio.sleep(1)
 
