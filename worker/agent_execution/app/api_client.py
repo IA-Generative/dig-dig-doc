@@ -94,3 +94,50 @@ def add_prediction(
     )
     response.raise_for_status()
     return response.json()
+
+
+# --- Conversations & chat events ---
+
+
+def get_conversation(client: httpx.Client, conversation_id: str) -> dict:
+    """Récupère la conversation complète (historique des messages + modèle
+    LLM préféré) pour construire le contexte du graphe LangGraph de chat."""
+    response = client.get(f"/conversations/{conversation_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def add_chat_event(
+    client: httpx.Client,
+    conversation_id: str,
+    *,
+    kind: str,
+    data: dict,
+) -> dict:
+    """Dépose un événement de chat (tool_call, tool_result, thinking, done,
+    error). Le frontend consomme ces événements via SSE pour streamer la
+    progression de l'exécution en temps réel."""
+    response = client.post(
+        f"/conversations/{conversation_id}/chat-events",
+        json={"kind": kind, "data": data},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def deposit_assistant_message(
+    client: httpx.Client,
+    conversation_id: str,
+    *,
+    content: str,
+    sources: list[dict] | None = None,
+) -> dict:
+    """Dépose le message assistant final (avec sources) via l'API interne.
+    Les sources référencent les documents/pages utilisés par l'agent pour
+    construire sa réponse."""
+    response = client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": content, "sources": sources or []},
+    )
+    response.raise_for_status()
+    return response.json()

@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 
 
 def _create_analyse(client: TestClient, name: str = "Analyse dossier test") -> str:
-    return client.post("/api/analyses", json={"name": name}).json()["id"]
+    return client.post(
+        "/api/analyses", json={"name": name, "description": "Test"}
+    ).json()["id"]
 
 
 def test_dossier_requires_an_existing_analyse(client: TestClient) -> None:
@@ -38,7 +40,9 @@ def test_list_dossiers_is_paginated(client: TestClient) -> None:
 def test_create_dossier_and_launch_lifecycle(client: TestClient) -> None:
     analyse_id = _create_analyse(client)
 
-    dossier = client.post("/api/dossiers", json={"name": "Dossier 2026-0001", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier 2026-0001", "analyse_id": analyse_id}
+    ).json()
     assert dossier["status"] == "en_attente"
     assert dossier["analyse_version"] == "v1"
 
@@ -65,17 +69,23 @@ def test_launch_adds_one_step_per_agent(client: TestClient) -> None:
         },
     )
 
-    dossier = client.post("/api/dossiers", json={"name": "Dossier avec agent", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier avec agent", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(f"/api/dossiers/{dossier['id']}/launch").json()
 
-    agent_steps = [step for step in dossier["execution_steps"] if step["kind"] == "agent"]
+    agent_steps = [
+        step for step in dossier["execution_steps"] if step["kind"] == "agent"
+    ]
     assert len(agent_steps) == 1
     assert agent_steps[0]["label"] == "Cohérence"
 
 
 def test_document_upload_and_label(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse documents")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier documents", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier documents", "analyse_id": analyse_id}
+    ).json()
 
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
@@ -94,12 +104,18 @@ def test_document_upload_and_label(client: TestClient) -> None:
     assert updated["label"] == "CNI"
 
 
-def test_document_upload_dispatches_text_extraction(client: TestClient, monkeypatch) -> None:
+def test_document_upload_dispatches_text_extraction(
+    client: TestClient, monkeypatch
+) -> None:
     dispatched: list[str] = []
-    monkeypatch.setattr("app.routers.dossiers.dispatch_text_extraction", dispatched.append)
+    monkeypatch.setattr(
+        "app.routers.dossiers.dispatch_text_extraction", dispatched.append
+    )
 
     analyse_id = _create_analyse(client, "Analyse dispatch")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier dispatch", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier dispatch", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -113,7 +129,9 @@ def test_document_upload_dispatches_text_extraction(client: TestClient, monkeypa
 
 def test_internal_set_extraction_status(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse statut extraction")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier statut", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier statut", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -139,7 +157,9 @@ def test_internal_set_extraction_status(client: TestClient) -> None:
 
 def test_internal_get_document_returns_s3_key_for_worker(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse document interne")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier interne", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier interne", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -160,7 +180,9 @@ def test_internal_get_document_returns_s3_key_for_worker(client: TestClient) -> 
 
 def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse conversation")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier chat", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier chat", "analyse_id": analyse_id}
+    ).json()
     dossier_id = dossier["id"]
 
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
@@ -186,9 +208,9 @@ def test_create_conversation_is_idempotent_per_user(client: TestClient) -> None:
     # utilisateur : cliquer/recharger plusieurs fois ne doit pas en
     # dupliquer une nouvelle à chaque fois.
     analyse_id = _create_analyse(client, "Analyse conversation idempotente")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier idempotent", "analyse_id": analyse_id}).json()[
-        "id"
-    ]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": "Dossier idempotent", "analyse_id": analyse_id}
+    ).json()["id"]
 
     first = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     second = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
@@ -206,7 +228,9 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     from app.main import app
 
     analyse_id = _create_analyse(client, "Analyse conversation privée")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé", "analyse_id": analyse_id}).json()["id"]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": "Dossier privé", "analyse_id": analyse_id}
+    ).json()["id"]
 
     owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     client.post(
@@ -215,16 +239,22 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     )
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:
         # Pas dans la liste de l'autre utilisateur...
-        other_listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
+        other_listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()[
+            "items"
+        ]
         assert other_listed == []
 
         # ...et une nouvelle conversation pour cet utilisateur, pas la même.
-        other_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+        other_conversation = client.post(
+            f"/api/dossiers/{dossier_id}/conversations"
+        ).json()
         assert other_conversation["id"] != owner_conversation["id"]
         assert other_conversation["user_id"] == "other-user"
 
@@ -246,7 +276,9 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
 
 def test_conversation_model_can_be_chosen(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse modèle conversation")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier modèle", "analyse_id": analyse_id}).json()["id"]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": "Dossier modèle", "analyse_id": analyse_id}
+    ).json()["id"]
 
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     assert conversation["model"] is None
@@ -265,7 +297,9 @@ def test_delete_conversation_only_removes_the_conversation(client: TestClient) -
     """Supprimer une conversation ne doit toucher qu'elle (et ses messages) :
     le dossier et ses documents restent intacts."""
     analyse_id = _create_analyse(client, "Analyse suppression conversation")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier à garder", "analyse_id": analyse_id}).json()["id"]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": "Dossier à garder", "analyse_id": analyse_id}
+    ).json()["id"]
     client.post(
         f"/api/dossiers/{dossier_id}/documents",
         files={"files": ("note.txt", b"contenu", "text/plain")},
@@ -277,7 +311,9 @@ def test_delete_conversation_only_removes_the_conversation(client: TestClient) -
         json={"content": "Un message"},
     )
 
-    response = client.delete(f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}")
+    response = client.delete(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}"
+    )
     assert response.status_code == 204
 
     assert client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"] == []
@@ -294,15 +330,21 @@ def test_delete_conversation_is_private_to_its_user(client: TestClient) -> None:
     from app.main import app
 
     analyse_id = _create_analyse(client, "Analyse suppression privée")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé 2", "analyse_id": analyse_id}).json()["id"]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": "Dossier privé 2", "analyse_id": analyse_id}
+    ).json()["id"]
     owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:
-        response = client.delete(f"/api/dossiers/{dossier_id}/conversations/{owner_conversation['id']}")
+        response = client.delete(
+            f"/api/dossiers/{dossier_id}/conversations/{owner_conversation['id']}"
+        )
         assert response.status_code == 404
     finally:
         del app.dependency_overrides[get_current_user]
@@ -316,7 +358,9 @@ INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
 
 
 def test_internal_routes_require_app_token(client: TestClient) -> None:
-    response = client.post(f"/api/internal/execution-steps/{uuid.uuid4()}/logs", json={"message": "hello"})
+    response = client.post(
+        f"/api/internal/execution-steps/{uuid.uuid4()}/logs", json={"message": "hello"}
+    )
     assert response.status_code in (401, 422)  # 422 si le header est simplement absent
 
     response = client.post(
@@ -329,7 +373,9 @@ def test_internal_routes_require_app_token(client: TestClient) -> None:
 
 def test_execution_step_logs_and_completion(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse logs")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier logs", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier logs", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(f"/api/dossiers/{dossier['id']}/launch").json()
     step_id = dossier["execution_steps"][0]["id"]
 
@@ -351,7 +397,9 @@ def test_execution_step_logs_and_completion(client: TestClient) -> None:
     assert step["ended_at"] is not None
 
 
-def _create_page(client: TestClient, document_id: str, page_number: int, content: str) -> dict:
+def _create_page(
+    client: TestClient, document_id: str, page_number: int, content: str
+) -> dict:
     return client.post(
         f"/api/internal/documents/{document_id}/pages",
         json={
@@ -376,7 +424,9 @@ def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> N
     from app.connectors import s3_connector
 
     analyse_id = _create_analyse(client, "Analyse capture")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier capture", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier capture", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -405,7 +455,9 @@ def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> N
     # Ni la clé S3 ni une URL signée ne sont exposées : juste un booléen.
     assert "screenshot_key" not in page
 
-    response = client.get(f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}/screenshot")
+    response = client.get(
+        f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}/screenshot"
+    )
     assert response.status_code == 200
     assert response.content == b"fake-png-bytes"
     assert response.headers["content-type"] == "image/png"
@@ -454,7 +506,9 @@ def test_classification_prediction_linked_to_one_page_and_label(
     assert prediction["label_definition_id"] == label["id"]
     assert prediction["entity_definition_id"] is None
     assert prediction["validations"] == []
-    assert analyse["id"] == analyse_id  # sanity: le label créé plus haut appartient bien à cette analyse
+    assert (
+        analyse["id"] == analyse_id
+    )  # sanity: le label créé plus haut appartient bien à cette analyse
 
     dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
     fetched_page = dossier["documents"][0]["pages"][0]
@@ -487,10 +541,16 @@ def test_entity_prediction_can_span_several_pages_and_bboxes(
     analyse_id = _create_analyse(client, "Analyse extraction")
     entity = client.put(
         f"/api/analyses/{analyse_id}/extraction/entities",
-        json={"entities": [{"name": "adresse", "definition": "Adresse postale.", "type": "texte"}]},
+        json={
+            "entities": [
+                {"name": "adresse", "definition": "Adresse postale.", "type": "texte"}
+            ]
+        },
     ).json()["extraction"]["entities"][0]
 
-    dossier = client.post("/api/dossiers", json={"name": "Dossier extraction", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier extraction", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("avis.pdf", b"fake-bytes", "application/pdf"))],
@@ -499,8 +559,12 @@ def test_entity_prediction_can_span_several_pages_and_bboxes(
 
     page1 = _create_page(client, document_id, 1, "... suite page suivante")
     page2 = _create_page(client, document_id, 2, "12 rue de la République, 75011 Paris")
-    bbox1 = _create_bbox(client, page1["id"], x_min=0.1, y_min=0.8, x_max=0.9, y_max=0.95)
-    bbox2 = _create_bbox(client, page2["id"], x_min=0.1, y_min=0.05, x_max=0.9, y_max=0.2)
+    bbox1 = _create_bbox(
+        client, page1["id"], x_min=0.1, y_min=0.8, x_max=0.9, y_max=0.95
+    )
+    bbox2 = _create_bbox(
+        client, page2["id"], x_min=0.1, y_min=0.05, x_max=0.9, y_max=0.2
+    )
 
     prediction = client.post(
         f"/api/internal/pages/{page1['id']}/predictions",
@@ -522,12 +586,16 @@ def test_entity_prediction_can_span_several_pages_and_bboxes(
     # La prédiction apparaît sur ses deux pages, pas seulement la première.
     dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
     pages = dossier["documents"][0]["pages"]
-    assert all(prediction["id"] in [p["id"] for p in page["predictions"]] for page in pages)
+    assert all(
+        prediction["id"] in [p["id"] for p in page["predictions"]] for page in pages
+    )
 
 
 def test_assistant_message_with_sources(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse sources")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier sources", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier sources", "analyse_id": analyse_id}
+    ).json()
     dossier_id = dossier["id"]
     dossier = client.post(
         f"/api/dossiers/{dossier_id}/documents",
@@ -564,7 +632,9 @@ def test_assistant_message_with_sources(client: TestClient) -> None:
 
 def test_execution_stream_sends_terminal_state(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse SSE")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier SSE", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier SSE", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(f"/api/dossiers/{dossier['id']}/launch").json()
     for step in dossier["execution_steps"]:
         client.post(
@@ -586,9 +656,13 @@ def test_execution_stream_sends_terminal_state(client: TestClient) -> None:
     assert "arr" in body  # "arrêté", échappé ou non selon l'encodage JSON
 
 
-def _create_conversation_with_message(client: TestClient, dossier_name: str) -> tuple[str, str, str]:
+def _create_conversation_with_message(
+    client: TestClient, dossier_name: str
+) -> tuple[str, str, str]:
     analyse_id = _create_analyse(client, f"Analyse {dossier_name}")
-    dossier_id = client.post("/api/dossiers", json={"name": dossier_name, "analyse_id": analyse_id}).json()["id"]
+    dossier_id = client.post(
+        "/api/dossiers", json={"name": dossier_name, "analyse_id": analyse_id}
+    ).json()["id"]
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     conversation = client.post(
         f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages",
@@ -599,9 +673,13 @@ def _create_conversation_with_message(client: TestClient, dossier_name: str) -> 
 
 
 def test_message_feedback_lifecycle(client: TestClient) -> None:
-    dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour")
+    dossier_id, conversation_id, message_id = _create_conversation_with_message(
+        client, "Dossier retour"
+    )
 
-    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"][0]
+    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()[
+        "items"
+    ][0]
     assert conversation["messages"][0]["feedback"] is None
 
     conversation = client.put(
@@ -637,10 +715,14 @@ def test_feedback_is_private_to_its_user(client: TestClient) -> None:
     from app.core.security.factory import RequestContext, get_current_user
     from app.main import app
 
-    dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour privé")
+    dossier_id, conversation_id, message_id = _create_conversation_with_message(
+        client, "Dossier retour privé"
+    )
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:

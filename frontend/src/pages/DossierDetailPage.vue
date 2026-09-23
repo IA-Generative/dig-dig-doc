@@ -5,20 +5,30 @@ import { RouterLink, useRoute } from "vue-router";
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
+import MarkdownText from "@/components/MarkdownText.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
-import type { FeedbackReasonCode } from "@/types/conversation";
+import type { ChatEvent, FeedbackReasonCode } from "@/types/conversation";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
 const { list: dossiers, addDocuments, fetchDossier, streamDossier } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
-const { conversation, ensureConversation, sendMessage, deleteConversation, setModel, setFeedback, removeFeedback } =
-  useConversations(dossierId);
+const {
+  conversation,
+  ensureConversation,
+  sendMessage,
+  streamConversation,
+  refreshConversation,
+  deleteConversation,
+  setModel,
+  setFeedback,
+  removeFeedback,
+} = useConversations(dossierId);
 const { fetchList: refreshSidebarConversations } = useMyConversations();
 const { models, fetchModels } = useModels();
 
@@ -26,6 +36,13 @@ const { models, fetchModels } = useModels();
 // recueillir la/les raison(s) avant d'envoyer (comme Muffin).
 const feedbackReasonsModalOpened = ref(false);
 const pendingDownMessageId = ref<string | null>(null);
+
+// Streaming du chat : événements reçus pendant l'exécution du graphe
+// LangGraph (tool_call, tool_result, done, error). Affichés en temps réel
+// sous la forme d'une "pensée" de l'assistant.
+const chatEvents = ref<ChatEvent[]>([]);
+const isChatRunning = ref(false);
+let closeChatStream: (() => void) | undefined;
 
 function thumbUp(messageId: string) {
   const current = messages.value.find((m) => m.id === messageId)?.feedback;
@@ -84,6 +101,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   closeStream?.();
+  closeChatStream?.();
 });
 watch(
   () => dossier.value?.analyseId,
@@ -107,6 +125,9 @@ const messages = computed(() => conversation.value?.messages ?? []);
 
 const messagesEndRef = ref<HTMLElement | null>(null);
 watch(messages, () => {
+  nextTick(() => messagesEndRef.value?.scrollIntoView({ behavior: "smooth" }));
+});
+watch(chatEvents, () => {
   nextTick(() => messagesEndRef.value?.scrollIntoView({ behavior: "smooth" }));
 });
 
@@ -146,6 +167,7 @@ async function submit() {
   if (!dossier.value) return;
   const content = draft.value.trim();
   if (!content && pendingFiles.value.length === 0) return;
+  if (isChatRunning.value) return;
 
   if (pendingFiles.value.length > 0) {
     await addDocuments(dossier.value.id, pendingFiles.value);
@@ -162,9 +184,27 @@ async function submit() {
   pendingFiles.value = [];
   nextTick(resizeTextarea);
 
+  const current = await ensureConversation();
+  // Démarre le streaming AVANT d'envoyer le message pour ne pas manquer
+  // les premiers événements (le worker peut être très rapide).
+  isChatRunning.value = true;
+  chatEvents.value = [];
+  closeChatStream = streamConversation(
+    current.id,
+    (event) => {
+      chatEvents.value.push(event);
+    },
+    async () => {
+      // done : recharge la conversation pour récupérer le message assistant
+      // final avec ses sources, puis ferme le streaming.
+      await refreshConversation();
+      await refreshSidebarConversations();
+      isChatRunning.value = false;
+      chatEvents.value = [];
+      closeChatStream = undefined;
+    },
+  );
   await sendMessage(parts.join("\n"));
-  // Le libellé/l'horodatage affichés dans la sidebar viennent de changer.
-  refreshSidebarConversations();
 }
 
 async function onDeleteConversation() {
@@ -239,11 +279,28 @@ async function onDeleteConversation() {
 
       <div v-else class="chat-window__messages">
         <div class="chat-window__inner">
-          <div v-for="message in messages" :key="message.id" class="chat-message">
+          <div
+            v-for="message in messages"
+            :key="message.id"
+            class="chat-message"
+            :class="{ 'chat-message--assistant': message.role === 'assistant' }"
+          >
             <div class="chat-message__bubble">
-              <p class="chat-message__text">{{ message.content }}</p>
+              <MarkdownText :content="message.content" class="chat-message__text" />
+              <!-- Sources citées par l'assistant -->
+              <div v-if="message.sources.length > 0" class="chat-message__sources">
+                <p class="chat-message__sources-title">Sources :</p>
+                <ul>
+                  <li v-for="source in message.sources" :key="source.id" class="chat-message__source">
+                    <span class="chat-message__source-pages">
+                      {{ source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") }}
+                    </span>
+                    <span v-if="source.excerpt" class="chat-message__source-excerpt">« {{ source.excerpt }} »</span>
+                  </li>
+                </ul>
+              </div>
             </div>
-            <div class="chat-message__feedback">
+            <div v-if="message.role === 'assistant'" class="chat-message__feedback">
               <button
                 type="button"
                 class="chat-message__feedback-button"
@@ -266,6 +323,31 @@ async function onDeleteConversation() {
               </button>
             </div>
           </div>
+
+          <!-- Streaming en cours : événements du graphe LangGraph -->
+          <div v-if="isChatRunning" class="chat-message chat-message--assistant chat-message--streaming">
+            <div class="chat-message__bubble">
+              <div v-for="event in chatEvents" :key="event.id" class="chat-message__event">
+                <VIcon
+                  :name="
+                    event.kind === 'tool_call'
+                      ? 'ri-tools-line'
+                      : event.kind === 'tool_result'
+                        ? 'ri-check-line'
+                        : event.kind === 'error'
+                          ? 'ri-error-warning-line'
+                          : 'ri-loader-4-line'
+                  "
+                />
+                <span>{{ event.data?.label || event.data?.tool || event.kind }}</span>
+              </div>
+              <div v-if="chatEvents.length === 0" class="chat-message__event chat-message__event--pending">
+                <VIcon name="ri-loader-4-line" class="spin" />
+                <span>Réflexion en cours…</span>
+              </div>
+            </div>
+          </div>
+
           <div ref="messagesEndRef" />
         </div>
       </div>
@@ -307,13 +389,14 @@ async function onDeleteConversation() {
               class="chat-window__textarea"
               placeholder="Alimentez l'analyse avec un message ou un document..."
               rows="1"
+              :disabled="isChatRunning"
               @input="resizeTextarea"
               @keydown.enter.exact.prevent="submit"
             />
             <button
               type="submit"
               class="chat-window__send"
-              :disabled="!draft.trim() && pendingFiles.length === 0"
+              :disabled="isChatRunning || (!draft.trim() && pendingFiles.length === 0)"
               aria-label="Envoyer"
             >
               <VIcon name="ri-arrow-up-line" />
@@ -536,6 +619,83 @@ async function onDeleteConversation() {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.6;
+}
+
+/* Messages assistant : alignés à gauche, bulle neutre */
+.chat-message--assistant {
+  align-items: flex-start;
+}
+
+.chat-message--assistant .chat-message__bubble {
+  background: var(--background-contrast-grey);
+  border-top-left-radius: 0.25rem;
+}
+
+/* Sources citées par l'assistant */
+.chat-message__sources {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-default-grey);
+}
+
+.chat-message__sources-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-mention-grey);
+}
+
+.chat-message__sources ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-message__source {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+  color: var(--text-mention-grey);
+}
+
+.chat-message__source-pages {
+  font-weight: 500;
+  color: var(--text-default-grey);
+}
+
+.chat-message__source-excerpt {
+  font-style: italic;
+  color: var(--text-mention-grey);
+}
+
+/* Streaming en cours */
+.chat-message--streaming .chat-message__bubble {
+  opacity: 0.85;
+}
+
+.chat-message__event {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0;
+  font-size: 0.8rem;
+  color: var(--text-mention-grey);
+}
+
+.chat-message__event--pending {
+  font-style: italic;
+}
+
+.chat-message__event .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chat-window__form {

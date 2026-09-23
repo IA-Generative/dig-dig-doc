@@ -32,3 +32,27 @@ def dispatch_entity_extraction(dossier_id: str) -> None:
     celery_client.send_task(
         "app.tasks.extract_dossier_entities", args=[dossier_id], queue="agent_execution"
     )
+
+
+def dispatch_agent_execution(dossier_id: str) -> None:
+    """Dépose la tâche d'exécution des agents sur la file agent_execution.
+    Le worker attend que la classification et l'extraction soient terminées,
+    puis exécute chaque agent via un graphe LangGraph avec des outils de
+    recherche (BM25), lecture de pages, et consultation des prédictions."""
+    celery_client.send_task(
+        "app.tasks.run_agents", args=[dossier_id], queue="agent_execution"
+    )
+
+
+def dispatch_chat_response(conversation_id: str, dossier_id: str) -> None:
+    """Dépose la tâche de réponse au chat sur la file agent_execution.
+    Le worker charge l'historique de la conversation + les synthèses
+    existantes (ExecutionStep.output), construit un graphe LangGraph avec
+    les outils de recherche, et dépose la réponse de l'assistant (avec
+    sources) via l'API interne. Les événements intermédiaires (tool_calls,
+    tool_results) sont streamés via la table chat_events."""
+    celery_client.send_task(
+        "app.tasks.run_chat",
+        args=[conversation_id, dossier_id],
+        queue="agent_execution",
+    )

@@ -11,6 +11,7 @@ from .analyse import (
 from .analyse_share import AnalyseShare, AnalyseShareKind
 from .app_token import AppToken
 from .base import Base
+from .chat_event import ChatEvent, ChatEventKind
 from .conversation import Conversation, Message, MessageRole, MessageSource
 from .document_page import (
     BoundingBox,
@@ -42,6 +43,8 @@ __all__ = [
     "AppToken",
     "Base",
     "BoundingBox",
+    "ChatEvent",
+    "ChatEventKind",
     "Conversation",
     "DocumentPage",
     "DocumentPrediction",

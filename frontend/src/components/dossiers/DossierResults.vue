@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
+import MarkdownText from "@/components/MarkdownText.vue";
 import type { Analyse } from "@/types/analyse";
 import type { Dossier } from "@/types/dossier";
 
@@ -164,7 +165,7 @@ function scrollCarousel(direction: 1 | -1) {
         </div>
       </dl>
 
-      <p v-else class="dossier-results__agent-output">{{ selectedCard.preview }}</p>
+      <MarkdownText v-else :content="selectedCard.preview" class="dossier-results__agent-output" />
 
       <RouterLink
         v-if="selectedCard.kind !== 'agent'"

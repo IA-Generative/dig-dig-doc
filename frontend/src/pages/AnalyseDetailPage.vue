@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
+import MarkdownText from "@/components/MarkdownText.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 
 const route = useRoute();
@@ -48,7 +49,7 @@ function selectTab(index: number) {
     <div class="analyse-detail__header">
       <div>
         <h1 class="fr-h2">{{ analyse.name }}</h1>
-        <p class="fr-text--lead">{{ analyse.description }}</p>
+        <MarkdownText :content="analyse.description" class="fr-text--lead" />
       </div>
     </div>
 

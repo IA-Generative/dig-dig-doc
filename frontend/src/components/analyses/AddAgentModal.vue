@@ -48,7 +48,7 @@ watch(opened, (isOpened) => {
 async function applySuggestion(suggestionModel: string | null) {
   isSuggesting.value = true;
   try {
-    prompt.value = await suggestAgentPrompt(suggestionModel);
+    prompt.value = await suggestAgentPrompt(prompt.value, suggestionModel);
   } catch (error) {
     alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
   } finally {
@@ -88,9 +88,17 @@ async function submit() {
       des analyses systématiques.
     </p>
     <DsfrInput v-model="name" label="Nom de l'agent" label-visible required />
-    <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
+    <DsfrInput
+      v-model="prompt"
+      label="Description (prompt)"
+      label-visible
+      is-textarea
+      required
+      hint="Décris précisément le but de l'agent et le résultat attendu. Cette description sert de prompt au modèle de langage."
+      class="fr-mt-2w"
+    />
     <LlmAssistButton
-      label="Aide à la rédaction du prompt"
+      label="Structurer la description avec le LLM"
       class="fr-mt-2w"
       :loading="isSuggesting"
       @click="applySuggestion"

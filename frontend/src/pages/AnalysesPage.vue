@@ -130,6 +130,15 @@ function onAnalyseCreated() {
   gap: 1.5rem;
 }
 
+/* Tronque la description des cartes à 3 lignes maximum */
+.analyses-page__grid :deep(.fr-card__desc) {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .analyses-page__pagination {
   margin-top: 2rem;
   display: flex;

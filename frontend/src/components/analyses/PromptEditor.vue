@@ -9,7 +9,7 @@ const props = withDefaults(
   defineProps<{
     prompt: string;
     versions: PromptVersion[];
-    suggestPrompt?: (model: string | null) => Promise<string>;
+    suggestPrompt?: (draft: string, model: string | null) => Promise<string>;
     suggestLabel?: string;
   }>(),
   { suggestLabel: "Aide à la rédaction du prompt" },
@@ -37,7 +37,7 @@ async function applySuggestion(model: string | null) {
   if (!props.suggestPrompt) return;
   isSuggesting.value = true;
   try {
-    draft.value = await props.suggestPrompt(model);
+    draft.value = await props.suggestPrompt(draft.value, model);
   } catch (error) {
     alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
   } finally {
