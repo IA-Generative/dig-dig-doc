@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.models.analyse import Analyse
 from app.models.conversation import Conversation, Message, MessageRole, MessageSource
 from app.models.document_page import (
+    BoundingBox,
     DocumentPage,
     DocumentPrediction,
     PredictionKind,
@@ -33,14 +34,17 @@ class DossierRepository:
         self._analyse_repository = AnalyseRepository(db)
 
     def _base_query(self):
+        pages_load = selectinload(Dossier.documents).selectinload(DossierDocument.pages)
+        predictions_load = pages_load.selectinload(DocumentPage.predictions)
         return (
             select(Dossier)
             .options(
                 selectinload(Dossier.execution_steps).selectinload(ExecutionStep.logs),
-                selectinload(Dossier.documents)
-                .selectinload(DossierDocument.pages)
-                .selectinload(DocumentPage.predictions)
-                .selectinload(DocumentPrediction.validations),
+                pages_load.selectinload(DocumentPage.bounding_boxes),
+                predictions_load.selectinload(DocumentPrediction.bounding_box),
+                predictions_load.selectinload(DocumentPrediction.validations).selectinload(
+                    PredictionValidation.bounding_box
+                ),
                 # populate_existing: nécessaire pour le SSE (/dossiers/{id}/stream),
                 # qui réinterroge en boucle sur la même session - sans ça, une
                 # fois le Dossier chargé une première fois, les requêtes
@@ -178,9 +182,17 @@ class DossierRepository:
     # --- Pages, prédictions et validation humaine ---
 
     async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
+        pages_load = selectinload(DossierDocument.pages)
+        predictions_load = pages_load.selectinload(DocumentPage.predictions)
         result = await self.db.execute(
             select(DossierDocument)
-            .options(selectinload(DossierDocument.pages).selectinload(DocumentPage.predictions))
+            .options(
+                pages_load.selectinload(DocumentPage.bounding_boxes),
+                predictions_load.selectinload(DocumentPrediction.bounding_box),
+                predictions_load.selectinload(DocumentPrediction.validations).selectinload(
+                    PredictionValidation.bounding_box
+                ),
+            )
             .where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
             .execution_options(populate_existing=True)
         )
@@ -197,7 +209,6 @@ class DossierRepository:
         page_number: int,
         width: int | None,
         height: int | None,
-        bbox: dict | None,
         content: str | None,
     ) -> DocumentPage:
         page = DocumentPage(
@@ -207,20 +218,30 @@ class DossierRepository:
             height=height,
             content=content,
             predictions=[],
-            **(bbox or {}),
+            bounding_boxes=[],
         )
         self.db.add(page)
         await self.db.commit()
         # Pas de refresh(page) : redéclencherait un lazy-load de
-        # `predictions` hors contexte async (MissingGreenlet) - voir le
-        # commentaire équivalent dans launch(). L'id généré côté client
-        # (UUIDMixin.default) est déjà à jour après le commit.
+        # `predictions`/`bounding_boxes` hors contexte async (MissingGreenlet)
+        # - voir le commentaire équivalent dans launch(). L'id généré côté
+        # client (UUIDMixin.default) est déjà à jour après le commit.
         return page
+
+    def _page_options(self):
+        predictions_load = selectinload(DocumentPage.predictions)
+        return (
+            selectinload(DocumentPage.bounding_boxes),
+            predictions_load.selectinload(DocumentPrediction.bounding_box),
+            predictions_load.selectinload(DocumentPrediction.validations).selectinload(
+                PredictionValidation.bounding_box
+            ),
+        )
 
     async def get_page(self, document_id: uuid.UUID, page_id: uuid.UUID) -> DocumentPage | None:
         result = await self.db.execute(
             select(DocumentPage)
-            .options(selectinload(DocumentPage.predictions).selectinload(DocumentPrediction.validations))
+            .options(*self._page_options())
             .where(DocumentPage.id == page_id, DocumentPage.dossier_document_id == document_id)
             .execution_options(populate_existing=True)
         )
@@ -229,11 +250,19 @@ class DossierRepository:
     async def get_page_by_id(self, page_id: uuid.UUID) -> DocumentPage | None:
         result = await self.db.execute(
             select(DocumentPage)
-            .options(selectinload(DocumentPage.predictions).selectinload(DocumentPrediction.validations))
+            .options(*self._page_options())
             .where(DocumentPage.id == page_id)
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
+
+    async def add_bounding_box(
+        self, page: DocumentPage, *, x_min: float, y_min: float, x_max: float, y_max: float
+    ) -> BoundingBox:
+        bbox = BoundingBox(document_page_id=page.id, x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        self.db.add(bbox)
+        await self.db.flush()
+        return bbox
 
     async def add_prediction(
         self,
@@ -243,26 +272,33 @@ class DossierRepository:
         name: str,
         value: str,
         confidence: float | None,
-        bbox: dict | None,
+        bounding_box: dict | None,
     ) -> DocumentPrediction:
+        bbox = await self.add_bounding_box(page, **bounding_box) if bounding_box else None
         prediction = DocumentPrediction(
             document_page_id=page.id,
             kind=kind,
             name=name,
             value=value,
             confidence=confidence,
+            bounding_box=bbox,
             validations=[],
-            **(bbox or {}),
         )
         self.db.add(prediction)
         await self.db.commit()
         # Pas de refresh(prediction) : même raison que pour add_page ci-dessus.
         return prediction
 
+    def _prediction_options(self):
+        return (
+            selectinload(DocumentPrediction.bounding_box),
+            selectinload(DocumentPrediction.validations).selectinload(PredictionValidation.bounding_box),
+        )
+
     async def get_prediction(self, page_id: uuid.UUID, prediction_id: uuid.UUID) -> DocumentPrediction | None:
         result = await self.db.execute(
             select(DocumentPrediction)
-            .options(selectinload(DocumentPrediction.validations))
+            .options(*self._prediction_options())
             .where(DocumentPrediction.id == prediction_id, DocumentPrediction.document_page_id == page_id)
             .execution_options(populate_existing=True)
         )
@@ -271,7 +307,7 @@ class DossierRepository:
     async def get_prediction_by_id(self, prediction_id: uuid.UUID) -> DocumentPrediction | None:
         result = await self.db.execute(
             select(DocumentPrediction)
-            .options(selectinload(DocumentPrediction.validations))
+            .options(*self._prediction_options())
             .where(DocumentPrediction.id == prediction_id)
             .execution_options(populate_existing=True)
         )
@@ -284,15 +320,20 @@ class DossierRepository:
         validator_user_id: str,
         status: PredictionValidationStatus,
         corrected_value: str | None,
-        bbox: dict | None,
+        bounding_box: dict | None,
     ) -> DocumentPrediction:
+        # Toujours une nouvelle BoundingBox, jamais une mutation de celle de
+        # la prédiction d'origine (ou d'une validation précédente) : l'idée
+        # est de garder l'historique intact, comme le reste de
+        # PredictionValidation.
+        bbox = BoundingBox(document_page_id=prediction.document_page_id, **bounding_box) if bounding_box else None
         self.db.add(
             PredictionValidation(
                 prediction_id=prediction.id,
                 validator_user_id=validator_user_id,
                 status=status,
                 corrected_value=corrected_value,
-                **(bbox or {}),
+                bounding_box=bbox,
             )
         )
         await self.db.commit()
