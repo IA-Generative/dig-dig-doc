@@ -23,16 +23,30 @@ function mapConversation(api: any): Conversation {
 export function useConversations(dossierId: string) {
   const conversation = ref<Conversation | undefined>(undefined);
 
-  const ensureConversation = async () => {
+  // Garde contre les appels concurrents : si ensureConversation() est
+  // appelé plusieurs fois avant la résolution du premier appel (ex:
+  // onMounted + sendMessage), on réutilise la même promesse au lieu de
+  // déclencher plusieurs créations de conversation.
+  let pending: Promise<Conversation> | undefined;
+
+  const ensureConversation = async (): Promise<Conversation> => {
     if (conversation.value) return conversation.value;
-    const existing = await apiFetch<any[]>(`/api/dossiers/${dossierId}/conversations`);
-    if (existing.length > 0) {
-      conversation.value = mapConversation(existing[0]);
-    } else {
-      const created = await apiFetch<any>(`/api/dossiers/${dossierId}/conversations`, { method: "POST" });
-      conversation.value = mapConversation(created);
-    }
-    return conversation.value;
+    if (pending) return pending;
+
+    pending = (async () => {
+      const existing = await apiFetch<any[]>(`/api/dossiers/${dossierId}/conversations`);
+      if (existing.length > 0) {
+        conversation.value = mapConversation(existing[0]);
+      } else {
+        const created = await apiFetch<any>(`/api/dossiers/${dossierId}/conversations`, { method: "POST" });
+        conversation.value = mapConversation(created);
+      }
+      return conversation.value!;
+    })().finally(() => {
+      pending = undefined;
+    });
+
+    return pending;
   };
 
   const sendMessage = async (content: string) => {

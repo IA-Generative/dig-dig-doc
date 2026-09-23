@@ -15,3 +15,12 @@ export interface Conversation {
   createdAt: string;
   messages: Message[];
 }
+
+/** Entrée de la liste "mes conversations" dans la sidebar, façon ChatGPT. */
+export interface ConversationSummary {
+  id: string;
+  dossierId: string;
+  dossierName: string;
+  lastMessagePreview?: string;
+  lastActivityAt: string;
+}

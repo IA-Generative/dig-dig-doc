@@ -21,6 +21,7 @@ from app.schemas.dossier import (
     ExecutionStepCompleteIn,
     ExecutionStepOut,
     InternalMessageIn,
+    TextExtractionStatusIn,
 )
 
 # Routes appelées par les workers Celery (pas par le navigateur) : le worker
@@ -54,6 +55,18 @@ async def get_document(document_id: uuid.UUID, db: Annotated[AsyncSession, Depen
     document = await DossierRepository(db).get_document_by_id(document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    return document
+
+
+@router.put("/documents/{document_id}/extraction-status", response_model=DossierDocumentOut)
+async def set_document_extraction_status(
+    document_id: uuid.UUID, body: TextExtractionStatusIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    repository = DossierRepository(db)
+    document = await repository.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    await repository.set_text_extraction_status(document, body.status, body.error)
     return document
 
 

@@ -1,10 +1,19 @@
 import { computed, reactive, ref } from "vue";
 
-import { apiFetch } from "@/utils/api";
+import { API_BASE_URL, apiFetch } from "@/utils/api";
 import type { Dossier, DossierDocument, ExecutionStep } from "@/types/dossier";
 
 function mapDocument(api: any): DossierDocument {
-  return { id: api.id, name: api.name, size: api.size, s3Key: api.s3_key, mimetype: api.mimetype, label: api.label ?? undefined };
+  return {
+    id: api.id,
+    name: api.name,
+    size: api.size,
+    s3Key: api.s3_key,
+    mimetype: api.mimetype,
+    label: api.label ?? undefined,
+    textExtractionStatus: api.text_extraction_status,
+    textExtractionError: api.text_extraction_error ?? undefined,
+  };
 }
 
 function mapStep(api: any): ExecutionStep {
@@ -113,6 +122,33 @@ export function useDossiers() {
     upsert(mapDossier(data));
   };
 
+  // SSE : le navigateur s'abonne à /dossiers/{id}/stream, qui émet un
+  // `execution-update` à chaque changement d'état (statut du dossier, statut
+  // d'extraction de texte d'un document...) puis un `done` quand il n'y a
+  // plus de travail actif. Le callback reçoit le dossier sérialisé (même
+  // forme que GET /dossiers/{id}) et met à jour le store via upsert.
+  const streamDossier = (dossierId: string, onUpdate: (dossier: Dossier) => void): (() => void) => {
+    const url = `${API_BASE_URL}/api/dossiers/${dossierId}/stream`;
+    const eventSource = new EventSource(url, { withCredentials: true });
+
+    eventSource.addEventListener("execution-update", (event) => {
+      const dossier = mapDossier(JSON.parse(event.data));
+      upsert(dossier);
+      onUpdate(dossier);
+    });
+    eventSource.addEventListener("done", () => {
+      eventSource.close();
+    });
+    eventSource.addEventListener("error", () => {
+      // Le navigateur reconnecte automatiquement en cas d'erreur réseau ;
+      // on ferme pour éviter une boucle infinie (le serveur a déjà émis
+      // `done` ou la session a expiré).
+      eventSource.close();
+    });
+
+    return () => eventSource.close();
+  };
+
   return {
     list,
     total,
@@ -127,5 +163,6 @@ export function useDossiers() {
     setDocumentLabel,
     launch,
     stop,
+    streamDossier,
   };
 }

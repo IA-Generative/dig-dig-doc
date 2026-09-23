@@ -1,0 +1,35 @@
+# Override automatiquement fusionné par `docker compose up` (dev only).
+#
+# - Remplace le frontend nginx par le serveur Vite (HMR sur :5173)
+# - Redirige les callbacks auth vers localhost:5173 au lieu de :8081
+#
+# Pour lancer la stack "production-like" sans cet override :
+#   docker compose -f docker-compose.yaml up --build
+# ou :
+#   make prod
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      # Bind mount : les modifs dans frontend/src/ sont détectées par Vite HMR.
+      - ./frontend:/app
+      # Volume anonyme : préserve node_modules du build Docker, évite que le
+      # bind mount ne l'écrase avec un dossier local vide.
+      - frontend-node-modules:/app/node_modules
+    restart: unless-stopped
+
+  backend:
+    environment:
+      # En dev, le frontend tourne sur :5173 (Vite) au lieu de :8081 (nginx).
+      # Le backend a besoin de cette URL pour :
+      #   - CORS (allow_origins)
+      #   - redirect post-login (/api/auth/callback → FRONTEND_URL + path)
+      #   - redirect post-logout (post_logout_redirect_uri)
+      FRONTEND_URL: http://localhost:5173
+
+volumes:
+  frontend-node-modules:

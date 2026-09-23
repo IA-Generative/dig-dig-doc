@@ -35,6 +35,19 @@ class ExecutionStepStatus(enum.StrEnum):
     ECHEC = "échec"
 
 
+class TextExtractionStatus(enum.StrEnum):
+    """État du run d'extraction de texte (worker document_process,
+    app.tasks.extract_document_text) pour un document - pas un
+    ExecutionStep : ça tourne dès l'upload, indépendamment d'un lancement de
+    dossier, et alimente les pages/bbox qu'une classification/extraction
+    lira ensuite."""
+
+    EN_ATTENTE = "en_attente"
+    EN_COURS = "en_cours"
+    TERMINE = "terminé"
+    ECHEC = "échec"
+
+
 class Dossier(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "dossiers"
 
@@ -102,6 +115,12 @@ class DossierDocument(UUIDMixin, TimestampMixin, Base):
     # Nature du document (ex: "CNI", "avis d'imposition") : posée par la
     # classification documentaire de l'analyse, ou corrigée manuellement.
     label: Mapped[str | None] = mapped_column(String, nullable=True)
+    text_extraction_status: Mapped[TextExtractionStatus] = mapped_column(
+        Enum(TextExtractionStatus, name="text_extraction_status"),
+        nullable=False,
+        default=TextExtractionStatus.EN_ATTENTE,
+    )
+    text_extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="documents")
     pages: Mapped[list["DocumentPage"]] = relationship(

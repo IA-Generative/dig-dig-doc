@@ -32,6 +32,7 @@ from app.models.dossier import (
     ExecutionStep,
     ExecutionStepKind,
     ExecutionStepStatus,
+    TextExtractionStatus,
 )
 from app.models.execution_log import ExecutionLog, ExecutionLogLevel
 from app.repositories.analyse_repository import AnalyseRepository
@@ -90,19 +91,29 @@ class DossierRepository:
         await self.db.refresh(dossier)
         return dossier
 
-    async def add_documents(self, dossier: Dossier, documents: list[dict]) -> None:
-        for document in documents:
-            self.db.add(
-                DossierDocument(
-                    dossier_id=dossier.id,
-                    name=document["name"],
-                    size=document["size"],
-                    s3_key=document["s3_key"],
-                    mimetype=document["mimetype"],
-                )
+    async def add_documents(self, dossier: Dossier, documents: list[dict]) -> list[DossierDocument]:
+        created = [
+            DossierDocument(
+                dossier_id=dossier.id,
+                name=document["name"],
+                size=document["size"],
+                s3_key=document["s3_key"],
+                mimetype=document["mimetype"],
             )
+            for document in documents
+        ]
+        for document in created:
+            self.db.add(document)
         await self.db.commit()
         await self.db.refresh(dossier)
+        return created
+
+    async def set_text_extraction_status(
+        self, document: DossierDocument, status: TextExtractionStatus, error: str | None = None
+    ) -> None:
+        document.text_extraction_status = status
+        document.text_extraction_error = error
+        await self.db.commit()
 
     async def set_document_label(self, document: DossierDocument, label: str | None) -> None:
         document.label = label
@@ -133,11 +144,33 @@ class DossierRepository:
         )
         return result.scalars().all()
 
+    async def list_conversations_for_user(self, user_id: str) -> list[Conversation]:
+        """Toutes les conversations d'un utilisateur, tous dossiers
+        confondus - pour la liste façon ChatGPT dans la sidebar. Triées par
+        activité la plus récente (dernier message, ou création si vide)."""
+        result = await self.db.execute(
+            self._conversation_query()
+            .options(selectinload(Conversation.dossier))
+            .where(Conversation.user_id == user_id)
+        )
+        conversations = list(result.scalars().all())
+        conversations.sort(key=lambda c: c.messages[-1].created_at if c.messages else c.created_at, reverse=True)
+        return conversations
+
     async def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:
         result = await self.db.execute(self._conversation_query().where(Conversation.id == conversation_id))
         return result.scalar_one_or_none()
 
     async def create_conversation(self, dossier_id: uuid.UUID, user_id: str) -> Conversation:
+        # Idempotent : si une conversation existe déjà pour ce couple
+        # (dossier, utilisateur), on la renvoie au lieu d'en créer une
+        # nouvelle. La page dossier est un chat personnel par instructeur :
+        # cliquer plusieurs fois sur le dossier ne doit pas dupliquer la
+        # conversation.
+        existing = await self.list_conversations(dossier_id, user_id)
+        if existing:
+            return existing[0]
+
         conversation = Conversation(dossier_id=dossier_id, user_id=user_id)
         self.db.add(conversation)
         await self.db.commit()

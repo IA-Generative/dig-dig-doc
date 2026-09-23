@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { RouterLink } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type Dossier, type DossierStatus } from "@/types/dossier";
 
+const router = useRouter();
 const { list: dossiers, pageCount, fetchList, launch, stop } = useDossiers();
 const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 
@@ -38,9 +39,25 @@ function analyseName(dossier: Dossier) {
   return analyses.value.find((a) => a.id === dossier.analyseId)?.name ?? "Analyse introuvable";
 }
 
-function formatDateTime(iso?: string) {
+function formatDate(iso?: string) {
   if (!iso) return "-";
-  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function formatTime(iso?: string) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Date la plus pertinente selon le statut : terminé → endedAt, en cours → startedAt, sinon createdAt. */
+function relevantDate(dossier: Dossier) {
+  if (dossier.endedAt) return dossier.endedAt;
+  if (dossier.startedAt) return dossier.startedAt;
+  return dossier.createdAt;
+}
+
+function goToDossier(dossier: Dossier) {
+  router.push(`/dossiers/${dossier.id}`);
 }
 </script>
 
@@ -56,50 +73,76 @@ function formatDateTime(iso?: string) {
 
     <p v-if="dossiers.length === 0" class="fr-text--sm">Aucun dossier pour le moment.</p>
 
-    <div v-else class="dossiers-page__table-wrapper">
-      <table class="fr-table dossiers-page__table">
-        <thead>
-          <tr>
-            <th>Dossier</th>
-            <th>Analyse</th>
-            <th>Version</th>
-            <th>Créé le</th>
-            <th>Lancé le</th>
-            <th>Terminé le</th>
-            <th>Statut</th>
-            <th class="dossiers-page__actions-col">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="dossier in dossiers" :key="dossier.id">
-            <td><RouterLink :to="`/dossiers/${dossier.id}`">{{ dossier.name }}</RouterLink></td>
-            <td>{{ analyseName(dossier) }}</td>
-            <td>{{ dossier.analyseVersion }}</td>
-            <td>{{ formatDateTime(dossier.createdAt) }}</td>
-            <td>{{ formatDateTime(dossier.startedAt) }}</td>
-            <td>{{ formatDateTime(dossier.endedAt) }}</td>
-            <td><DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small /></td>
-            <td class="dossiers-page__actions">
-              <DsfrButton
-                v-if="dossier.status === 'en_cours'"
-                label="Arrêter"
-                secondary
-                icon="ri-stop-circle-line"
-                size="sm"
-                @click="stop(dossier.id)"
-              />
-              <DsfrButton
-                v-else
-                label="Lancer"
-                icon="ri-play-circle-line"
-                size="sm"
-                @click="launch(dossier.id)"
-              />
-              <RouterLink :to="`/dossiers/${dossier.id}`" class="fr-btn fr-btn--tertiary fr-btn--sm fr-icon-file-text-line" title="Voir le résultat" />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else class="fr-table">
+      <div class="fr-table__wrapper">
+        <div class="fr-table__container">
+          <div class="fr-table__content">
+            <table class="dossiers-page__table">
+              <thead>
+                <tr>
+                  <th scope="col">Dossier</th>
+                  <th scope="col">Analyse</th>
+                  <th scope="col">Statut</th>
+                  <th scope="col">Date</th>
+                  <th scope="col" class="dossiers-page__actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="dossier in dossiers"
+                  :key="dossier.id"
+                  class="dossiers-page__row"
+                  @click="goToDossier(dossier)"
+                >
+                  <td>
+                    <RouterLink :to="`/dossiers/${dossier.id}`" class="dossiers-page__name-link" @click.stop>
+                      {{ dossier.name }}
+                    </RouterLink>
+                  </td>
+                  <td>
+                    <div class="dossiers-page__analyse-cell">
+                      <span class="dossiers-page__analyse-name">{{ analyseName(dossier) }}</span>
+                      <span class="fr-text--xs dossiers-page__version">v{{ dossier.analyseVersion }}</span>
+                    </div>
+                  </td>
+                  <td><DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small /></td>
+                  <td>
+                    <div class="dossiers-page__date-cell">
+                      <span>{{ formatDate(relevantDate(dossier)) }}</span>
+                      <span class="fr-text--xs dossiers-page__time">{{ formatTime(relevantDate(dossier)) }}</span>
+                    </div>
+                  </td>
+                  <td @click.stop>
+                    <div class="dossiers-page__actions">
+                      <DsfrButton
+                        v-if="dossier.status === 'en_cours'"
+                        label="Arrêter"
+                        secondary
+                        icon="ri-stop-circle-line"
+                        size="sm"
+                        @click="stop(dossier.id)"
+                      />
+                      <DsfrButton
+                        v-else-if="dossier.status === 'en_attente' || dossier.status === 'arrêté'"
+                        label="Lancer"
+                        icon="ri-play-circle-line"
+                        size="sm"
+                        @click="launch(dossier.id)"
+                      />
+                      <RouterLink
+                        v-if="dossier.status === 'terminé' || dossier.status === 'échec'"
+                        :to="`/dossiers/${dossier.id}`"
+                        class="fr-btn fr-btn--tertiary fr-btn--sm fr-icon-eye-line"
+                        title="Voir le résultat"
+                      />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <DsfrPagination
@@ -122,12 +165,50 @@ function formatDateTime(iso?: string) {
   margin-bottom: 1.5rem;
 }
 
-.dossiers-page__table-wrapper {
-  overflow-x: auto;
-}
-
 .dossiers-page__table {
   width: 100%;
+}
+
+.dossiers-page__row {
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.dossiers-page__row:hover {
+  background-color: var(--background-alt-grey);
+}
+
+.dossiers-page__name-link {
+  font-weight: 500;
+}
+
+.dossiers-page__table :deep(td),
+.dossiers-page__table :deep(th) {
+  vertical-align: middle;
+}
+
+.dossiers-page__analyse-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.dossiers-page__analyse-name {
+  font-weight: 500;
+}
+
+.dossiers-page__version {
+  color: var(--text-mention-grey);
+}
+
+.dossiers-page__date-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.dossiers-page__time {
+  color: var(--text-mention-grey);
 }
 
 .dossiers-page__actions-col {

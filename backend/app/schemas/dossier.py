@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.conversation import MessageRole
 from app.models.document_page import PredictionKind, PredictionValidationStatus
-from app.models.dossier import DossierStatus, ExecutionStepKind, ExecutionStepStatus
+from app.models.dossier import DossierStatus, ExecutionStepKind, ExecutionStepStatus, TextExtractionStatus
 from app.models.execution_log import ExecutionLogLevel
 
 
@@ -154,11 +154,18 @@ class DossierDocumentOut(BaseModel):
     s3_key: str
     mimetype: str
     label: str | None
+    text_extraction_status: TextExtractionStatus
+    text_extraction_error: str | None
     pages: list[DocumentPageOut]
 
 
 class DossierDocumentLabelIn(BaseModel):
     label: str | None
+
+
+class TextExtractionStatusIn(BaseModel):
+    status: TextExtractionStatus
+    error: str | None = None
 
 
 class MessageSourceOut(BaseModel):
@@ -194,6 +201,20 @@ class ConversationOut(BaseModel):
     user_id: str
     created_at: datetime
     messages: list[MessageOut]
+
+
+class ConversationSummaryOut(BaseModel):
+    """Vue légère pour la liste "mes conversations" de la sidebar (façon
+    ChatGPT) : pas la liste complète des messages, juste de quoi afficher
+    une entrée et y naviguer."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    dossier_id: uuid.UUID
+    dossier_name: str
+    last_message_preview: str | None
+    last_activity_at: datetime
 
 
 class ExecutionLogOut(BaseModel):
