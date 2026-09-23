@@ -47,9 +47,7 @@ class Feedback(UUIDMixin, TimestampMixin, Base):
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     message: Mapped["Message"] = relationship(back_populates="feedbacks")
-    reason_rows: Mapped[list["FeedbackReason"]] = relationship(
-        back_populates="feedback", cascade="all, delete-orphan"
-    )
+    reason_rows: Mapped[list["FeedbackReason"]] = relationship(back_populates="feedback", cascade="all, delete-orphan")
 
     @property
     def reasons(self) -> list[FeedbackReasonCode]:

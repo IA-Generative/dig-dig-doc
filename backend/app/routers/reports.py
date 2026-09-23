@@ -1,7 +1,16 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +19,7 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.report import ReportType
 from app.repositories.report_repository import ReportRepository
+from app.schemas.pagination import Page
 from app.schemas.report import ReportOut
 
 router = APIRouter(prefix="/reports", tags=["Reports"], dependencies=[Depends(get_current_user)])
@@ -36,7 +46,10 @@ async def create_report(
         # boto3 est synchrone : hors du threadpool, cet appel bloquerait la
         # boucle asyncio le temps de l'upload.
         await run_in_threadpool(
-            s3_connector.upload, screenshot_key, data, screenshot.content_type or "application/octet-stream"
+            s3_connector.upload,
+            screenshot_key,
+            data,
+            screenshot.content_type or "application/octet-stream",
         )
     return await ReportRepository(db).create(
         user_id=user.user_id,
@@ -48,11 +61,17 @@ async def create_report(
     )
 
 
-@router.get("", response_model=list[ReportOut])
+@router.get("", response_model=Page[ReportOut])
 async def list_my_reports(
-    db: Annotated[AsyncSession, Depends(get_db)], user: Annotated[RequestContext, Depends(get_current_user)]
-) -> list[ReportOut]:
-    return list(await ReportRepository(db).list_mine(user.user_id))
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[ReportOut]:
+    reports, total = await ReportRepository(db).list_mine_paginated(
+        user_id=user.user_id, page=page, page_size=page_size
+    )
+    return Page.of(list(reports), total=total, page=page, page_size=page_size)
 
 
 @router.get("/{report_id}/screenshot")
