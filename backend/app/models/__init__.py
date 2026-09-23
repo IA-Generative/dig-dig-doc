@@ -30,6 +30,8 @@ from .dossier import (
     TextExtractionStatus,
 )
 from .execution_log import ExecutionLog, ExecutionLogLevel
+from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
+from .report import Report, ReportStatus, ReportType
 
 __all__ = [
     "Agent",
@@ -53,6 +55,10 @@ __all__ = [
     "ExecutionStep",
     "ExecutionStepKind",
     "ExecutionStepStatus",
+    "Feedback",
+    "FeedbackReason",
+    "FeedbackReasonCode",
+    "FeedbackValue",
     "FieldVersion",
     "LabelDefinition",
     "Message",
@@ -61,6 +67,9 @@ __all__ = [
     "PredictionKind",
     "PredictionValidation",
     "PredictionValidationStatus",
+    "Report",
+    "ReportStatus",
+    "ReportType",
     "TextExtractionStatus",
     "VersionedField",
 ]

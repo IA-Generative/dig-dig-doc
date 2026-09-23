@@ -2,6 +2,7 @@ import { watch } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 
 import { useAuth } from "@/composables/useAuth";
+import AdministrationPage from "@/pages/AdministrationPage.vue";
 import AnalyseAgentsTab from "@/pages/analyse/AnalyseAgentsTab.vue";
 import AnalyseClassificationTab from "@/pages/analyse/AnalyseClassificationTab.vue";
 import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
@@ -42,6 +43,12 @@ export const router = createRouter({
     },
     { path: "/dossiers", name: "dossiers", component: DossiersPage },
     { path: "/dossiers/:id", name: "dossier-detail", component: DossierDetailPage },
+    {
+      path: "/administration",
+      name: "administration",
+      component: AdministrationPage,
+      meta: { requiresAdmin: true },
+    },
   ],
 });
 
@@ -53,7 +60,7 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   if (to.meta.public) return true;
 
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, isAdmin, loading } = useAuth();
 
   if (loading.value) {
     // fetchProfile est lancé au montage de App.vue : on attend qu'elle
@@ -72,6 +79,10 @@ router.beforeEach(async (to) => {
     // On redirige vers la page d'accueil avec un paramètre pour revenir
     // ici après login.
     return { name: "welcome", query: { redirect: to.fullPath } };
+  }
+
+  if (to.meta.requiresAdmin && !isAdmin.value) {
+    return { name: "dossiers" };
   }
 
   return true;

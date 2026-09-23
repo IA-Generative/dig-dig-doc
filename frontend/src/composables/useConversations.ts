@@ -1,10 +1,28 @@
 import { ref } from "vue";
 
 import { apiFetch } from "@/utils/api";
-import type { Conversation, Message } from "@/types/conversation";
+import type { Conversation, Feedback, FeedbackReasonCode, FeedbackValue, Message } from "@/types/conversation";
+
+function mapFeedback(api: any): Feedback | null {
+  if (!api) return null;
+  return {
+    id: api.id,
+    messageId: api.message_id,
+    value: api.value,
+    reasons: api.reasons,
+    comment: api.comment,
+    createdAt: api.created_at,
+  };
+}
 
 function mapMessage(api: any): Message {
-  return { id: api.id, role: api.role, content: api.content, createdAt: api.created_at };
+  return {
+    id: api.id,
+    role: api.role,
+    content: api.content,
+    createdAt: api.created_at,
+    feedback: mapFeedback(api.feedback),
+  };
 }
 
 function mapConversation(api: any): Conversation {
@@ -77,5 +95,28 @@ export function useConversations(dossierId: string) {
     conversation.value = mapConversation(data);
   };
 
-  return { conversation, ensureConversation, sendMessage, deleteConversation, setModel };
+  const setFeedback = async (
+    messageId: string,
+    value: FeedbackValue,
+    reasons: FeedbackReasonCode[] = [],
+    comment: string | null = null,
+  ) => {
+    const current = await ensureConversation();
+    const data = await apiFetch<any>(
+      `/api/dossiers/${dossierId}/conversations/${current.id}/messages/${messageId}/feedback`,
+      { method: "PUT", body: JSON.stringify({ value, reasons, comment }) },
+    );
+    conversation.value = mapConversation(data);
+  };
+
+  const removeFeedback = async (messageId: string) => {
+    const current = await ensureConversation();
+    const data = await apiFetch<any>(
+      `/api/dossiers/${dossierId}/conversations/${current.id}/messages/${messageId}/feedback`,
+      { method: "DELETE" },
+    );
+    conversation.value = mapConversation(data);
+  };
+
+  return { conversation, ensureConversation, sendMessage, deleteConversation, setModel, setFeedback, removeFeedback };
 }

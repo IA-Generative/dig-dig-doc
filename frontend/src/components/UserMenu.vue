@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import InfoModal from "@/components/InfoModal.vue";
+import ReportFormModal from "@/components/ReportFormModal.vue";
 import { useAuth } from "@/composables/useAuth";
 import { renderMarkdown } from "@/utils/markdown";
 
@@ -193,25 +194,7 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
     <p v-else>Chargement…</p>
   </InfoModal>
 
-  <InfoModal title="Signaler un bug" :open="showReport" @close="showReport = false">
-    <p>
-      Pour signaler un bug ou suggérer une amélioration, ouvrez un ticket sur le
-      dépôt du projet&nbsp;:
-    </p>
-    <p>
-      <a
-        href="https://github.com/IA-Generative/dig-dig-doc/issues/new"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        Créer un ticket sur GitHub →
-      </a>
-    </p>
-    <p class="user-menu__hint">
-      Merci d'inclure le maximum de détails (version {{ APP_VERSION }}, étapes pour
-      reproduire, captures d'écran).
-    </p>
-  </InfoModal>
+  <ReportFormModal :open="showReport" @close="showReport = false" />
 </template>
 
 <style scoped>
@@ -371,11 +354,6 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
 /* Contenu markdown dans les modales */
 .user-menu__error {
   color: var(--text-default-error);
-}
-
-.user-menu__hint {
-  font-size: 0.85rem;
-  color: var(--text-mention-grey);
 }
 
 .markdown :deep(h1) {
