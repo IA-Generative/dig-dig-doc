@@ -34,3 +34,14 @@ def add_page(
     )
     response.raise_for_status()
     return response.json()
+
+
+def add_bounding_box(
+    client: httpx.Client, page_id: str, *, x_min: float, y_min: float, x_max: float, y_max: float
+) -> dict:
+    response = client.post(
+        f"/pages/{page_id}/bounding-boxes",
+        json={"x_min": x_min, "y_min": y_min, "x_max": x_max, "y_max": y_max},
+    )
+    response.raise_for_status()
+    return response.json()
