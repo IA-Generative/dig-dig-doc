@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.2.0...v0.3.0) (2026-09-23)
+
+
+### Features
+
+* **backend,frontend:** choix du modèle LLM ([fe9a6a1](https://github.com/IA-Generative/dig-dig-doc/commit/fe9a6a1c42ea1eb1ca99d48823e569a9dadbeb38))
+* **backend,frontend:** choix du modèle LLM pour conversations et agents ([8b0ebe7](https://github.com/IA-Generative/dig-dig-doc/commit/8b0ebe78aefbdeda4a54ce0c48b85d180b97bc60))
+* **backend,frontend:** pagination des listes + système de jetons d'application ([364c499](https://github.com/IA-Generative/dig-dig-doc/commit/364c4992e28b9bef48da30923c6a045260bd5574))
+* **backend,worker,frontend:** chat task with streaming + sources, markdown rendering, analyse description ([a1b11d9](https://github.com/IA-Generative/dig-dig-doc/commit/a1b11d90b50289e54977e72aee42f5cd9428b217))
+* **backend:** authentification Keycloak du BFF, comme Muffin ([bc48367](https://github.com/IA-Generative/dig-dig-doc/commit/bc483678aa54967bc415fdc72a47cbd2237a52b9))
+* **backend:** health check étendu à postgres et s3, sortie pydantic typée ([603bde0](https://github.com/IA-Generative/dig-dig-doc/commit/603bde0337c054cf1c2d48ef170d28516dacbe40))
+* **backend:** logs d'exécution, prédictions par page, partage d'analyse, SSE, CI GitLab ([f338578](https://github.com/IA-Generative/dig-dig-doc/commit/f3385782f18871607496844b786002a3311b12c5))
+* **backend:** modèle de données et endpoints analyses/dossiers ([b656d48](https://github.com/IA-Generative/dig-dig-doc/commit/b656d48520e359ecfefe5c29e27adc035a7da72e))
+* **backend:** prédictions et sources de message comme ensembles de pages/bbox ([f05b445](https://github.com/IA-Generative/dig-dig-doc/commit/f05b445ff564810afd716be50f60f880806b30fc))
+* connecte le frontend au backend, ajoute conversations et métadonnées de document ([687c0b1](https://github.com/IA-Generative/dig-dig-doc/commit/687c0b157e0fec64dd71fcdc3be754ee166ae198))
+* extraction de texte du worker, écran d'accueil DSFR, conversations en sidebar ([5a39556](https://github.com/IA-Generative/dig-dig-doc/commit/5a3955618c5a1ce39f361869224518fe6e1398d5))
+* **helm:** add Helm chart with redis/postgres deps and migration job ([f2b0044](https://github.com/IA-Generative/dig-dig-doc/commit/f2b00446b6d3895ba7b199d3b06d1fda5f77362d))
+* page d'accueil ([fcedcc2](https://github.com/IA-Generative/dig-dig-doc/commit/fcedcc277a8ee3f7330e9af88873ca6b63373402))
+* **report:** add reporting ([a5e8241](https://github.com/IA-Generative/dig-dig-doc/commit/a5e82412d96b52413379335f65087e431e07727c))
+* **worker,backend:** classification & entity extraction tasks ([3f3e7f6](https://github.com/IA-Generative/dig-dig-doc/commit/3f3e7f684eb3eb05b820e13affa688f7714ff409))
+* **worker,backend:** extraction de texte (issue [#4](https://github.com/IA-Generative/dig-dig-doc/issues/4)) + captures de page relayées par le backend ([6d7d564](https://github.com/IA-Generative/dig-dig-doc/commit/6d7d564b4a69db8f884b8edc81f801d9d6618237))
+* **worker:** client HTTP authentifié par jeton vers le BFF ([7a792ff](https://github.com/IA-Generative/dig-dig-doc/commit/7a792ff38f30d88bc3b4e09b99a1537840b4d938))
+* **worker:** extrait aussi les bbox des blocs de mise en page ([64f753b](https://github.com/IA-Generative/dig-dig-doc/commit/64f753b2a5e28b4433e5bbadb9b13c0190da40c4))
+
+
+### Bug Fixes
+
+* **backend:** bounding_boxes devient sa propre table, rattachée à une page ([f561bca](https://github.com/IA-Generative/dig-dig-doc/commit/f561bcae098f27c4c0e70e7cb4be71b376e5cda4))
+* remove duplicate migration file with same revision ID ([e04c5eb](https://github.com/IA-Generative/dig-dig-doc/commit/e04c5ebb4e853aa8130ab4f00b77ffc440858c55))
+* unittest ([2c6a549](https://github.com/IA-Generative/dig-dig-doc/commit/2c6a54955a4f272f55168311b52427aec31e99fd))
+
 ## [0.3.0-rc.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc.2...v0.3.0-rc.3) (2026-09-23)
 
 
