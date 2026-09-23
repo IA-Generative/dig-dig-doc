@@ -130,9 +130,47 @@ jobs:
       BUILD_ARGS: |
         APP_VERSION=${{ needs.release.outputs.version }}
 
-  # Pas de chart Helm pour l'instant (voir issue CI/CD) : à ajouter avec les
-  # jobs bump-chart/release-chart de Muffin le jour où un déploiement k8s
-  # est prévu.
+  # Bump the Helm chart version + appVersion in Chart.yaml, then commit the
+  # bump directly on the release branch (local mode). Runs after build-docker
+  # so APP_VERSION is the version release-please just cut. The chart version
+  # bumps on its own lifecycle (auto derives the level from the appVersion
+  # delta), and the commit uses the 'chore(chart):' prefix so release-please
+  # does not pick it up as a release-worthy change.
+  bump-chart:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/update-helm-chart.yml@v0
+    needs:
+      - expose-vars
+      - release
+      - build-docker
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    with:
+      RUN_MODE: local
+      CHART_DIR: .
+      CHART_NAME: digdigdoc
+      APP_VERSION: ${{ needs.release.outputs.version }}
+      UPGRADE_TYPE: auto
+      PRERELEASE_IDENTIFIER: rc
+
+  # Package the chart (helm package) and push the tgz to the GitHub Container
+  # Registry as an OCI artifact. CHECKOUT_REF picks up the bump commit pushed
+  # by bump-chart so the published chart carries the new version.
+  release-chart:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/release-helm-local.yml@v0
+    needs:
+      - expose-vars
+      - release
+      - bump-chart
+    if: ${{ needs.release.outputs.release-created == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    with:
+      CHARTS_DIR: .
+      CHART_NAME: digdigdoc
+      CHECKOUT_REF: ${{ needs.bump-chart.outputs.commit-sha }}
 
   # Dernier volontairement, même raisonnement que Muffin/ocr-api : une
   # release pousse un commit sur main (le commit de release) que dev n'a pas

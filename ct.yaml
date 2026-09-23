@@ -1,0 +1,8 @@
+# chart-testing configuration for the digdigdoc monorepo chart.
+# The chart lives at the repo root in digdigdoc/, not in charts/.
+chart-dirs:
+  - digdigdoc
+check-version-increment: false
+validate-maintainers: false
+validate-chart-schema: true
+validate-yaml: true
