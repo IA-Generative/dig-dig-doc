@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc...v0.3.0-rc.1) (2026-09-23)
+
+
+### Features
+
+* **backend,frontend:** choix du modèle LLM ([613cb7b](https://github.com/IA-Generative/dig-dig-doc/commit/613cb7b7a57547a7f59c44183cfd35482a81d890))
+* **backend,frontend:** choix du modèle LLM pour conversations et agents ([37bad13](https://github.com/IA-Generative/dig-dig-doc/commit/37bad13a103c3655421f43c41d7f32c87b1dd903))
+* **backend,frontend:** pagination des listes + système de jetons d'application ([7923b08](https://github.com/IA-Generative/dig-dig-doc/commit/7923b0870b0c3736772306ef94a98755410d1d46))
+* **backend:** health check étendu à postgres et s3, sortie pydantic typée ([c42cf64](https://github.com/IA-Generative/dig-dig-doc/commit/c42cf645347b67de45444f6bf064795e5fbafb6d))
+* **backend:** logs d'exécution, prédictions par page, partage d'analyse, SSE, CI GitLab ([03cd7d9](https://github.com/IA-Generative/dig-dig-doc/commit/03cd7d9dfe3bf1d590f3451bb1e59140315ecc9f))
+* **backend:** modèle de données et endpoints analyses/dossiers ([479c4d1](https://github.com/IA-Generative/dig-dig-doc/commit/479c4d1fd837abffd33dbedbe67b655e1a674ab6))
+* **backend:** prédictions et sources de message comme ensembles de pages/bbox ([9654a92](https://github.com/IA-Generative/dig-dig-doc/commit/9654a922a9cc699087bd3022bbfb731c64e65f3c))
+* connecte le frontend au backend, ajoute conversations et métadonnées de document ([a8cb97c](https://github.com/IA-Generative/dig-dig-doc/commit/a8cb97c467ff9bac2252e2b2d120d399a5ebf146))
+* extraction de texte du worker, écran d'accueil DSFR, conversations en sidebar ([9ed9607](https://github.com/IA-Generative/dig-dig-doc/commit/9ed9607307d97d9fee3c721e90cb005389501a25))
+* **report:** add reporting ([f0996e7](https://github.com/IA-Generative/dig-dig-doc/commit/f0996e74549d720edc9c2f489f38c5c1c191b688))
+* **worker,backend:** extraction de texte (issue [#4](https://github.com/IA-Generative/dig-dig-doc/issues/4)) + captures de page relayées par le backend ([a705bb2](https://github.com/IA-Generative/dig-dig-doc/commit/a705bb21be914eb7b365a814461600117f9d2bd0))
+* **worker:** client HTTP authentifié par jeton vers le BFF ([b448a76](https://github.com/IA-Generative/dig-dig-doc/commit/b448a7677921243a0bd913a814d9759e4395f6d0))
+* **worker:** extrait aussi les bbox des blocs de mise en page ([6eea40a](https://github.com/IA-Generative/dig-dig-doc/commit/6eea40a7568d59f6bfa773b9974c3389028027b3))
+
+
+### Bug Fixes
+
+* **backend:** bounding_boxes devient sa propre table, rattachée à une page ([83013c6](https://github.com/IA-Generative/dig-dig-doc/commit/83013c6cf201a5dfb86e25b6dab76bb78b1a2d8a))
+* unittest ([66c9c4c](https://github.com/IA-Generative/dig-dig-doc/commit/66c9c4c2860fedf0578db899f5597b838e8294f6))
+
 ## [0.3.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.2.0...v0.3.0-rc) (2026-09-22)
 
 
