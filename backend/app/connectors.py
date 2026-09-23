@@ -57,6 +57,18 @@ class S3Connector:
         except (BotoCoreError, ClientError) as error:
             return Health(name="s3", status="unhealthy", extras={"error": str(error)})
 
+    def upload(self, key: str, data: bytes, content_type: str) -> None:
+        try:
+            self.client.create_bucket(Bucket=self.bucket)
+        except self.client.exceptions.BucketAlreadyOwnedByYou:
+            pass
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=content_type)
+
+    def download(self, key: str) -> tuple[bytes, str]:
+        response = self.client.get_object(Bucket=self.bucket, Key=key)
+        content_type = response.get("ContentType") or "application/octet-stream"
+        return response["Body"].read(), content_type
+
 
 redis_settings = RedisSettings()
 redis_connector = RedisConnector(redis_settings.REDIS_URL)

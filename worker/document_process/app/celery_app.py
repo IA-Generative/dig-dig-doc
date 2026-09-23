@@ -1,9 +1,17 @@
-import os
-
 from celery import Celery
 
-celery_app = Celery(
-    "document_process",
-    broker=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+from app.config import settings
+
+celery_app = Celery("document_process", broker=settings.CELERY_BROKER_URL, backend=settings.CELERY_RESULT_BACKEND)
+
+celery_app.conf.update(
+    # Un document mal formé (PDF corrompu, OCR qui boucle) est tué plutôt
+    # que de bloquer la queue - SIGKILL, pas une demande polie : le parsing
+    # n'est pas interruptible proprement.
+    task_time_limit=300,
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
+    task_track_started=True,
 )
+
+from app import tasks  # noqa: E402,F401

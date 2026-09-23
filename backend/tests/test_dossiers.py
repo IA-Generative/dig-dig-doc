@@ -82,6 +82,26 @@ def test_document_upload_and_label(client: TestClient) -> None:
     assert updated["label"] == "CNI"
 
 
+def test_internal_get_document_returns_s3_key_for_worker(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse document interne")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier interne", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document = dossier["documents"][0]
+
+    response = client.get(
+        f"/api/internal/documents/{document['id']}", headers={"X-App-Token": "dev-only-worker-token-not-for-prod"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == document["id"]
+    assert body["s3_key"] == document["s3_key"]
+    assert body["mimetype"] == "application/pdf"
+    assert body["pages"] == []
+
+
 def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse conversation")
     dossier = client.post("/api/dossiers", json={"name": "Dossier chat", "analyse_id": analyse_id}).json()
@@ -154,6 +174,43 @@ def _create_page(client: TestClient, document_id: str, page_number: int, content
 
 def _create_bbox(client: TestClient, page_id: str, **coords) -> dict:
     return client.post(f"/api/internal/pages/{page_id}/bounding-boxes", json=coords, headers=INTERNAL_HEADERS).json()
+
+
+def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> None:
+    from app.connectors import s3_connector
+
+    analyse_id = _create_analyse(client, "Analyse capture")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier capture", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document_id = dossier["documents"][0]["id"]
+
+    page_without_screenshot = client.post(
+        f"/api/internal/documents/{document_id}/pages", json={"page_number": 1}, headers=INTERNAL_HEADERS
+    ).json()
+    assert page_without_screenshot["has_screenshot"] is False
+    response = client.get(
+        f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page_without_screenshot['id']}/screenshot"
+    )
+    assert response.status_code == 404
+
+    screenshot_key = f"screenshots/{document_id}/page-1.png"
+    s3_connector.upload(screenshot_key, b"fake-png-bytes", "image/png")
+    page = client.post(
+        f"/api/internal/documents/{document_id}/pages",
+        json={"page_number": 2, "screenshot_key": screenshot_key},
+        headers=INTERNAL_HEADERS,
+    ).json()
+    assert page["has_screenshot"] is True
+    # Ni la clé S3 ni une URL signée ne sont exposées : juste un booléen.
+    assert "screenshot_key" not in page
+
+    response = client.get(f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}/screenshot")
+    assert response.status_code == 200
+    assert response.content == b"fake-png-bytes"
+    assert response.headers["content-type"] == "image/png"
 
 
 def test_classification_prediction_linked_to_one_page_and_label(client: TestClient) -> None:

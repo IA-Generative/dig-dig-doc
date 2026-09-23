@@ -31,11 +31,11 @@ repos:
         files: ^frontend/
         pass_filenames: false
 
-      # Nécessite postgres/redis locaux (voir backend/tests/.env.testing,
+      # Nécessite postgres/redis/rustfs locaux (voir backend/tests/.env.testing,
       # docker-compose.yaml) - contrairement au lint, ce hook suppose
       # l'environnement de dev déjà démarré (`docker compose up postgres
-      # redis`). Scoppé à backend/ pour ne pas ralentir les commits qui n'y
-      # touchent pas.
+      # redis rustfs`). Scoppé à backend/ pour ne pas ralentir les commits qui
+      # n'y touchent pas.
       - id: backend-tests
         name: backend - pytest
         entry: bash -c 'cd backend && uv run pytest -q'
