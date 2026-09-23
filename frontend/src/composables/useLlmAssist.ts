@@ -1,67 +1,79 @@
-// Mocked "aide LLM" suggestions until a real LLM-backed endpoint exists on
-// the BFF. Kept separate from useAnalyses (the data store) so the two
-// concerns - persistence vs. suggestion content - don't mix.
+// Aides LLM ("Aide à la rédaction...") : chaque fonction construit un
+// prompt d'instruction et l'envoie à POST /api/llm/complete (voir
+// useLlmComplete.ts). `model` vient du LlmAssistButton qui a déclenché
+// l'appel (null = modèle par défaut du hub côté backend).
+import { completeChat, parseJsonFromCompletion } from "@/composables/useLlmComplete";
 import type { EntityDefinition, EntityType, LabelDefinition } from "@/types/analyse";
 
-const CLASSIFICATION_PROMPT_TEMPLATE =
-  "Analyse le document fourni et retourne une catégorie normalisée parmi les labels définis, " +
-  "avec un score de confiance.";
-
-const EXTRACTION_PROMPT_TEMPLATE =
-  "Extrait les entités définies au format JSON strict, sans inventer de champ absent du document.";
-
-const AGENT_PROMPT_TEMPLATE =
-  "Décris précisément le but métier de cet agent (ex : contrôle de cohérence entre pièces, rédaction d'une " +
-  "synthèse, construction d'une timeline des événements du dossier...) et le résultat attendu.";
-
-const suggestedLabels: Omit<LabelDefinition, "id">[] = [
-  { name: "CNI", definition: "Carte nationale d'identité française, recto ou verso." },
-  { name: "Passeport", definition: "Passeport français ou étranger en cours de validité." },
-  { name: "Justificatif de domicile", definition: "Facture, quittance ou attestation de moins de 3 mois." },
-  { name: "Avis d'imposition", definition: "Avis d'impôt sur le revenu émis par la DGFiP." },
-  { name: "Autre", definition: "Tout document ne correspondant à aucune autre catégorie." },
-];
-
-const suggestedEntities: Omit<EntityDefinition, "id">[] = [
-  { name: "Nom", definition: "Nom de famille tel qu'il apparaît sur le document.", type: "texte" },
-  { name: "Prénom", definition: "Premier prénom d'usage.", type: "texte" },
-  { name: "Date de naissance", definition: "Date de naissance au format JJ/MM/AAAA.", type: "date" },
-  { name: "Adresse postale", definition: "Adresse complète : numéro, voie, code postal, ville.", type: "texte" },
-  { name: "Numéro de pièce", definition: "Numéro d'identification unique du document.", type: "identifiant" },
-];
-
-export function suggestClassificationPrompt(): string {
-  return CLASSIFICATION_PROMPT_TEMPLATE;
+export async function suggestClassificationPrompt(model: string | null = null): Promise<string> {
+  return completeChat(
+    "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé de classifier des " +
+      "documents administratifs. Le prompt doit lui demander de choisir un label parmi une liste fournie et de " +
+      "retourner sa décision avec un score de confiance. Réponds uniquement avec le texte du prompt, sans " +
+      "balises ni explication.",
+    model,
+  );
 }
 
-export function suggestExtractionPrompt(): string {
-  return EXTRACTION_PROMPT_TEMPLATE;
+export async function suggestExtractionPrompt(model: string | null = null): Promise<string> {
+  return completeChat(
+    "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé d'extraire des entités " +
+      "nommées d'un document administratif, au format JSON strict, sans inventer de champ absent du document. " +
+      "Réponds uniquement avec le texte du prompt, sans balises ni explication.",
+    model,
+  );
 }
 
-export function suggestAgentPrompt(): string {
-  return AGENT_PROMPT_TEMPLATE;
+export async function suggestAgentPrompt(model: string | null = null): Promise<string> {
+  return completeChat(
+    "Rédige, en français, un prompt décrivant précisément le but métier d'un agent d'analyse de dossier " +
+      "administratif (par exemple : contrôle de cohérence entre pièces, rédaction d'une synthèse, construction " +
+      "d'une timeline des événements du dossier...) et le résultat attendu. Réponds uniquement avec le texte du " +
+      "prompt, sans balises ni explication.",
+    model,
+  );
 }
 
-export function suggestLabels(): LabelDefinition[] {
-  return suggestedLabels.map((label, index) => ({ ...label, id: `label-suggestion-${index}` }));
+export async function suggestLabels(model: string | null = null): Promise<Omit<LabelDefinition, "id">[]> {
+  const content = await completeChat(
+    "Propose une liste de labels de classification pour des documents administratifs français (pièces " +
+      "justificatives : carte d'identité, passeport, justificatif de domicile, avis d'imposition...). Réponds " +
+      'uniquement avec un JSON strict de la forme [{"name": "...", "definition": "..."}], sans balises ni ' +
+      "explication.",
+    model,
+  );
+  return parseJsonFromCompletion<Omit<LabelDefinition, "id">[]>(content);
 }
 
-export function suggestEntities(): EntityDefinition[] {
-  return suggestedEntities.map((entity, index) => ({ ...entity, id: `entity-suggestion-${index}` }));
+export async function suggestEntities(model: string | null = null): Promise<Omit<EntityDefinition, "id">[]> {
+  const content = await completeChat(
+    "Propose une liste d'entités à extraire de documents administratifs français (nom, prénom, date de " +
+      "naissance, adresse postale, numéro de pièce...). Réponds uniquement avec un JSON strict de la forme " +
+      '[{"name": "...", "definition": "...", "type": "texte"|"date"|"nombre"|"booléen"|"identifiant"}], sans ' +
+      "balises ni explication.",
+    model,
+  );
+  return parseJsonFromCompletion<Omit<EntityDefinition, "id">[]>(content);
 }
 
-/** Suggère une définition pour un label déjà nommé, à partir de son nom. */
-export function suggestLabelDefinition(name: string): string {
-  const match = suggestedLabels.find((label) => label.name.toLowerCase() === name.trim().toLowerCase());
-  if (match) return match.definition;
-  if (!name.trim()) return "Décris précisément ce que recouvre ce label.";
-  return `Document de type "${name.trim()}", à préciser (contenu attendu, mentions obligatoires...).`;
+export async function suggestLabelDefinition(name: string, model: string | null = null): Promise<string> {
+  return completeChat(
+    `Rédige, en français, une définition concise (une phrase) pour le label de classification "${name}" ` +
+      "utilisé pour catégoriser des documents administratifs. Réponds uniquement avec le texte de la " +
+      "définition, sans balises ni explication.",
+    model,
+  );
 }
 
-/** Suggère une définition et un type pour une entité déjà nommée, à partir de son nom. */
-export function suggestEntityDefinition(name: string): { definition: string; type: EntityType } {
-  const match = suggestedEntities.find((entity) => entity.name.toLowerCase() === name.trim().toLowerCase());
-  if (match) return { definition: match.definition, type: match.type };
-  if (!name.trim()) return { definition: "Décris précisément la valeur à extraire pour cette entité.", type: "texte" };
-  return { definition: `Valeur de "${name.trim()}" telle qu'elle apparaît sur le document.`, type: "texte" };
+export async function suggestEntityDefinition(
+  name: string,
+  model: string | null = null,
+): Promise<{ definition: string; type: EntityType }> {
+  const content = await completeChat(
+    `Propose, en français, une définition concise et un type pour l'entité "${name}" à extraire de documents ` +
+      'administratifs. Réponds uniquement avec un JSON strict de la forme {"definition": "...", "type": ' +
+      '"texte"|"date"|"nombre"|"booléen"|"identifiant"}, sans balises ni explication.',
+    model,
+  );
+  return parseJsonFromCompletion<{ definition: string; type: EntityType }>(content);
 }

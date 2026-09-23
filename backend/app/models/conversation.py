@@ -60,6 +60,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     # L'auteur de la conversation (identité Keycloak) : la page dossier est
     # un chat personnel à chaque instructeur qui l'ouvre.
     user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    # Identifiant de modèle tel que renvoyé par GET /models (id du hub LLM
+    # configuré) ; NULL = pas de préférence, le hub par défaut sera utilisé.
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(

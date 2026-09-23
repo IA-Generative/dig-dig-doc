@@ -13,6 +13,8 @@ export interface Conversation {
   dossierId: string;
   userId: string;
   createdAt: string;
+  /** Identifiant de modèle (voir GET /api/models) ; null = pas de préférence, le hub par défaut sera utilisé. */
+  model: string | null;
   messages: Message[];
 }
 

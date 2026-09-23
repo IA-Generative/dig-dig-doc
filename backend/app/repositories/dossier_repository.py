@@ -161,6 +161,16 @@ class DossierRepository:
         result = await self.db.execute(self._conversation_query().where(Conversation.id == conversation_id))
         return result.scalar_one_or_none()
 
+    async def set_conversation_model(self, conversation: Conversation, model: str | None) -> None:
+        conversation.model = model
+        await self.db.commit()
+
+    async def delete_conversation(self, conversation: Conversation) -> None:
+        # Supprime uniquement la conversation (et ses messages, en cascade) -
+        # jamais le dossier, ses documents ou l'analyse associée.
+        await self.db.delete(conversation)
+        await self.db.commit()
+
     async def create_conversation(self, dossier_id: uuid.UUID, user_id: str) -> Conversation:
         # Idempotent : si une conversation existe déjà pour ce couple
         # (dossier, utilisateur), on la renvoie au lieu d'en créer une

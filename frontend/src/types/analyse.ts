@@ -78,6 +78,9 @@ export interface Agent {
   /** Si vrai, le résultat de cet agent est présenté comme une sortie visible dans la page de résultat du dossier. */
   output: boolean;
   outputVersions: Version<boolean>[];
+  /** Identifiant de modèle (voir GET /api/models) ; null = pas de préférence, le hub par défaut sera utilisé. */
+  model: string | null;
+  modelVersions: Version<string | null>[];
 }
 
 export interface Analyse {

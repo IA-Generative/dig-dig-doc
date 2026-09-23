@@ -18,6 +18,7 @@ from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
+    ConversationModelUpdate,
     ConversationOut,
     DossierCreate,
     DossierDocumentLabelIn,
@@ -179,6 +180,39 @@ async def add_message(
     if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
     return await repository.add_message(conversation, MessageRole.USER, body.content)
+
+
+@router.put("/{dossier_id}/conversations/{conversation_id}/model", response_model=ConversationOut)
+async def update_conversation_model(
+    dossier_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    body: ConversationModelUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
+    await repository.set_conversation_model(conversation, body.model)
+    return conversation
+
+
+@router.delete("/{dossier_id}/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    dossier_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    # Ne supprime que la conversation (et ses messages) : le dossier, ses
+    # documents et l'analyse associée restent intacts.
+    repository = DossierRepository(db)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
+    await repository.delete_conversation(conversation)
 
 
 @router.put(

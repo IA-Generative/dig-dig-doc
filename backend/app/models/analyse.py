@@ -42,6 +42,7 @@ class VersionedField(enum.StrEnum):
     AGENT_PROMPT = "agent_prompt"
     AGENT_TOOLS = "agent_tools"
     AGENT_OUTPUT = "agent_output"
+    AGENT_MODEL = "agent_model"
 
 
 class Analyse(UUIDMixin, TimestampMixin, Base):
@@ -116,6 +117,9 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     # Si vrai, le résultat de cet agent est présenté comme une sortie visible
     # dans la page de résultat du dossier.
     output: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Identifiant de modèle tel que renvoyé par GET /models (id du hub LLM
+    # configuré) ; NULL = pas de préférence, le hub par défaut sera utilisé.
+    model: Mapped[str | None] = mapped_column(String, nullable=True)
 
     analyse: Mapped["Analyse"] = relationship(back_populates="agents")
     field_versions: Mapped[list["FieldVersion"]] = relationship(

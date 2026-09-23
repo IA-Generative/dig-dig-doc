@@ -22,6 +22,14 @@ async function fetchList() {
   conversations.splice(0, conversations.length, ...data.map(mapSummary));
 }
 
+// Supprime uniquement la conversation (et ses messages) : le dossier, ses
+// documents et l'analyse associée ne sont pas touchés.
+async function deleteConversation(dossierId: string, conversationId: string) {
+  await apiFetch(`/api/dossiers/${dossierId}/conversations/${conversationId}`, { method: "DELETE" });
+  const index = conversations.findIndex((c) => c.id === conversationId);
+  if (index !== -1) conversations.splice(index, 1);
+}
+
 export function useMyConversations() {
-  return { list: computed(() => conversations), fetchList };
+  return { list: computed(() => conversations), fetchList, deleteConversation };
 }

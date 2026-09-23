@@ -123,3 +123,26 @@ def test_agent_lifecycle_and_output_versioning(client: TestClient) -> None:
     assert agent["output"] is False
     assert len(agent["output_versions"]) == 1
     assert agent["output_versions"][0]["content"] is True
+
+
+def test_agent_model_is_stored_and_versioned(client: TestClient) -> None:
+    analyse = client.post("/api/analyses", json={"name": "Agents modèle"}).json()
+    analyse_id = analyse["id"]
+
+    agent = client.post(
+        f"/api/analyses/{analyse_id}/agents",
+        json={"name": "Synthèse", "prompt": "Rédige une synthèse.", "model": "gpt-4o"},
+    ).json()
+    assert agent["model"] == "gpt-4o"
+    assert agent["model_versions"] == []
+
+    agent = client.put(
+        f"/api/analyses/{analyse_id}/agents/{agent['id']}/model", json={"model": "mistral-large"}
+    ).json()
+    assert agent["model"] == "mistral-large"
+    assert len(agent["model_versions"]) == 1
+    assert agent["model_versions"][0]["content"] == "gpt-4o"
+
+    version_id = agent["model_versions"][0]["id"]
+    restored = client.post(f"/api/analyses/{analyse_id}/agents/{agent['id']}/model/restore/{version_id}").json()
+    assert restored["model"] == "gpt-4o"

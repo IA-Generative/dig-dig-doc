@@ -14,6 +14,8 @@ const pageSize = 3;
 const draftLabels = ref<LabelDefinition[]>(cloneLabels(props.labels));
 const isDirty = ref(false);
 const currentPage = ref(1);
+const isSuggestingList = ref(false);
+const suggestingDefinitionId = ref<string | null>(null);
 
 function cloneLabels(labels: LabelDefinition[]): LabelDefinition[] {
   return labels.map((label) => ({ ...label }));
@@ -57,13 +59,28 @@ function removeLabel(id: string) {
   nextTick(() => (currentPage.value = Math.min(currentPage.value, pageCount.value)));
 }
 
-function applySuggestions() {
-  draftLabels.value = suggestLabels();
-  nextTick(() => (currentPage.value = 1));
+async function applySuggestions(model: string | null) {
+  isSuggestingList.value = true;
+  try {
+    const suggestions = await suggestLabels(model);
+    draftLabels.value = suggestions.map((label, index) => ({ ...label, id: `label-suggestion-${index}` }));
+    nextTick(() => (currentPage.value = 1));
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    isSuggestingList.value = false;
+  }
 }
 
-function applyDefinitionSuggestion(label: LabelDefinition) {
-  label.definition = suggestLabelDefinition(label.name);
+async function applyDefinitionSuggestion(label: LabelDefinition, model: string | null) {
+  suggestingDefinitionId.value = label.id;
+  try {
+    label.definition = await suggestLabelDefinition(label.name, model);
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    suggestingDefinitionId.value = null;
+  }
 }
 
 function save() {
@@ -97,7 +114,12 @@ function formatVersionContent(labels: LabelDefinition[]) {
           </div>
           <div class="labels-editor__definition-row">
             <DsfrInput v-model="label.definition" label="Définition" label-visible class="labels-editor__definition" />
-            <LlmAssistButton compact label="Suggérer une définition" @click="applyDefinitionSuggestion(label)" />
+            <LlmAssistButton
+              compact
+              label="Suggérer une définition"
+              :loading="suggestingDefinitionId === label.id"
+              @click="(model) => applyDefinitionSuggestion(label, model)"
+            />
           </div>
         </li>
       </ul>
@@ -112,7 +134,7 @@ function formatVersionContent(labels: LabelDefinition[]) {
 
     <div class="labels-editor__actions">
       <DsfrButton label="Ajouter un label" tertiary icon="ri-add-line" size="sm" @click="addLabel" />
-      <LlmAssistButton @click="applySuggestions" />
+      <LlmAssistButton :loading="isSuggestingList" @click="applySuggestions" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
 
