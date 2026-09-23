@@ -101,7 +101,7 @@ wheels = [
 
 [[package]]
 name = "dig-dig-doc-worker-agent-execution"
-version = "0.1.0"
+version = "0.3.0rc0"
 source = { editable = "." }
 dependencies = [
     { name = "celery" },

@@ -14,12 +14,88 @@ variables:
 
 stages:
   - read-secret
+  - lint
+  - test
   - docker-build
 
 read_secret:
   stage: read-secret
   extends:
     - .vault:read_secret
+
+# --- Lint : même commandes que .github/workflows/lint.yml, pour que le
+# mirroir GitLab ne laisse rien passer que la CI GitHub aurait bloqué. ---
+
+lint-backend:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd backend
+    - uv sync --group test
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+lint-worker-document-process:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/document_process
+    - uv sync
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+lint-worker-agent-execution:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/agent_execution
+    - uv sync
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+lint-frontend:
+  stage: lint
+  image: node:22-slim
+  before_script:
+    - corepack enable
+  script:
+    - cd frontend
+    - pnpm install --no-frozen-lockfile
+    - pnpm run typecheck
+
+# --- Tests : même commandes que .github/workflows/unit-tests.yml. Seul le
+# backend a des tests aujourd'hui (les workers sont encore des squelettes,
+# voir le commentaire équivalent dans .pre-commit-config.yaml). ---
+
+unit-tests-backend:
+  stage: test
+  image: python:3.12-slim
+  variables:
+    DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+    REDIS_URL: redis://redis:6379/0
+    VERIFY_TOKEN_MODEL: full-access
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+      variables:
+        POSTGRES_USER: digdigdoc
+        POSTGRES_PASSWORD: digdigdoc
+        POSTGRES_DB: digdigdoc
+    - name: redis:7-alpine
+      alias: redis
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd backend
+    - uv sync --group test
+    - uv run alembic upgrade head
+    - uv run pytest -q
 
 .docker-build-common:
   stage: docker-build
