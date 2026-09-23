@@ -4,8 +4,11 @@ version = "0.3.0-rc.1"
 description = "Worker Celery : exécution de l'agent d'instruction de dossier"
 requires-python = ">=3.12"
 dependencies = [
+    "boto3>=1.43.100",
     "celery>=5.6.3",
     "httpx>=0.28.1",
+    "openai>=1.0.0",
+    "pydantic-settings>=2.15.0",
     "redis>=8.1.0",
 ]
 
