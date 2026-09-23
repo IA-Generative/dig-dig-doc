@@ -78,6 +78,14 @@ unit-tests-backend:
     DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
     REDIS_URL: redis://redis:6379/0
     VERIFY_TOKEN_MODEL: full-access
+    S3_ENDPOINT_URL: http://rustfs:9000
+    S3_ACCESS_KEY: rustfsadmin
+    S3_SECRET_KEY: rustfsadmin
+    S3_BUCKET: dig-dig-doc
+    RUSTFS_VOLUMES: /data/rustfs0
+    RUSTFS_ADDRESS: 0.0.0.0:9000
+    RUSTFS_ACCESS_KEY: rustfsadmin
+    RUSTFS_SECRET_KEY: rustfsadmin
   services:
     - name: postgres:16-alpine
       alias: postgres
@@ -87,6 +95,8 @@ unit-tests-backend:
         POSTGRES_DB: digdigdoc
     - name: redis:7-alpine
       alias: redis
+    - name: rustfs/rustfs:latest
+      alias: rustfs
   before_script:
     - pip install --no-cache-dir uv
   script:

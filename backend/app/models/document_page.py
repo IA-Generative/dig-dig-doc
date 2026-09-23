@@ -70,6 +70,14 @@ class DocumentPage(UUIDMixin, TimestampMixin, Base):
     height: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Contenu textuel de la page (OCR / extraction de texte).
     content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Clé S3 d'une capture de la page (rendue par le worker) - jamais une
+    # URL S3 signée exposée telle quelle : le frontend passe toujours par
+    # GET /api/dossiers/.../pages/{id}/screenshot, qui la relaie.
+    screenshot_key: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    @property
+    def has_screenshot(self) -> bool:
+        return self.screenshot_key is not None
 
     document: Mapped["DossierDocument"] = relationship(back_populates="pages")
     # Toutes les prédictions qui couvrent cette page (voir prediction_pages

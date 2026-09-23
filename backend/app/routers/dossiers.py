@@ -4,10 +4,12 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.conversation import MessageRole
@@ -69,15 +71,15 @@ async def add_documents(
 ) -> Dossier:
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id)
-    documents = [
-        {
-            "name": f.filename or "document",
-            "size": f.size or 0,
-            "s3_key": f"dossiers/{dossier_id}/{uuid.uuid4()}-{f.filename or 'document'}",
-            "mimetype": f.content_type or "application/octet-stream",
-        }
-        for f in files
-    ]
+    documents = []
+    for f in files:
+        data = await f.read()
+        s3_key = f"dossiers/{dossier_id}/{uuid.uuid4()}-{f.filename or 'document'}"
+        mimetype = f.content_type or "application/octet-stream"
+        # boto3 est synchrone : hors du threadpool, cet appel bloquerait la
+        # boucle asyncio le temps de l'upload.
+        await run_in_threadpool(s3_connector.upload, s3_key, data, mimetype)
+        documents.append({"name": f.filename or "document", "size": len(data), "s3_key": s3_key, "mimetype": mimetype})
     await repository.add_documents(dossier, documents)
     return dossier
 
@@ -95,6 +97,24 @@ async def set_document_label(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     await repository.set_document_label(document, body.label)
     return document
+
+
+@router.get("/{dossier_id}/documents/{document_id}/pages/{page_id}/screenshot")
+async def get_page_screenshot(
+    dossier_id: uuid.UUID, document_id: uuid.UUID, page_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """Relaie la capture d'une page depuis S3 - jamais d'URL S3 signée
+    renvoyée au frontend : seule cette route (protégée par la session
+    Keycloak, comme tout /api/dossiers/*) a les identifiants du bucket."""
+    repository = DossierRepository(db)
+    document = await repository.get_document(dossier_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    page = await repository.get_page(document_id, page_id)
+    if page is None or page.screenshot_key is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Capture introuvable")
+    data, content_type = await run_in_threadpool(s3_connector.download, page.screenshot_key)
+    return Response(content=data, media_type=content_type)
 
 
 @router.post("/{dossier_id}/launch", response_model=DossierOut)
