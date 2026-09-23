@@ -88,6 +88,10 @@ class DocumentPageIn(BaseModel):
     width: int | None = None
     height: int | None = None
     content: str | None = None
+    # Clé S3 de la capture de la page, déjà uploadée par le worker (voir
+    # storage.put_object) au moment de cet appel - jamais renvoyée telle
+    # quelle par l'API, uniquement via GET .../pages/{id}/screenshot.
+    screenshot_key: str | None = None
 
 
 class DocumentPredictionIn(BaseModel):
@@ -129,6 +133,7 @@ class DocumentPageOut(BaseModel):
     width: int | None
     height: int | None
     content: str | None
+    has_screenshot: bool
     bounding_boxes: list[BoundingBoxOut]
     predictions: list[DocumentPredictionSummaryOut]
 

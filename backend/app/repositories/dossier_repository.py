@@ -213,25 +213,33 @@ class DossierRepository:
 
     # --- Pages, prédictions et validation humaine ---
 
-    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
+    def _document_options(self):
         pages_load = selectinload(DossierDocument.pages)
         predictions_load = pages_load.selectinload(DocumentPage.predictions)
+        return (
+            pages_load.selectinload(DocumentPage.bounding_boxes),
+            predictions_load.selectinload(DocumentPrediction.bounding_boxes),
+            predictions_load.selectinload(DocumentPrediction.validations).selectinload(
+                PredictionValidation.bounding_box
+            ),
+        )
+
+    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
         result = await self.db.execute(
             select(DossierDocument)
-            .options(
-                pages_load.selectinload(DocumentPage.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.validations).selectinload(
-                    PredictionValidation.bounding_box
-                ),
-            )
+            .options(*self._document_options())
             .where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
     async def get_document_by_id(self, document_id: uuid.UUID) -> DossierDocument | None:
-        result = await self.db.execute(select(DossierDocument).where(DossierDocument.id == document_id))
+        result = await self.db.execute(
+            select(DossierDocument)
+            .options(*self._document_options())
+            .where(DossierDocument.id == document_id)
+            .execution_options(populate_existing=True)
+        )
         return result.scalar_one_or_none()
 
     async def add_page(
@@ -242,6 +250,7 @@ class DossierRepository:
         width: int | None,
         height: int | None,
         content: str | None,
+        screenshot_key: str | None = None,
     ) -> DocumentPage:
         page = DocumentPage(
             dossier_document_id=document.id,
@@ -249,6 +258,7 @@ class DossierRepository:
             width=width,
             height=height,
             content=content,
+            screenshot_key=screenshot_key,
             predictions=[],
             bounding_boxes=[],
         )

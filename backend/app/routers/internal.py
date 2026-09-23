@@ -16,6 +16,7 @@ from app.schemas.dossier import (
     DocumentPageOut,
     DocumentPredictionIn,
     DocumentPredictionOut,
+    DossierDocumentOut,
     ExecutionLogIn,
     ExecutionStepCompleteIn,
     ExecutionStepOut,
@@ -48,6 +49,14 @@ async def complete_execution_step(
     return await repository.complete_execution_step(step, body.status, body.output)
 
 
+@router.get("/documents/{document_id}", response_model=DossierDocumentOut)
+async def get_document(document_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    document = await DossierRepository(db).get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    return document
+
+
 @router.post("/documents/{document_id}/pages", response_model=DocumentPageOut, status_code=status.HTTP_201_CREATED)
 async def add_document_page(document_id: uuid.UUID, body: DocumentPageIn, db: Annotated[AsyncSession, Depends(get_db)]):
     repository = DossierRepository(db)
@@ -60,6 +69,7 @@ async def add_document_page(document_id: uuid.UUID, body: DocumentPageIn, db: An
         width=body.width,
         height=body.height,
         content=body.content,
+        screenshot_key=body.screenshot_key,
     )
 
 

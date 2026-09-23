@@ -1,18 +1,36 @@
-import os
-
 import httpx
 
-BACKEND_INTERNAL_URL = os.environ.get("BACKEND_INTERNAL_URL", "http://localhost:8000")
-# Même jeton que côté backend (voir app.core.security.internal.verify_app_token) :
-# soit le secret de bootstrap fixe (dev local, docker-compose), soit le
-# jeton en clair d'un AppToken créé via POST /api/app-tokens (prod,
-# révocable indépendamment) - les deux marchent avec la même variable
-# d'environnement, sans changement de code ici.
-APP_TOKEN = os.environ.get("INTERNAL_WORKER_TOKEN", "")
+from app.config import settings
 
 
 def get_client() -> httpx.Client:
     """Client HTTP authentifié vers le BFF, pour tous les appels à
     /api/internal/* (logs d'exécution, pages/prédictions extraites d'un
-    document...)."""
-    return httpx.Client(base_url=f"{BACKEND_INTERNAL_URL}/api/internal", headers={"X-App-Token": APP_TOKEN})
+    document...). Le jeton (voir app.core.security.internal.verify_app_token
+    côté backend) est soit le secret de bootstrap fixe (dev local, docker-
+    compose), soit le jeton en clair d'un AppToken créé via
+    POST /api/app-tokens (prod, révocable indépendamment) - les deux
+    marchent avec la même variable d'environnement, sans changement de
+    code ici."""
+    return httpx.Client(
+        base_url=f"{settings.BACKEND_INTERNAL_URL}/api/internal",
+        headers={"X-App-Token": settings.INTERNAL_WORKER_TOKEN},
+        timeout=30.0,
+    )
+
+
+def get_document(client: httpx.Client, document_id: str) -> dict:
+    response = client.get(f"/documents/{document_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def add_page(
+    client: httpx.Client, document_id: str, *, page_number: int, content: str, screenshot_key: str | None = None
+) -> dict:
+    response = client.post(
+        f"/documents/{document_id}/pages",
+        json={"page_number": page_number, "content": content, "screenshot_key": screenshot_key},
+    )
+    response.raise_for_status()
+    return response.json()
