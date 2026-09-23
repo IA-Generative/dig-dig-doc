@@ -3,6 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.models.chat_event import ChatEventKind
 from app.models.conversation import MessageRole
 from app.models.document_page import PredictionKind, PredictionValidationStatus
 from app.models.dossier import (
@@ -236,6 +237,27 @@ class ConversationOut(BaseModel):
     messages: list[MessageOut]
 
 
+class ChatEventOut(BaseModel):
+    """Événement d'exécution du chat (streaming). Déposé par le worker
+    pendant l'exécution du graphe LangGraph, consommé par le frontend
+    via SSE pour afficher la progression en temps réel."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    kind: ChatEventKind
+    data: dict
+    created_at: datetime
+
+
+class ChatEventIn(BaseModel):
+    """Payload pour déposer un événement de chat (worker → backend)."""
+
+    kind: ChatEventKind
+    data: dict = {}
+
+
 class ConversationSummaryOut(BaseModel):
     """Vue légère pour la liste "mes conversations" de la sidebar (façon
     ChatGPT) : pas la liste complète des messages, juste de quoi afficher
@@ -296,7 +318,10 @@ class DossierCreate(BaseModel):
 
 
 class InternalDocumentPageOut(BaseModel):
-    """Page avec sa clé S3 de capture - réservé à l'API interne."""
+    """Page avec sa clé S3 de capture et ses prédictions (labels + entités)
+    - réservé à l'API interne. Les prédictions sont nécessaires pour que
+    l'agent LangGraph puisse consulter les classifications et entités déjà
+    déposées par les tâches de classification/extraction."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -304,6 +329,7 @@ class InternalDocumentPageOut(BaseModel):
     page_number: int
     content: str | None
     screenshot_key: str | None
+    predictions: list[DocumentPredictionSummaryOut] = []
 
 
 class InternalDossierDocumentOut(BaseModel):
@@ -324,6 +350,36 @@ class InternalExecutionStepOut(BaseModel):
     kind: ExecutionStepKind
     label: str
     status: ExecutionStepStatus
+    # Synthèse produite par l'agent (si output=True et étape terminée).
+    # Nécessaire au chat pour injecter les synthèses existantes dans le
+    # contexte de la conversation.
+    output: str | None = None
+
+
+class InternalMessageOut(BaseModel):
+    """Message de conversation pour le worker (chat). Inclut le rôle et le
+    contenu, sans les sources (le worker n'en a pas besoin pour construire
+    son contexte - il génère les siennes)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    role: MessageRole
+    content: str
+    created_at: datetime
+
+
+class InternalConversationOut(BaseModel):
+    """Conversation complète pour le worker : messages (historique du chat)
+    + modèle LLM préféré. Le worker en a besoin pour construire le contexte
+    du graphe LangGraph de chat."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    dossier_id: uuid.UUID
+    model: str | None
+    messages: list[InternalMessageOut]
 
 
 class InternalDossierOut(BaseModel):
@@ -367,15 +423,31 @@ class InternalExtractionOut(BaseModel):
     entities: list[InternalEntityDefinitionOut]
 
 
+class InternalAgentOut(BaseModel):
+    """Définition d'un agent pour le worker : prompt, outils, output, modèle.
+    L'agent LangGraph utilise ces informations pour configurer son graphe."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    prompt: str
+    tools: list[str]
+    output: bool
+    model: str | None
+
+
 class InternalAnalyseOut(BaseModel):
-    """Définitions de l'analyse (labels, entités, prompts) pour le worker.
-    Pas d'agents ici - ils seront gérés par une tâche dédiée plus tard."""
+    """Définitions de l'analyse (labels, entités, prompts, agents) pour le
+    worker. Les agents sont gérés par la tâche LangGraph qui les exécute
+    un par un après la classification et l'extraction."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     classification: InternalClassificationOut
     extraction: InternalExtractionOut
+    agents: list[InternalAgentOut] = []
 
 
 class DossierOut(BaseModel):

@@ -91,6 +91,7 @@ function formatOutputVersionContent(output: boolean) {
       :prompt="agent.prompt"
       :versions="agent.promptVersions"
       :suggest-prompt="suggestAgentPrompt"
+      suggest-label="Structurer la description avec le LLM"
       @save="savePrompt"
       @restore="restorePromptVersion"
     />

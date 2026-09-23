@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.analyse import AgentTool, EntityType
 from app.models.analyse_share import AnalyseShareKind
@@ -52,12 +52,21 @@ class ExtractionOut(BaseModel):
 
 class AgentCreate(BaseModel):
     name: str
-    prompt: str
+    # La description est obligatoire : elle décrit précisément le but métier
+    # de l'agent et sert de prompt au modèle de langage lors de l'exécution.
+    prompt: str = Field(min_length=1)
     tools: list[AgentTool] = []
     output: bool = True
     # Identifiant de modèle tel que renvoyé par GET /models ; None = pas de
     # préférence, le hub par défaut sera utilisé.
     model: str | None = None
+
+    @field_validator("prompt")
+    @classmethod
+    def _prompt_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("La description (prompt) ne peut pas être vide.")
+        return value
 
 
 class AgentOut(BaseModel):
@@ -77,7 +86,17 @@ class AgentOut(BaseModel):
 
 class AnalyseCreate(BaseModel):
     name: str
-    description: str = ""
+    # La description est obligatoire : elle décrit le but métier de
+    # l'analyse et sert de prompt/instruction globale aux agents lors de
+    # l'exécution.
+    description: str = Field(min_length=1)
+
+    @field_validator("description")
+    @classmethod
+    def _description_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("La description ne peut pas être vide.")
+        return value
 
 
 class AnalyseListItem(BaseModel):
@@ -103,7 +122,14 @@ class AnalyseOut(BaseModel):
 
 
 class PromptUpdate(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1)
+
+    @field_validator("prompt")
+    @classmethod
+    def _prompt_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("La description (prompt) ne peut pas être vide.")
+        return value
 
 
 class LabelsUpdate(BaseModel):

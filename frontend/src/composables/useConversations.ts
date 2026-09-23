@@ -1,7 +1,17 @@
 import { ref } from "vue";
 
 import { apiFetch } from "@/utils/api";
-import type { Conversation, Feedback, FeedbackReasonCode, FeedbackValue, Message } from "@/types/conversation";
+import type {
+  ChatEvent,
+  Conversation,
+  Feedback,
+  FeedbackReasonCode,
+  FeedbackValue,
+  Message,
+  MessageSource,
+} from "@/types/conversation";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 function mapFeedback(api: any): Feedback | null {
   if (!api) return null;
@@ -15,12 +25,24 @@ function mapFeedback(api: any): Feedback | null {
   };
 }
 
+function mapSource(api: any): MessageSource {
+  return {
+    id: api.id,
+    dossierDocumentId: api.dossier_document_id,
+    executionStepId: api.execution_step_id,
+    excerpt: api.excerpt,
+    pages: (api.pages ?? []).map((p: any) => ({ id: p.id, pageNumber: p.page_number })),
+    boundingBoxes: (api.bounding_boxes ?? []).map((b: any) => ({ id: b.id })),
+  };
+}
+
 function mapMessage(api: any): Message {
   return {
     id: api.id,
     role: api.role,
     content: api.content,
     createdAt: api.created_at,
+    sources: (api.sources ?? []).map(mapSource),
     feedback: mapFeedback(api.feedback),
   };
 }
@@ -77,6 +99,44 @@ export function useConversations(dossierId: string) {
     conversation.value = mapConversation(data);
   };
 
+  // SSE : s'abonne au flux d'événements de chat (tool_call, tool_result,
+  // done, error) pendant que le worker exécute le graphe LangGraph. Le
+  // callback reçoit chaque événement au fur et à mesure, et onEventDone est
+  // appelé quand l'exécution est terminée (le frontend peut alors
+  // recharger la conversation pour récupérer le message assistant final).
+  const streamConversation = (
+    conversationId: string,
+    onEvent: (event: ChatEvent) => void,
+    onDone: () => void,
+  ): (() => void) => {
+    const url = `${API_BASE_URL}/api/dossiers/${dossierId}/conversations/${conversationId}/stream`;
+    const eventSource = new EventSource(url, { withCredentials: true });
+
+    eventSource.addEventListener("chat-event", (event) => {
+      const data = JSON.parse(event.data);
+      onEvent(data);
+    });
+    eventSource.addEventListener("done", () => {
+      eventSource.close();
+      onDone();
+    });
+    eventSource.addEventListener("error", () => {
+      eventSource.close();
+    });
+
+    return () => eventSource.close();
+  };
+
+  // Recharge la conversation depuis l'API (pour récupérer le message
+  // assistant final avec ses sources après la fin du streaming).
+  const refreshConversation = async () => {
+    const current = conversation.value;
+    if (!current) return;
+    const list = await apiFetch<any[]>(`/api/dossiers/${dossierId}/conversations`);
+    const found = list.find((c: any) => c.id === current.id);
+    if (found) conversation.value = mapConversation(found);
+  };
+
   // Supprime uniquement la conversation (et ses messages) : le dossier, ses
   // documents et l'analyse associée ne sont pas touchés.
   const deleteConversation = async () => {
@@ -118,5 +178,15 @@ export function useConversations(dossierId: string) {
     conversation.value = mapConversation(data);
   };
 
-  return { conversation, ensureConversation, sendMessage, deleteConversation, setModel, setFeedback, removeFeedback };
+  return {
+    conversation,
+    ensureConversation,
+    sendMessage,
+    streamConversation,
+    refreshConversation,
+    deleteConversation,
+    setModel,
+    setFeedback,
+    removeFeedback,
+  };
 }

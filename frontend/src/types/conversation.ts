@@ -26,11 +26,21 @@ export interface Feedback {
   createdAt: string;
 }
 
+export interface MessageSource {
+  id: string;
+  dossierDocumentId: string | null;
+  executionStepId: string | null;
+  excerpt: string | null;
+  pages: { id: string; pageNumber: number }[];
+  boundingBoxes: { id: string }[];
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: string;
+  sources: MessageSource[];
   feedback: Feedback | null;
 }
 
@@ -52,4 +62,16 @@ export interface ConversationSummary {
   dossierName: string;
   lastMessagePreview?: string;
   lastActivityAt: string;
+}
+
+// --- Événements de chat (streaming de l'exécution) ---
+
+export type ChatEventKind = "tool_call" | "tool_result" | "thinking" | "done" | "error";
+
+export interface ChatEvent {
+  id: string;
+  conversationId: string;
+  kind: ChatEventKind;
+  data: Record<string, unknown>;
+  createdAt: string;
 }

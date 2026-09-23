@@ -57,14 +57,10 @@ def _deposit_entity(
     a réussi, False si l'entité n'est pas dans les définitions."""
     entity_def = entity_def_by_name.get(entity_value.entity_name)
     if entity_def is None:
-        logger.warning(
-            "Entity '%s' not in definitions, skipping", entity_value.entity_name
-        )
+        logger.warning("Entity '%s' not in definitions, skipping", entity_value.entity_name)
         return False
 
-    entity_page_numbers = [
-        pn for pn in entity_value.page_numbers if pn in batch_page_numbers
-    ]
+    entity_page_numbers = [pn for pn in entity_value.page_numbers if pn in batch_page_numbers]
     if not entity_page_numbers:
         entity_page_numbers = [min(batch_page_numbers)]
 
@@ -104,9 +100,7 @@ def _process_batch(
     batch_page_numbers = {p["page_number"] for p in batch}
 
     result = llm.extract_entities_batch(
-        pages=[
-            {"page_number": p["page_number"], "content": p["content"]} for p in batch
-        ],
+        pages=[{"page_number": p["page_number"], "content": p["content"]} for p in batch],
         entity_definitions=entity_defs,
         extraction_prompt=extraction_prompt,
     )
@@ -132,9 +126,7 @@ def extract_dossier_entities(self, dossier_id: str) -> None:
 
         step_id = _find_step_id(dossier, "extraction")
         if step_id:
-            api_client.add_execution_log(
-                client, step_id, message="Extraction d'entités démarrée"
-            )
+            api_client.add_execution_log(client, step_id, message="Extraction d'entités démarrée")
 
         try:
             definitions = api_client.get_analyse_definitions(client, analyse_id)
@@ -182,22 +174,14 @@ def extract_dossier_entities(self, dossier_id: str) -> None:
                     page_id_by_number,
                 )
 
-            output = (
-                f"{total_entities} entité(s) extraite(s) sur {len(all_pages)} page(s)"
-            )
+            output = f"{total_entities} entité(s) extraite(s) sur {len(all_pages)} page(s)"
             if step_id:
-                api_client.complete_execution_step(
-                    client, step_id, status=_STATUS_TERMINE, output=output
-                )
+                api_client.complete_execution_step(client, step_id, status=_STATUS_TERMINE, output=output)
             logger.info("Extraction complete for dossier %s: %s", dossier_id, output)
 
         except Exception as error:
             logger.exception("Extraction failed for dossier %s", dossier_id)
             if step_id:
-                api_client.add_execution_log(
-                    client, step_id, level="error", message=str(error)
-                )
-                api_client.complete_execution_step(
-                    client, step_id, status=_STATUS_ECHEC, output=str(error)
-                )
+                api_client.add_execution_log(client, step_id, level="error", message=str(error))
+                api_client.complete_execution_step(client, step_id, status=_STATUS_ECHEC, output=str(error))
             raise

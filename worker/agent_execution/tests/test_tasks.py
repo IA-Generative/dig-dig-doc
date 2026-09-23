@@ -126,9 +126,7 @@ def test_classify_dossier_deposits_label_predictions(monkeypatch) -> None:
         if request.url.path.endswith("/logs"):
             return httpx.Response(200, json=_log_response())
         if request.url.path.endswith("/complete"):
-            return httpx.Response(
-                200, json=_step_complete_response("step-classif", "classification")
-            )
+            return httpx.Response(200, json=_step_complete_response("step-classif", "classification"))
         if request.url.path.endswith("/predictions"):
             prediction_bodies.append(json.loads(request.content))
             return httpx.Response(201, json={"id": "pred-1", **prediction_bodies[-1]})
@@ -152,9 +150,7 @@ def test_classify_dossier_deposits_label_predictions(monkeypatch) -> None:
         classification_mod.llm,
         "classify_page",
         lambda **kwargs: ClassificationResult(
-            prediction=LabelPrediction(
-                label_name="CNI", confidence=0.95, reasoning="Photo visible"
-            )
+            prediction=LabelPrediction(label_name="CNI", confidence=0.95, reasoning="Photo visible")
         ),
     )
 
@@ -181,9 +177,7 @@ def test_classify_dossier_handles_no_labels(monkeypatch) -> None:
         if request.url.path.endswith("/logs"):
             return httpx.Response(200, json=_log_response())
         if request.url.path.endswith("/complete"):
-            return httpx.Response(
-                200, json=_step_complete_response("step-classif", "classification")
-            )
+            return httpx.Response(200, json=_step_complete_response("step-classif", "classification"))
         return httpx.Response(404)
 
     monkeypatch.setattr(
@@ -212,9 +206,7 @@ def test_extract_dossier_entities_deposits_entity_predictions(monkeypatch) -> No
         if request.url.path.endswith("/logs"):
             return httpx.Response(200, json=_log_response())
         if request.url.path.endswith("/complete"):
-            return httpx.Response(
-                200, json=_step_complete_response("step-extract", "extraction")
-            )
+            return httpx.Response(200, json=_step_complete_response("step-extract", "extraction"))
         if request.url.path.endswith("/predictions"):
             prediction_bodies.append(json.loads(request.content))
             return httpx.Response(201, json={"id": "pred-1", **prediction_bodies[-1]})
@@ -233,9 +225,7 @@ def test_extract_dossier_entities_deposits_entity_predictions(monkeypatch) -> No
         "extract_entities_batch",
         lambda **kwargs: ExtractionResult(
             entities=[
-                EntityValue(
-                    entity_name="nom", value="Dupont", confidence=0.95, page_numbers=[1]
-                ),
+                EntityValue(entity_name="nom", value="Dupont", confidence=0.95, page_numbers=[1]),
                 EntityValue(
                     entity_name="adresse",
                     value="123 rue de Paris",
@@ -269,9 +259,7 @@ def test_extract_dossier_entities_handles_no_entities(monkeypatch) -> None:
         if request.url.path.endswith("/logs"):
             return httpx.Response(200, json=_log_response())
         if request.url.path.endswith("/complete"):
-            return httpx.Response(
-                200, json=_step_complete_response("step-extract", "extraction")
-            )
+            return httpx.Response(200, json=_step_complete_response("step-extract", "extraction"))
         return httpx.Response(404)
 
     monkeypatch.setattr(

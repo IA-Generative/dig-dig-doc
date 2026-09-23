@@ -99,9 +99,7 @@ def classify_dossier(self, dossier_id: str) -> None:
 
         step_id = _find_step_id(dossier, "classification")
         if step_id:
-            api_client.add_execution_log(
-                client, step_id, message="Classification démarrée"
-            )
+            api_client.add_execution_log(client, step_id, message="Classification démarrée")
 
         try:
             definitions = api_client.get_analyse_definitions(client, analyse_id)
@@ -129,27 +127,17 @@ def classify_dossier(self, dossier_id: str) -> None:
             for document in dossier["documents"]:
                 for page in document["pages"]:
                     total_pages += 1
-                    if _classify_page(
-                        client, page, label_defs, label_by_name, classification_prompt
-                    ):
+                    if _classify_page(client, page, label_defs, label_by_name, classification_prompt):
                         classified_pages += 1
 
             output = f"{classified_pages}/{total_pages} page(s) classifiée(s)"
             if step_id:
-                api_client.complete_execution_step(
-                    client, step_id, status=_STATUS_TERMINE, output=output
-                )
-            logger.info(
-                "Classification complete for dossier %s: %s", dossier_id, output
-            )
+                api_client.complete_execution_step(client, step_id, status=_STATUS_TERMINE, output=output)
+            logger.info("Classification complete for dossier %s: %s", dossier_id, output)
 
         except Exception as error:
             logger.exception("Classification failed for dossier %s", dossier_id)
             if step_id:
-                api_client.add_execution_log(
-                    client, step_id, level="error", message=str(error)
-                )
-                api_client.complete_execution_step(
-                    client, step_id, status=_STATUS_ECHEC, output=str(error)
-                )
+                api_client.add_execution_log(client, step_id, level="error", message=str(error))
+                api_client.complete_execution_step(client, step_id, status=_STATUS_ECHEC, output=str(error))
             raise

@@ -3,7 +3,10 @@ from fastapi.testclient import TestClient
 
 def test_list_analyses_is_paginated(client: TestClient) -> None:
     for i in range(5):
-        client.post("/api/analyses", json={"name": f"Analyse pagination {i}"})
+        client.post(
+            "/api/analyses",
+            json={"name": f"Analyse pagination {i}", "description": "Test"},
+        )
 
     first_page = client.get("/api/analyses", params={"page": 1, "page_size": 2}).json()
     assert len(first_page["items"]) == 2
@@ -20,7 +23,9 @@ def test_list_analyses_is_paginated(client: TestClient) -> None:
 
 
 def test_create_and_get_analyse(client: TestClient) -> None:
-    response = client.post("/api/analyses", json={"name": "Contrôle CNI", "description": "Lot de test"})
+    response = client.post(
+        "/api/analyses", json={"name": "Contrôle CNI", "description": "Lot de test"}
+    )
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "Contrôle CNI"
@@ -33,7 +38,9 @@ def test_create_and_get_analyse(client: TestClient) -> None:
 
 
 def test_classification_prompt_is_versioned(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Avis d'imposition"}).json()
+    analyse = client.post(
+        "/api/analyses", json={"name": "Avis d'imposition", "description": "Test"}
+    ).json()
     analyse_id = analyse["id"]
 
     client.put(
@@ -52,12 +59,16 @@ def test_classification_prompt_is_versioned(client: TestClient) -> None:
     assert versions[0]["content"] == "Identifie le document."
 
     version_id = versions[0]["id"]
-    restored = client.post(f"/api/analyses/{analyse_id}/classification/prompt/restore/{version_id}").json()
+    restored = client.post(
+        f"/api/analyses/{analyse_id}/classification/prompt/restore/{version_id}"
+    ).json()
     assert restored["classification"]["prompt"] == "Identifie le document."
 
 
 def test_labels_round_trip_and_version(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Labels test"}).json()
+    analyse = client.post(
+        "/api/analyses", json={"name": "Labels test", "description": "Test"}
+    ).json()
     analyse_id = analyse["id"]
 
     body = client.put(
@@ -70,13 +81,17 @@ def test_labels_round_trip_and_version(client: TestClient) -> None:
     assert len(body["classification"]["labels_versions"]) == 1
     assert body["classification"]["labels_versions"][0]["content"] == []
 
-    body = client.put(f"/api/analyses/{analyse_id}/classification/labels", json={"labels": []}).json()
+    body = client.put(
+        f"/api/analyses/{analyse_id}/classification/labels", json={"labels": []}
+    ).json()
     assert body["classification"]["labels"] == []
     assert len(body["classification"]["labels_versions"]) == 2
 
 
 def test_share_by_email_returns_working_link(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Analyse partagée"}).json()
+    analyse = client.post(
+        "/api/analyses", json={"name": "Analyse partagée", "description": "Test"}
+    ).json()
 
     share = client.post(
         f"/api/analyses/{analyse['id']}/shares",
@@ -102,7 +117,10 @@ def test_share_by_email_returns_working_link(client: TestClient) -> None:
 
 
 def test_share_by_keycloak_group(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Analyse partagée par groupe"}).json()
+    analyse = client.post(
+        "/api/analyses",
+        json={"name": "Analyse partagée par groupe", "description": "Test"},
+    ).json()
 
     share = client.post(
         f"/api/analyses/{analyse['id']}/shares",
@@ -114,7 +132,9 @@ def test_share_by_keycloak_group(client: TestClient) -> None:
 
 
 def test_agent_lifecycle_and_output_versioning(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Agents test"}).json()
+    analyse = client.post(
+        "/api/analyses", json={"name": "Agents test", "description": "Test"}
+    ).json()
     analyse_id = analyse["id"]
 
     agent = client.post(
@@ -139,7 +159,9 @@ def test_agent_lifecycle_and_output_versioning(client: TestClient) -> None:
 
 
 def test_agent_model_is_stored_and_versioned(client: TestClient) -> None:
-    analyse = client.post("/api/analyses", json={"name": "Agents modèle"}).json()
+    analyse = client.post(
+        "/api/analyses", json={"name": "Agents modèle", "description": "Test"}
+    ).json()
     analyse_id = analyse["id"]
 
     agent = client.post(
@@ -158,5 +180,27 @@ def test_agent_model_is_stored_and_versioned(client: TestClient) -> None:
     assert agent["model_versions"][0]["content"] == "gpt-4o"
 
     version_id = agent["model_versions"][0]["id"]
-    restored = client.post(f"/api/analyses/{analyse_id}/agents/{agent['id']}/model/restore/{version_id}").json()
+    restored = client.post(
+        f"/api/analyses/{analyse_id}/agents/{agent['id']}/model/restore/{version_id}"
+    ).json()
     assert restored["model"] == "gpt-4o"
+
+
+def test_analyse_description_is_mandatory(client: TestClient) -> None:
+    # Une description vide est rejetée (422).
+    response = client.post("/api/analyses", json={"name": "Test", "description": ""})
+    assert response.status_code == 422
+
+    # Une description constituée d'espaces est aussi rejetée.
+    response = client.post("/api/analyses", json={"name": "Test", "description": "   "})
+    assert response.status_code == 422
+
+    # Une description absente est aussi rejetée.
+    response = client.post("/api/analyses", json={"name": "Test"})
+    assert response.status_code == 422
+
+    # Une description non vide est acceptée.
+    response = client.post(
+        "/api/analyses", json={"name": "Test", "description": "Analyse de cohérence"}
+    )
+    assert response.status_code == 201

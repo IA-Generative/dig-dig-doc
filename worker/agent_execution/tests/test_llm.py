@@ -37,12 +37,8 @@ def test_entity_value_model() -> None:
 
 def test_extraction_result_model() -> None:
     entities = [
-        EntityValue(
-            entity_name="nom", value="Dupont", confidence=0.95, page_numbers=[1]
-        ),
-        EntityValue(
-            entity_name="date", value="2024-01-15", confidence=0.88, page_numbers=[1]
-        ),
+        EntityValue(entity_name="nom", value="Dupont", confidence=0.95, page_numbers=[1]),
+        EntityValue(entity_name="date", value="2024-01-15", confidence=0.88, page_numbers=[1]),
     ]
     result = ExtractionResult(entities=entities)
     assert len(result.entities) == 2

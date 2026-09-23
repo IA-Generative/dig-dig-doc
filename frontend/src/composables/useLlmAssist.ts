@@ -24,14 +24,33 @@ export async function suggestExtractionPrompt(model: string | null = null): Prom
   );
 }
 
-export async function suggestAgentPrompt(model: string | null = null): Promise<string> {
-  return completeChat(
-    "Rédige, en français, un prompt décrivant précisément le but métier d'un agent d'analyse de dossier " +
+export async function suggestAgentPrompt(draft: string = "", model: string | null = null): Promise<string> {
+  const instruction = draft.trim()
+    ? `L'utilisateur décrit ainsi le but de l'agent : "${draft.trim()}". À partir de cette description, rédige, ` +
+      "en français, un prompt décrivant précisément le but métier d'un agent d'analyse de dossier " +
       "administratif (par exemple : contrôle de cohérence entre pièces, rédaction d'une synthèse, construction " +
       "d'une timeline des événements du dossier...) et le résultat attendu. Réponds uniquement avec le texte du " +
-      "prompt, sans balises ni explication.",
-    model,
-  );
+      "prompt, sans balises ni explication."
+    : "Rédige, en français, un prompt décrivant précisément le but métier d'un agent d'analyse de dossier " +
+      "administratif (par exemple : contrôle de cohérence entre pièces, rédaction d'une synthèse, construction " +
+      "d'une timeline des événements du dossier...) et le résultat attendu. Réponds uniquement avec le texte du " +
+      "prompt, sans balises ni explication.";
+  return completeChat(instruction, model);
+}
+
+export async function suggestAnalyseDescription(
+  draft: string = "",
+  model: string | null = null,
+): Promise<string> {
+  const instruction = draft.trim()
+    ? `L'utilisateur décrit ainsi le but de l'analyse : "${draft.trim()}". À partir de cette description, rédige, ` +
+      "en français, une description structurée et complète de l'analyse de dossier administratif. La description doit " +
+      "préciser : le contexte, l'objectif métier, les types de documents concernés, et le résultat attendu. " +
+      "Réponds uniquement avec le texte de la description, sans balises ni explication."
+    : "Rédige, en français, une description structurée pour une analyse de dossier administratif. La description doit " +
+      "préciser : le contexte, l'objectif métier, les types de documents concernés, et le résultat attendu. " +
+      "Réponds uniquement avec le texte de la description, sans balises ni explication.";
+  return completeChat(instruction, model);
 }
 
 export async function suggestLabels(model: string | null = null): Promise<Omit<LabelDefinition, "id">[]> {

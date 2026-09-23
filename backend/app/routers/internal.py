@@ -12,6 +12,8 @@ from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
     BoundingBoxIn,
     BoundingBoxOut,
+    ChatEventIn,
+    ChatEventOut,
     ConversationOut,
     DocumentPageIn,
     DocumentPageOut,
@@ -21,8 +23,10 @@ from app.schemas.dossier import (
     ExecutionLogIn,
     ExecutionStepCompleteIn,
     ExecutionStepOut,
+    InternalAgentOut,
     InternalAnalyseOut,
     InternalClassificationOut,
+    InternalConversationOut,
     InternalDossierOut,
     InternalEntityDefinitionOut,
     InternalExtractionOut,
@@ -195,6 +199,44 @@ async def add_assistant_message(
     )
 
 
+@router.get("/conversations/{conversation_id}", response_model=InternalConversationOut)
+async def get_internal_conversation(
+    conversation_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Conversation complète pour le worker : historique des messages +
+    modèle LLM préféré. Le worker en a besoin pour construire le contexte
+    du graphe LangGraph de chat."""
+    conversation = await DossierRepository(db).get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
+        )
+    return conversation
+
+
+@router.post(
+    "/conversations/{conversation_id}/chat-events",
+    response_model=ChatEventOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_chat_event(
+    conversation_id: uuid.UUID,
+    body: ChatEventIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose un événement de chat (tool_call, tool_result, thinking, done,
+    error). Le worker appelle cette route pendant l'exécution du graphe
+    LangGraph pour streamer la progression au frontend via SSE."""
+    repository = DossierRepository(db)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
+        )
+    return await repository.add_chat_event(conversation_id, body.kind, body.data)
+
+
 @router.get("/dossiers/{dossier_id}", response_model=InternalDossierOut)
 async def get_internal_dossier(
     dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
@@ -238,4 +280,5 @@ async def get_internal_analyse(
                 for entity in analyse.entities
             ],
         ),
+        agents=[InternalAgentOut.model_validate(agent) for agent in analyse.agents],
     )

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.chat_event import ChatEvent
     from app.models.document_page import BoundingBox, DocumentPage
     from app.models.dossier import Dossier, DossierDocument, ExecutionStep
     from app.models.feedback import Feedback
@@ -59,7 +60,11 @@ class MessageRole(enum.StrEnum):
 
 class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
-    __table_args__ = (UniqueConstraint("dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"
+        ),
+    )
 
     dossier_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -79,6 +84,11 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
+    )
+    chat_events: Mapped[list["ChatEvent"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ChatEvent.created_at",
     )
 
     @property
@@ -107,7 +117,9 @@ class Message(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[MessageRole] = mapped_column(Enum(MessageRole, name="message_role"), nullable=False)
+    role: Mapped[MessageRole] = mapped_column(
+        Enum(MessageRole, name="message_role"), nullable=False
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

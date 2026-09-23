@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 
+import MarkdownText from "@/components/MarkdownText.vue";
 import { useReportsAdmin } from "@/composables/useReportsAdmin";
 import { REPORT_STATUS_LABELS, REPORT_TYPE_LABELS, type ReportStatus, type ReportType } from "@/types/report";
 import { API_BASE_URL } from "@/utils/api";
@@ -97,7 +98,7 @@ onMounted(reload);
             <DsfrBadge :label="REPORT_STATUS_LABELS[report.status]" :type="statusBadgeType[report.status]" />
           </div>
 
-          <p class="administration-page__item-description">{{ report.description }}</p>
+          <MarkdownText :content="report.description" :lines="3" class="administration-page__item-description" />
 
           <a
             v-if="report.hasScreenshot"
@@ -205,6 +206,11 @@ onMounted(reload);
 .administration-page__item-description {
   margin: 0;
   white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .administration-page__item-response {
