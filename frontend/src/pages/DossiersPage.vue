@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
@@ -7,24 +7,24 @@ import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
 import { DOSSIER_STATUS_LABELS, type Dossier, type DossierStatus } from "@/types/dossier";
 
-const { list: dossiers, launch, stop } = useDossiers();
-const { list: analyses } = useAnalyses();
+const { list: dossiers, pageCount, fetchList, launch, stop } = useDossiers();
+const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 
 const isCreateModalOpened = ref(false);
 
-const pageSize = 10;
+const PAGE_SIZE = 10;
 const currentPage = ref(1);
-
-const pageCount = computed(() => Math.max(1, Math.ceil(dossiers.value.length / pageSize)));
-
-const paginatedDossiers = computed(() => {
-  const start = (currentPage.value - 1) * pageSize;
-  return dossiers.value.slice(start, start + pageSize);
-});
 
 const pages = computed(() =>
   Array.from({ length: pageCount.value }, (_, i) => ({ label: String(i + 1), title: `Page ${i + 1}` })),
 );
+
+watch(currentPage, (page) => fetchList(page, PAGE_SIZE), { immediate: true });
+// La table affiche le nom de l'analyse liée à chaque dossier : la liste
+// paginée par défaut (6-20 éléments) ne couvre pas forcément toutes les
+// analyses existantes, donc on en charge une fenêtre large dédiée à cette
+// page plutôt que de dépendre de ce qu'une autre page a chargé en dernier.
+onMounted(() => fetchAnalyses(1, 100));
 
 const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warning" | "error"> = {
   en_attente: "new",
@@ -71,7 +71,7 @@ function formatDateTime(iso?: string) {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="dossier in paginatedDossiers" :key="dossier.id">
+          <tr v-for="dossier in dossiers" :key="dossier.id">
             <td><RouterLink :to="`/dossiers/${dossier.id}`">{{ dossier.name }}</RouterLink></td>
             <td>{{ analyseName(dossier) }}</td>
             <td>{{ dossier.analyseVersion }}</td>

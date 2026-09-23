@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.internal import verify_worker_token
+from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.conversation import MessageRole
 from app.repositories.dossier_repository import DossierRepository
@@ -25,7 +25,7 @@ from app.schemas.dossier import (
 # Routes appelées par les workers Celery (pas par le navigateur) : le worker
 # dépose ici le résultat de son travail - logs en cours d'exécution, étape
 # terminée, pages/prédictions extraites d'un document, réponse de l'agent.
-router = APIRouter(prefix="/internal", tags=["Internal"], dependencies=[Depends(verify_worker_token)])
+router = APIRouter(prefix="/internal", tags=["Internal"], dependencies=[Depends(verify_app_token)])
 
 
 @router.post("/execution-steps/{step_id}/logs", response_model=ExecutionStepOut)

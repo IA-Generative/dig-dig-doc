@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import insert, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -66,6 +66,13 @@ class DossierRepository:
     async def list_all(self) -> Sequence[Dossier]:
         result = await self.db.execute(self._base_query().order_by(Dossier.created_at.desc()))
         return result.scalars().all()
+
+    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[Dossier], int]:
+        total = await self.db.scalar(select(func.count()).select_from(Dossier))
+        result = await self.db.execute(
+            self._base_query().order_by(Dossier.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+        )
+        return result.scalars().all(), total or 0
 
     async def get(self, dossier_id: uuid.UUID) -> Dossier | None:
         result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))

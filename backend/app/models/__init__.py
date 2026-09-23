@@ -9,6 +9,7 @@ from .analyse import (
     VersionedField,
 )
 from .analyse_share import AnalyseShare, AnalyseShareKind
+from .app_token import AppToken
 from .base import Base
 from .conversation import Conversation, Message, MessageRole, MessageSource
 from .document_page import (
@@ -28,6 +29,7 @@ __all__ = [
     "Analyse",
     "AnalyseShare",
     "AnalyseShareKind",
+    "AppToken",
     "Base",
     "BoundingBox",
     "Conversation",

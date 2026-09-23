@@ -7,7 +7,7 @@ import { useDossiers } from "@/composables/useDossiers";
 const opened = defineModel<boolean>("opened", { default: false });
 const emit = defineEmits<{ created: [] }>();
 
-const { list: analyses } = useAnalyses();
+const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 const { create, addDocuments } = useDossiers();
 
 const analyseOptions = computed(() => analyses.value.map((analyse) => ({ value: analyse.id, text: analyse.name })));
@@ -16,11 +16,16 @@ const name = ref("");
 const analyseId = ref<string | undefined>(undefined);
 const files = ref<File[]>([]);
 
-watch(opened, (isOpened) => {
+watch(opened, async (isOpened) => {
   if (isOpened) {
     name.value = "";
-    analyseId.value = analyses.value[0]?.id;
     files.value = [];
+    // La liste par défaut (useAnalyses) est paginée pour l'affichage ;
+    // ce select doit lister toutes les analyses disponibles, donc on
+    // recharge avec la taille de page maximale plutôt que de dépendre de
+    // la page actuellement affichée sur AnalysesPage.
+    await fetchAnalyses(1, 100);
+    analyseId.value = analyses.value[0]?.id;
   }
 });
 
