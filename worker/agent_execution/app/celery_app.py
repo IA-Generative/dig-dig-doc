@@ -1,9 +1,10 @@
-import os
-
 from celery import Celery
+
+from app.config import settings
 
 celery_app = Celery(
     "agent_execution",
-    broker=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-    backend=os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
 )
+celery_app.conf.task_default_queue = "agent_execution"

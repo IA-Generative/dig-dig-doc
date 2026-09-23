@@ -5,7 +5,12 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.conversation import MessageRole
 from app.models.document_page import PredictionKind, PredictionValidationStatus
-from app.models.dossier import DossierStatus, ExecutionStepKind, ExecutionStepStatus, TextExtractionStatus
+from app.models.dossier import (
+    DossierStatus,
+    ExecutionStepKind,
+    ExecutionStepStatus,
+    TextExtractionStatus,
+)
 from app.models.execution_log import ExecutionLogLevel
 from app.models.feedback import FeedbackReasonCode, FeedbackValue
 
@@ -280,6 +285,97 @@ class ExecutionLogIn(BaseModel):
 class DossierCreate(BaseModel):
     name: str
     analyse_id: uuid.UUID
+
+
+# --- Schémas internes (worker agent_execution) ---
+# Ces schémas exposent les clés S3 (screenshot_key) et les définitions
+# d'analyse (labels/entités/prompts) dont le worker a besoin pour
+# télécharger les captures et exécuter la classification/extraction.
+# Ils ne sont jamais renvoyés par l'API publique (seulement par
+# /api/internal/*), pour ne pas fuiter les clés S3 côté frontend.
+
+
+class InternalDocumentPageOut(BaseModel):
+    """Page avec sa clé S3 de capture - réservé à l'API interne."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    page_number: int
+    content: str | None
+    screenshot_key: str | None
+
+
+class InternalDossierDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    s3_key: str
+    mimetype: str
+    text_extraction_status: TextExtractionStatus
+    pages: list[InternalDocumentPageOut]
+
+
+class InternalExecutionStepOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    kind: ExecutionStepKind
+    label: str
+    status: ExecutionStepStatus
+
+
+class InternalDossierOut(BaseModel):
+    """Dossier complet pour le worker : documents, pages (avec clés S3),
+    étapes d'exécution. Pas de prédictions ici - le worker en dépose, il
+    n'a pas besoin de les lire."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    analyse_id: uuid.UUID
+    status: DossierStatus
+    execution_steps: list[InternalExecutionStepOut]
+    documents: list[InternalDossierDocumentOut]
+
+
+class InternalLabelDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    definition: str
+
+
+class InternalEntityDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    definition: str
+    type: str
+
+
+class InternalClassificationOut(BaseModel):
+    prompt: str
+    labels: list[InternalLabelDefinitionOut]
+
+
+class InternalExtractionOut(BaseModel):
+    prompt: str
+    entities: list[InternalEntityDefinitionOut]
+
+
+class InternalAnalyseOut(BaseModel):
+    """Définitions de l'analyse (labels, entités, prompts) pour le worker.
+    Pas d'agents ici - ils seront gérés par une tâche dédiée plus tard."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    classification: InternalClassificationOut
+    extraction: InternalExtractionOut
 
 
 class DossierOut(BaseModel):

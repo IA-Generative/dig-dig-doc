@@ -17,7 +17,11 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.celery_client import dispatch_text_extraction
+from app.celery_client import (
+    dispatch_classification,
+    dispatch_entity_extraction,
+    dispatch_text_extraction,
+)
 from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
@@ -154,6 +158,12 @@ async def launch_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depe
     if analyse is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
     await dossier_repository.launch(dossier, analyse)
+    # Dépose les tâches de classification et d'extraction sur la file
+    # agent_execution : le worker traite chaque page (VLM + LLM) et dépose
+    # les prédictions via l'API interne. Les tâches sont indépendantes et
+    # tournent en parallèle sur la file dédiée.
+    dispatch_classification(str(dossier.id))
+    dispatch_entity_extraction(str(dossier.id))
     return dossier
 
 
