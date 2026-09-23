@@ -1,0 +1,11 @@
+# Dev-only : lance le serveur Vite avec HMR au lieu de builder nginx.
+# Utilisé par docker-compose.override.yaml (fusionné automatiquement par
+# `docker compose up`). Les sources sont montées en bind mount, donc les
+# modifications sont détectées par Vite instantanément.
+FROM node:22-alpine
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml* .dsfr.yml ./
+RUN pnpm install --frozen-lockfile
+EXPOSE 5173
+CMD ["pnpm", "dev"]

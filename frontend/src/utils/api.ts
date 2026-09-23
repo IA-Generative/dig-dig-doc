@@ -1,7 +1,7 @@
 // Le navigateur parle directement au backend (pas via l'origine Vite/nginx) :
 // le cookie de session du BFF est scopé à cette origine, et le CORS du
 // backend autorise explicitement le frontend (voir KeycloakSettings.FRONTEND_URL).
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   constructor(

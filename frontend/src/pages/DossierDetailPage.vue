@@ -1,28 +1,45 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
+import { useMyConversations } from "@/composables/useMyConversations";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
-const { list: dossiers, addDocuments, fetchDossier } = useDossiers();
+const { list: dossiers, addDocuments, fetchDossier, streamDossier } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const { conversation, ensureConversation, sendMessage } = useConversations(dossierId);
+const { fetchList: refreshSidebarConversations } = useMyConversations();
 
 const dossier = computed(() => dossiers.value.find((d) => d.id === dossierId));
 const analyse = computed(() => (dossier.value ? getAnalyseById(dossier.value.analyseId) : undefined));
 
+// SSE : on s'abonne au flux du dossier pour suivre en temps réel l'état
+// d'extraction de texte des documents (et plus tard l'exécution). Le serveur
+// émet `done` quand il n'y a plus de travail actif, puis on ferme.
+let closeStream: (() => void) | undefined;
+
 onMounted(async () => {
-  ensureConversation();
+  // ensureConversation() crée la conversation de cet utilisateur pour ce
+  // dossier si elle n'existe pas encore : c'est ce qui la fait apparaître
+  // dans la sidebar (voir App.vue, qui rafraîchit aussi sur la navigation).
+  await ensureConversation();
+  refreshSidebarConversations();
   // Le dossier n'est pas forcément dans la page actuellement chargée par
   // DossiersPage (pagination côté serveur) : on le charge directement.
   const loaded = await fetchDossier(dossierId);
   await fetchAnalyse(loaded.analyseId);
+  closeStream = streamDossier(dossierId, () => {});
+});
+
+onUnmounted(() => {
+  closeStream?.();
 });
 watch(
   () => dossier.value?.analyseId,
@@ -96,6 +113,8 @@ async function submit() {
   nextTick(resizeTextarea);
 
   await sendMessage(parts.join("\n"));
+  // Le libellé/l'horodatage affichés dans la sidebar viennent de changer.
+  refreshSidebarConversations();
 }
 </script>
 
@@ -115,6 +134,8 @@ async function submit() {
       </div>
       <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
     </div>
+
+    <DossierDocuments :documents="dossier.documents" />
 
     <DossierResults :dossier="dossier" :analyse="analyse" />
 

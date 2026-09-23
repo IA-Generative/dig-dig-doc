@@ -1,8 +1,9 @@
 import enum
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Column, Enum, ForeignKey, String, Table, Text
+from sqlalchemy import Column, Enum, ForeignKey, String, Table, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -51,6 +52,7 @@ class MessageRole(enum.StrEnum):
 
 class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
+    __table_args__ = (UniqueConstraint("dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"),)
 
     dossier_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("dossiers.id", ondelete="CASCADE"), nullable=False, index=True
@@ -63,6 +65,18 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan", order_by="Message.created_at"
     )
+
+    @property
+    def dossier_name(self) -> str:
+        return self.dossier.name
+
+    @property
+    def last_message_preview(self) -> str | None:
+        return self.messages[-1].content if self.messages else None
+
+    @property
+    def last_activity_at(self) -> datetime:
+        return self.messages[-1].created_at if self.messages else self.created_at
 
 
 class Message(UUIDMixin, TimestampMixin, Base):

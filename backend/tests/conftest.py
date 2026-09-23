@@ -13,3 +13,14 @@ def client() -> TestClient:
     # fail with "another operation is in progress" / "different loop".
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _no_real_celery_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Un document uploadé pendant les tests n'est jamais un vrai PDF -
+    dispatcher pour de vrai polluerait la queue Redis partagée avec des
+    tâches vouées à échouer (et un worker qui tournerait en même temps les
+    prendrait). Un test qui veut vérifier le dispatch lui-même
+    (test_document_upload_dispatches_text_extraction) réapplique son propre
+    monkeypatch par-dessus celui-ci."""
+    monkeypatch.setattr("app.routers.dossiers.dispatch_text_extraction", lambda document_id: None)

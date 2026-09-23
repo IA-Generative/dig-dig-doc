@@ -20,7 +20,15 @@ from .document_page import (
     PredictionValidation,
     PredictionValidationStatus,
 )
-from .dossier import Dossier, DossierDocument, DossierStatus, ExecutionStep, ExecutionStepKind, ExecutionStepStatus
+from .dossier import (
+    Dossier,
+    DossierDocument,
+    DossierStatus,
+    ExecutionStep,
+    ExecutionStepKind,
+    ExecutionStepStatus,
+    TextExtractionStatus,
+)
 from .execution_log import ExecutionLog, ExecutionLogLevel
 
 __all__ = [
@@ -53,5 +61,6 @@ __all__ = [
     "PredictionKind",
     "PredictionValidation",
     "PredictionValidationStatus",
+    "TextExtractionStatus",
     "VersionedField",
 ]

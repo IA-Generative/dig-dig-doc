@@ -25,6 +25,12 @@ def get_document(client: httpx.Client, document_id: str) -> dict:
     return response.json()
 
 
+def set_extraction_status(client: httpx.Client, document_id: str, *, status: str, error: str | None = None) -> dict:
+    response = client.put(f"/documents/{document_id}/extraction-status", json={"status": status, "error": error})
+    response.raise_for_status()
+    return response.json()
+
+
 def add_page(
     client: httpx.Client, document_id: str, *, page_number: int, content: str, screenshot_key: str | None = None
 ) -> dict:

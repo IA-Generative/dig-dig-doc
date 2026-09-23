@@ -82,6 +82,47 @@ def test_document_upload_and_label(client: TestClient) -> None:
     assert updated["label"] == "CNI"
 
 
+def test_document_upload_dispatches_text_extraction(client: TestClient, monkeypatch) -> None:
+    dispatched: list[str] = []
+    monkeypatch.setattr("app.routers.dossiers.dispatch_text_extraction", dispatched.append)
+
+    analyse_id = _create_analyse(client, "Analyse dispatch")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier dispatch", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document = dossier["documents"][0]
+
+    assert document["text_extraction_status"] == "en_attente"
+    assert document["text_extraction_error"] is None
+    assert dispatched == [document["id"]]
+
+
+def test_internal_set_extraction_status(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse statut extraction")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier statut", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document_id = dossier["documents"][0]["id"]
+    headers = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
+
+    started = client.put(
+        f"/api/internal/documents/{document_id}/extraction-status", json={"status": "en_cours"}, headers=headers
+    ).json()
+    assert started["text_extraction_status"] == "en_cours"
+
+    failed = client.put(
+        f"/api/internal/documents/{document_id}/extraction-status",
+        json={"status": "échec", "error": "PDF corrompu"},
+        headers=headers,
+    ).json()
+    assert failed["text_extraction_status"] == "échec"
+    assert failed["text_extraction_error"] == "PDF corrompu"
+
+
 def test_internal_get_document_returns_s3_key_for_worker(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse document interne")
     dossier = client.post("/api/dossiers", json={"name": "Dossier interne", "analyse_id": analyse_id}).json()
@@ -123,6 +164,69 @@ def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
     assert len(listed) == 1
     assert listed[0]["id"] == conversation["id"]
+
+
+def test_create_conversation_is_idempotent_per_user(client: TestClient) -> None:
+    # "Aller sur un dossier" crée une conversation une seule fois par
+    # utilisateur : cliquer/recharger plusieurs fois ne doit pas en
+    # dupliquer une nouvelle à chaque fois.
+    analyse_id = _create_analyse(client, "Analyse conversation idempotente")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier idempotent", "analyse_id": analyse_id}).json()[
+        "id"
+    ]
+
+    first = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    second = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert first["id"] == second["id"]
+
+    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert len(listed) == 1
+
+
+def test_conversation_is_private_to_its_user(client: TestClient) -> None:
+    """Une conversation appartient à un (dossier, utilisateur) : un autre
+    utilisateur ne doit ni la voir dans sa liste, ni pouvoir y écrire, même
+    en connaissant son id."""
+    from app.core.security.factory import RequestContext, get_current_user
+    from app.main import app
+
+    analyse_id = _create_analyse(client, "Analyse conversation privée")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé", "analyse_id": analyse_id}).json()["id"]
+
+    owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    client.post(
+        f"/api/dossiers/{dossier_id}/conversations/{owner_conversation['id']}/messages",
+        json={"content": "Message du propriétaire"},
+    )
+
+    def as_other_user() -> RequestContext:
+        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+
+    app.dependency_overrides[get_current_user] = as_other_user
+    try:
+        # Pas dans la liste de l'autre utilisateur...
+        other_listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+        assert other_listed == []
+
+        # ...et une nouvelle conversation pour cet utilisateur, pas la même.
+        other_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+        assert other_conversation["id"] != owner_conversation["id"]
+        assert other_conversation["user_id"] == "other-user"
+
+        # Impossible d'écrire dans celle du propriétaire en devinant son id.
+        response = client.post(
+            f"/api/dossiers/{dossier_id}/conversations/{owner_conversation['id']}/messages",
+            json={"content": "Tentative d'intrusion"},
+        )
+        assert response.status_code == 404
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    # Le message de l'autre utilisateur n'a pas fuité dans la conversation du propriétaire.
+    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert len(owner_view) == 1
+    assert len(owner_view[0]["messages"]) == 1
+    assert owner_view[0]["messages"][0]["content"] == "Message du propriétaire"
 
 
 INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
