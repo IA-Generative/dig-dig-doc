@@ -4,20 +4,50 @@ import { RouterLink, useRoute } from "vue-router";
 
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
+import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
+import type { FeedbackReasonCode } from "@/types/conversation";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
 const { list: dossiers, addDocuments, fetchDossier, streamDossier } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
-const { conversation, ensureConversation, sendMessage, deleteConversation, setModel } = useConversations(dossierId);
+const { conversation, ensureConversation, sendMessage, deleteConversation, setModel, setFeedback, removeFeedback } =
+  useConversations(dossierId);
 const { fetchList: refreshSidebarConversations } = useMyConversations();
 const { models, fetchModels } = useModels();
+
+// Pouce haut : bascule directement. Pouce bas : ouvre une modale pour
+// recueillir la/les raison(s) avant d'envoyer (comme Muffin).
+const feedbackReasonsModalOpened = ref(false);
+const pendingDownMessageId = ref<string | null>(null);
+
+function thumbUp(messageId: string) {
+  const current = messages.value.find((m) => m.id === messageId)?.feedback;
+  if (current?.value === "up") removeFeedback(messageId);
+  else setFeedback(messageId, "up");
+}
+
+function thumbDown(messageId: string) {
+  const current = messages.value.find((m) => m.id === messageId)?.feedback;
+  if (current?.value === "down") {
+    removeFeedback(messageId);
+    return;
+  }
+  pendingDownMessageId.value = messageId;
+  feedbackReasonsModalOpened.value = true;
+}
+
+function submitDownFeedback(reasons: FeedbackReasonCode[], comment: string | null) {
+  if (!pendingDownMessageId.value) return;
+  setFeedback(pendingDownMessageId.value, "down", reasons, comment);
+  pendingDownMessageId.value = null;
+}
 
 // "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
 // pas de valeur null pour une option.
@@ -213,6 +243,28 @@ async function onDeleteConversation() {
             <div class="chat-message__bubble">
               <p class="chat-message__text">{{ message.content }}</p>
             </div>
+            <div class="chat-message__feedback">
+              <button
+                type="button"
+                class="chat-message__feedback-button"
+                :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'up' }"
+                aria-label="Bonne réponse"
+                title="Bonne réponse"
+                @click="thumbUp(message.id)"
+              >
+                <VIcon name="ri-thumb-up-line" />
+              </button>
+              <button
+                type="button"
+                class="chat-message__feedback-button"
+                :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'down' }"
+                aria-label="Mauvaise réponse"
+                title="Mauvaise réponse"
+                @click="thumbDown(message.id)"
+              >
+                <VIcon name="ri-thumb-down-line" />
+              </button>
+            </div>
           </div>
           <div ref="messagesEndRef" />
         </div>
@@ -317,6 +369,8 @@ async function onDeleteConversation() {
       </p>
       <DossierDocuments v-else :documents="dossier.documents" />
     </DsfrModal>
+
+    <FeedbackReasonsModal v-model:opened="feedbackReasonsModalOpened" @submit="submitDownFeedback" />
   </div>
   <div v-else>
     <p>Dossier introuvable.</p>
@@ -435,7 +489,8 @@ async function onDeleteConversation() {
 
 .chat-message {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
   padding: 0.5rem 0;
 }
 
@@ -444,6 +499,37 @@ async function onDeleteConversation() {
   padding: 0.75rem 1.125rem;
   border-radius: 1.25rem;
   background: var(--background-alt-grey);
+}
+
+.chat-message__feedback {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.chat-message__feedback-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-mention-grey);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.chat-message__feedback-button:hover {
+  background: var(--background-alt-grey-hover);
+  color: var(--text-default-grey);
+}
+
+.chat-message__feedback-button--active {
+  color: var(--text-active-blue-france);
+  background: var(--background-action-low-blue-france);
 }
 
 .chat-message__text {

@@ -52,9 +52,9 @@ class DossierRepository:
                 selectinload(Dossier.execution_steps).selectinload(ExecutionStep.logs),
                 pages_load.selectinload(DocumentPage.bounding_boxes),
                 predictions_load.selectinload(DocumentPrediction.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.validations).selectinload(
-                    PredictionValidation.bounding_box
-                ),
+                predictions_load.selectinload(
+                    DocumentPrediction.validations
+                ).selectinload(PredictionValidation.bounding_box),
                 # populate_existing: nécessaire pour le SSE (/dossiers/{id}/stream),
                 # qui réinterroge en boucle sur la même session - sans ça, une
                 # fois le Dossier chargé une première fois, les requêtes
@@ -65,18 +65,27 @@ class DossierRepository:
         )
 
     async def list_all(self) -> Sequence[Dossier]:
-        result = await self.db.execute(self._base_query().order_by(Dossier.created_at.desc()))
+        result = await self.db.execute(
+            self._base_query().order_by(Dossier.created_at.desc())
+        )
         return result.scalars().all()
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[Dossier], int]:
+    async def list_paginated(
+        self, *, page: int, page_size: int
+    ) -> tuple[Sequence[Dossier], int]:
         total = await self.db.scalar(select(func.count()).select_from(Dossier))
         result = await self.db.execute(
-            self._base_query().order_by(Dossier.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+            self._base_query()
+            .order_by(Dossier.created_at.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
         )
         return result.scalars().all(), total or 0
 
     async def get(self, dossier_id: uuid.UUID) -> Dossier | None:
-        result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))
+        result = await self.db.execute(
+            self._base_query().where(Dossier.id == dossier_id)
+        )
         return result.scalar_one_or_none()
 
     async def create(self, *, name: str, analyse: Analyse) -> Dossier:
@@ -91,7 +100,9 @@ class DossierRepository:
         await self.db.refresh(dossier)
         return dossier
 
-    async def add_documents(self, dossier: Dossier, documents: list[dict]) -> list[DossierDocument]:
+    async def add_documents(
+        self, dossier: Dossier, documents: list[dict]
+    ) -> list[DossierDocument]:
         created = [
             DossierDocument(
                 dossier_id=dossier.id,
@@ -109,13 +120,18 @@ class DossierRepository:
         return created
 
     async def set_text_extraction_status(
-        self, document: DossierDocument, status: TextExtractionStatus, error: str | None = None
+        self,
+        document: DossierDocument,
+        status: TextExtractionStatus,
+        error: str | None = None,
     ) -> None:
         document.text_extraction_status = status
         document.text_extraction_error = error
         await self.db.commit()
 
-    async def set_document_label(self, document: DossierDocument, label: str | None) -> None:
+    async def set_document_label(
+        self, document: DossierDocument, label: str | None
+    ) -> None:
         document.label = label
         await self.db.commit()
         # Pas de refresh(document) : réexpirerait `pages` (déjà chargée par
@@ -136,42 +152,27 @@ class DossierRepository:
             .execution_options(populate_existing=True)
         )
 
-    async def list_conversations(self, dossier_id: uuid.UUID, user_id: str) -> Sequence[Conversation]:
+    async def list_conversations(
+        self, dossier_id: uuid.UUID, user_id: str
+    ) -> Sequence[Conversation]:
         result = await self.db.execute(
             self._conversation_query()
-            .where(Conversation.dossier_id == dossier_id, Conversation.user_id == user_id)
+            .where(
+                Conversation.dossier_id == dossier_id, Conversation.user_id == user_id
+            )
             .order_by(Conversation.created_at)
         )
         return result.scalars().all()
 
-    async def list_conversations_for_user(self, user_id: str) -> list[Conversation]:
-        """Toutes les conversations d'un utilisateur, tous dossiers
-        confondus - pour la liste façon ChatGPT dans la sidebar. Triées par
-        activité la plus récente (dernier message, ou création si vide)."""
-        result = await self.db.execute(
-            self._conversation_query()
-            .options(selectinload(Conversation.dossier))
-            .where(Conversation.user_id == user_id)
-        )
-        conversations = list(result.scalars().all())
-        conversations.sort(key=lambda c: c.messages[-1].created_at if c.messages else c.created_at, reverse=True)
-        return conversations
-
     async def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:
-        result = await self.db.execute(self._conversation_query().where(Conversation.id == conversation_id))
+        result = await self.db.execute(
+            self._conversation_query().where(Conversation.id == conversation_id)
+        )
         return result.scalar_one_or_none()
 
-    async def set_conversation_model(self, conversation: Conversation, model: str | None) -> None:
-        conversation.model = model
-        await self.db.commit()
-
-    async def delete_conversation(self, conversation: Conversation) -> None:
-        # Supprime uniquement la conversation (et ses messages, en cascade) -
-        # jamais le dossier, ses documents ou l'analyse associée.
-        await self.db.delete(conversation)
-        await self.db.commit()
-
-    async def create_conversation(self, dossier_id: uuid.UUID, user_id: str) -> Conversation:
+    async def create_conversation(
+        self, dossier_id: uuid.UUID, user_id: str
+    ) -> Conversation:
         # Idempotent : si une conversation existe déjà pour ce couple
         # (dossier, utilisateur), on la renvoie au lieu d'en créer une
         # nouvelle. La page dossier est un chat personnel par instructeur :
@@ -188,7 +189,11 @@ class DossierRepository:
         return await self.get_conversation(conversation.id)
 
     async def add_message(
-        self, conversation: Conversation, role: MessageRole, content: str, sources: list[dict] | None = None
+        self,
+        conversation: Conversation,
+        role: MessageRole,
+        content: str,
+        sources: list[dict] | None = None,
     ) -> Conversation:
         message = Message(conversation_id=conversation.id, role=role, content=content)
         self.db.add(message)
@@ -206,20 +211,31 @@ class DossierRepository:
             if page_ids:
                 await self.db.execute(
                     insert(message_source_pages),
-                    [{"message_source_id": message_source.id, "document_page_id": pid} for pid in page_ids],
+                    [
+                        {
+                            "message_source_id": message_source.id,
+                            "document_page_id": pid,
+                        }
+                        for pid in page_ids
+                    ],
                 )
             bounding_box_ids = source.get("bounding_box_ids") or []
             if bounding_box_ids:
                 await self.db.execute(
                     insert(message_source_bounding_boxes),
-                    [{"message_source_id": message_source.id, "bounding_box_id": bid} for bid in bounding_box_ids],
+                    [
+                        {"message_source_id": message_source.id, "bounding_box_id": bid}
+                        for bid in bounding_box_ids
+                    ],
                 )
         await self.db.commit()
         return await self.get_conversation(conversation.id)
 
     # --- Logs et callback de fin d'étape (appelés par le worker) ---
 
-    async def get_execution_step(self, dossier_id: uuid.UUID, step_id: uuid.UUID) -> ExecutionStep | None:
+    async def get_execution_step(
+        self, dossier_id: uuid.UUID, step_id: uuid.UUID
+    ) -> ExecutionStep | None:
         result = await self.db.execute(
             select(ExecutionStep)
             .options(selectinload(ExecutionStep.logs))
@@ -228,7 +244,9 @@ class DossierRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_execution_step_by_id(self, step_id: uuid.UUID) -> ExecutionStep | None:
+    async def get_execution_step_by_id(
+        self, step_id: uuid.UUID
+    ) -> ExecutionStep | None:
         result = await self.db.execute(
             select(ExecutionStep)
             .options(selectinload(ExecutionStep.logs))
@@ -237,8 +255,12 @@ class DossierRepository:
         )
         return result.scalar_one_or_none()
 
-    async def add_log(self, step: ExecutionStep, level: ExecutionLogLevel, message: str) -> ExecutionStep:
-        self.db.add(ExecutionLog(execution_step_id=step.id, level=level, message=message))
+    async def add_log(
+        self, step: ExecutionStep, level: ExecutionLogLevel, message: str
+    ) -> ExecutionStep:
+        self.db.add(
+            ExecutionLog(execution_step_id=step.id, level=level, message=message)
+        )
         await self.db.commit()
         return await self.get_execution_step(step.dossier_id, step.id)
 
@@ -267,16 +289,23 @@ class DossierRepository:
             ),
         )
 
-    async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
+    async def get_document(
+        self, dossier_id: uuid.UUID, document_id: uuid.UUID
+    ) -> DossierDocument | None:
         result = await self.db.execute(
             select(DossierDocument)
             .options(*self._document_options())
-            .where(DossierDocument.id == document_id, DossierDocument.dossier_id == dossier_id)
+            .where(
+                DossierDocument.id == document_id,
+                DossierDocument.dossier_id == dossier_id,
+            )
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
-    async def get_document_by_id(self, document_id: uuid.UUID) -> DossierDocument | None:
+    async def get_document_by_id(
+        self, document_id: uuid.UUID
+    ) -> DossierDocument | None:
         result = await self.db.execute(
             select(DossierDocument)
             .options(*self._document_options())
@@ -323,11 +352,16 @@ class DossierRepository:
             ),
         )
 
-    async def get_page(self, document_id: uuid.UUID, page_id: uuid.UUID) -> DocumentPage | None:
+    async def get_page(
+        self, document_id: uuid.UUID, page_id: uuid.UUID
+    ) -> DocumentPage | None:
         result = await self.db.execute(
             select(DocumentPage)
             .options(*self._page_options())
-            .where(DocumentPage.id == page_id, DocumentPage.dossier_document_id == document_id)
+            .where(
+                DocumentPage.id == page_id,
+                DocumentPage.dossier_document_id == document_id,
+            )
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
@@ -342,9 +376,17 @@ class DossierRepository:
         return result.scalar_one_or_none()
 
     async def add_bounding_box(
-        self, page: DocumentPage, *, x_min: float, y_min: float, x_max: float, y_max: float
+        self,
+        page: DocumentPage,
+        *,
+        x_min: float,
+        y_min: float,
+        x_max: float,
+        y_max: float,
     ) -> BoundingBox:
-        bbox = BoundingBox(document_page_id=page.id, x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
+        bbox = BoundingBox(
+            document_page_id=page.id, x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max
+        )
         self.db.add(bbox)
         await self.db.commit()
         await self.db.refresh(bbox)
@@ -384,12 +426,18 @@ class DossierRepository:
         all_page_ids = {page.id, *(page_ids or [])}
         await self.db.execute(
             insert(prediction_pages),
-            [{"prediction_id": prediction.id, "document_page_id": pid} for pid in all_page_ids],
+            [
+                {"prediction_id": prediction.id, "document_page_id": pid}
+                for pid in all_page_ids
+            ],
         )
         if bounding_box_ids:
             await self.db.execute(
                 insert(prediction_bounding_boxes),
-                [{"prediction_id": prediction.id, "bounding_box_id": bid} for bid in bounding_box_ids],
+                [
+                    {"prediction_id": prediction.id, "bounding_box_id": bid}
+                    for bid in bounding_box_ids
+                ],
             )
         await self.db.commit()
         return await self.get_prediction_by_id(prediction.id)
@@ -398,19 +446,28 @@ class DossierRepository:
         return (
             selectinload(DocumentPrediction.pages),
             selectinload(DocumentPrediction.bounding_boxes),
-            selectinload(DocumentPrediction.validations).selectinload(PredictionValidation.bounding_box),
+            selectinload(DocumentPrediction.validations).selectinload(
+                PredictionValidation.bounding_box
+            ),
         )
 
-    async def get_prediction(self, page_id: uuid.UUID, prediction_id: uuid.UUID) -> DocumentPrediction | None:
+    async def get_prediction(
+        self, page_id: uuid.UUID, prediction_id: uuid.UUID
+    ) -> DocumentPrediction | None:
         result = await self.db.execute(
             select(DocumentPrediction)
             .options(*self._prediction_options())
-            .where(DocumentPrediction.id == prediction_id, DocumentPrediction.pages.any(DocumentPage.id == page_id))
+            .where(
+                DocumentPrediction.id == prediction_id,
+                DocumentPrediction.pages.any(DocumentPage.id == page_id),
+            )
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
-    async def get_prediction_by_id(self, prediction_id: uuid.UUID) -> DocumentPrediction | None:
+    async def get_prediction_by_id(
+        self, prediction_id: uuid.UUID
+    ) -> DocumentPrediction | None:
         result = await self.db.execute(
             select(DocumentPrediction)
             .options(*self._prediction_options())
@@ -434,7 +491,11 @@ class DossierRepository:
         # PredictionValidation. Rattachée à la première page de la
         # prédiction (`prediction.pages` doit déjà être chargée : cette
         # méthode reçoit toujours un objet issu de get_prediction/_by_id).
-        bbox = BoundingBox(document_page_id=prediction.pages[0].id, **bounding_box) if bounding_box else None
+        bbox = (
+            BoundingBox(document_page_id=prediction.pages[0].id, **bounding_box)
+            if bounding_box
+            else None
+        )
         self.db.add(
             PredictionValidation(
                 prediction_id=prediction.id,

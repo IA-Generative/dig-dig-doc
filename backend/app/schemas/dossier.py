@@ -7,6 +7,7 @@ from app.models.conversation import MessageRole
 from app.models.document_page import PredictionKind, PredictionValidationStatus
 from app.models.dossier import DossierStatus, ExecutionStepKind, ExecutionStepStatus, TextExtractionStatus
 from app.models.execution_log import ExecutionLogLevel
+from app.models.feedback import FeedbackReasonCode, FeedbackValue
 
 
 class BoundingBoxIn(BaseModel):
@@ -189,6 +190,25 @@ class ConversationModelUpdate(BaseModel):
     model: str | None
 
 
+class FeedbackIn(BaseModel):
+    value: FeedbackValue
+    # Uniquement pertinent pour un pouce bas - jamais requis, un pouce haut
+    # simple n'a aucune raison.
+    reasons: list[FeedbackReasonCode] = []
+    comment: str | None = None
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    message_id: uuid.UUID
+    value: FeedbackValue
+    reasons: list[FeedbackReasonCode]
+    comment: str | None
+    created_at: datetime
+
+
 class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -197,6 +217,7 @@ class MessageOut(BaseModel):
     content: str
     created_at: datetime
     sources: list[MessageSourceOut]
+    feedback: FeedbackOut | None
 
 
 class ConversationOut(BaseModel):

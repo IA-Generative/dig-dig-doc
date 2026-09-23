@@ -554,3 +554,65 @@ def test_execution_stream_sends_terminal_state(client: TestClient) -> None:
         body = "".join(response.iter_text())
     assert "execution-update" in body
     assert "arr" in body  # "arrêté", échappé ou non selon l'encodage JSON
+
+
+def _create_conversation_with_message(client: TestClient, dossier_name: str) -> tuple[str, str, str]:
+    analyse_id = _create_analyse(client, f"Analyse {dossier_name}")
+    dossier_id = client.post("/api/dossiers", json={"name": dossier_name, "analyse_id": analyse_id}).json()["id"]
+    conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    conversation = client.post(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages", json={"content": "Un message"}
+    ).json()
+    message_id = conversation["messages"][0]["id"]
+    return dossier_id, conversation["id"], message_id
+
+
+def test_message_feedback_lifecycle(client: TestClient) -> None:
+    dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour")
+
+    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()[0]
+    assert conversation["messages"][0]["feedback"] is None
+
+    conversation = client.put(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
+        json={"value": "down", "reasons": ["incorrect_answer", "not_useful"], "comment": "Pas la bonne réponse"},
+    ).json()
+    feedback = conversation["messages"][0]["feedback"]
+    assert feedback["value"] == "down"
+    assert sorted(feedback["reasons"]) == ["incorrect_answer", "not_useful"]
+    assert feedback["comment"] == "Pas la bonne réponse"
+
+    # Re-soumission : mise à jour du même retour, pas de doublon.
+    conversation = client.put(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
+        json={"value": "up"},
+    ).json()
+    feedback = conversation["messages"][0]["feedback"]
+    assert feedback["value"] == "up"
+    assert feedback["reasons"] == []
+    assert feedback["comment"] is None
+
+    conversation = client.delete(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback"
+    ).json()
+    assert conversation["messages"][0]["feedback"] is None
+
+
+def test_feedback_is_private_to_its_user(client: TestClient) -> None:
+    from app.core.security.factory import RequestContext, get_current_user
+    from app.main import app
+
+    dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour privé")
+
+    def as_other_user() -> RequestContext:
+        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+
+    app.dependency_overrides[get_current_user] = as_other_user
+    try:
+        response = client.put(
+            f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
+            json={"value": "up"},
+        )
+        assert response.status_code == 404
+    finally:
+        del app.dependency_overrides[get_current_user]
