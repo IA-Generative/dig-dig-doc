@@ -1,6 +1,24 @@
 from fastapi.testclient import TestClient
 
 
+def test_list_analyses_is_paginated(client: TestClient) -> None:
+    for i in range(5):
+        client.post("/api/analyses", json={"name": f"Analyse pagination {i}"})
+
+    first_page = client.get("/api/analyses", params={"page": 1, "page_size": 2}).json()
+    assert len(first_page["items"]) == 2
+    assert first_page["page"] == 1
+    assert first_page["page_size"] == 2
+    assert first_page["total"] >= 5
+    assert first_page["pages"] >= 3
+
+    second_page = client.get("/api/analyses", params={"page": 2, "page_size": 2}).json()
+    assert len(second_page["items"]) == 2
+    first_ids = {a["id"] for a in first_page["items"]}
+    second_ids = {a["id"] for a in second_page["items"]}
+    assert first_ids.isdisjoint(second_ids)
+
+
 def test_create_and_get_analyse(client: TestClient) -> None:
     response = client.post("/api/analyses", json={"name": "Contrôle CNI", "description": "Lot de test"})
     assert response.status_code == 201

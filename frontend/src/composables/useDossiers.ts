@@ -1,4 +1,4 @@
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 
 import { apiFetch } from "@/utils/api";
 import type { Dossier, DossierDocument, ExecutionStep } from "@/types/dossier";
@@ -34,15 +34,25 @@ function mapDossier(api: any): Dossier {
   };
 }
 
-// Store partagé par toute l'application, alimenté depuis la vraie API BFF.
+// Store partagé par toute l'application : `dossiers` contient la page
+// actuellement chargée (pagination côté serveur, voir fetchList) plus tout
+// dossier ouvert individuellement (fetchDossier) qui ne s'y trouvait pas.
 const dossiers = reactive<Dossier[]>([]);
+const total = ref(0);
+const pageCount = ref(1);
+const currentPage = ref(1);
+const pageSize = ref(10);
 
-async function fetchList() {
-  const data = await apiFetch<any[]>("/api/dossiers");
-  dossiers.splice(0, dossiers.length, ...data.map(mapDossier));
+async function fetchList(page = currentPage.value, size = pageSize.value) {
+  const data = await apiFetch<{ items: any[]; total: number; page: number; page_size: number; pages: number }>(
+    `/api/dossiers?page=${page}&page_size=${size}`,
+  );
+  dossiers.splice(0, dossiers.length, ...data.items.map(mapDossier));
+  total.value = data.total;
+  pageCount.value = data.pages;
+  currentPage.value = data.page;
+  pageSize.value = data.page_size;
 }
-
-fetchList();
 
 function upsert(dossier: Dossier) {
   const index = dossiers.findIndex((d) => d.id === dossier.id);
@@ -54,6 +64,15 @@ export function useDossiers() {
   const list = computed(() => dossiers);
 
   const getById = (id: string) => dossiers.find((d) => d.id === id);
+
+  // Pour ouvrir un dossier qui n'est pas forcément dans la page actuellement
+  // chargée (navigation directe vers /dossiers/:id).
+  const fetchDossier = async (id: string) => {
+    const data = await apiFetch<any>(`/api/dossiers/${id}`);
+    const dossier = mapDossier(data);
+    upsert(dossier);
+    return dossier;
+  };
 
   const create = async (name: string, analyseId: string) => {
     const data = await apiFetch<any>("/api/dossiers", {
@@ -94,5 +113,19 @@ export function useDossiers() {
     upsert(mapDossier(data));
   };
 
-  return { list, getById, fetchList, create, addDocuments, setDocumentLabel, launch, stop };
+  return {
+    list,
+    total,
+    pageCount,
+    currentPage,
+    pageSize,
+    getById,
+    fetchDossier,
+    fetchList,
+    create,
+    addDocuments,
+    setDocumentLabel,
+    launch,
+    stop,
+  };
 }

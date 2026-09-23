@@ -12,6 +12,23 @@ def test_dossier_requires_an_existing_analyse(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def test_list_dossiers_is_paginated(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse pagination dossiers")
+    for i in range(5):
+        client.post("/api/dossiers", json={"name": f"Dossier pagination {i}", "analyse_id": analyse_id})
+
+    first_page = client.get("/api/dossiers", params={"page": 1, "page_size": 2}).json()
+    assert len(first_page["items"]) == 2
+    assert first_page["page"] == 1
+    assert first_page["page_size"] == 2
+    assert first_page["total"] >= 5
+
+    second_page = client.get("/api/dossiers", params={"page": 2, "page_size": 2}).json()
+    first_ids = {d["id"] for d in first_page["items"]}
+    second_ids = {d["id"] for d in second_page["items"]}
+    assert first_ids.isdisjoint(second_ids)
+
+
 def test_create_dossier_and_launch_lifecycle(client: TestClient) -> None:
     analyse_id = _create_analyse(client)
 
@@ -88,12 +105,19 @@ def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     assert listed[0]["id"] == conversation["id"]
 
 
-INTERNAL_HEADERS = {"X-Worker-Token": "dev-only-worker-token-not-for-prod"}
+INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
 
 
-def test_internal_routes_require_worker_token(client: TestClient) -> None:
+def test_internal_routes_require_app_token(client: TestClient) -> None:
     response = client.post(f"/api/internal/execution-steps/{uuid.uuid4()}/logs", json={"message": "hello"})
     assert response.status_code in (401, 422)  # 422 si le header est simplement absent
+
+    response = client.post(
+        f"/api/internal/execution-steps/{uuid.uuid4()}/logs",
+        json={"message": "hello"},
+        headers={"X-App-Token": "not-a-valid-token"},
+    )
+    assert response.status_code == 401
 
 
 def test_execution_step_logs_and_completion(client: TestClient) -> None:

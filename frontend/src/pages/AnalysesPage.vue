@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import CreateAnalyseModal from "@/components/analyses/CreateAnalyseModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 
-const { list } = useAnalyses();
+const BROWSE_PAGE_SIZE = 6;
+// Pas de recherche côté serveur (GET /analyses n'a pas de paramètre `q`) :
+// une recherche charge une page large et filtre côté client plutôt que de
+// dépendre de la pagination normale.
+const SEARCH_PAGE_SIZE = 100;
+
+const { list, pageCount: serverPageCount, fetchList } = useAnalyses();
 
 const searchQuery = ref("");
 const currentPage = ref(1);
-const pageSize = 6;
 const isCreateModalOpened = ref(false);
+const isSearching = computed(() => searchQuery.value.trim().length > 0);
 
 const filteredAnalyses = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
@@ -19,11 +25,14 @@ const filteredAnalyses = computed(() => {
   );
 });
 
-const pageCount = computed(() => Math.max(1, Math.ceil(filteredAnalyses.value.length / pageSize)));
+const pageCount = computed(() =>
+  isSearching.value ? Math.max(1, Math.ceil(filteredAnalyses.value.length / BROWSE_PAGE_SIZE)) : serverPageCount.value,
+);
 
 const paginatedAnalyses = computed(() => {
-  const start = (currentPage.value - 1) * pageSize;
-  return filteredAnalyses.value.slice(start, start + pageSize);
+  if (!isSearching.value) return list.value;
+  const start = (currentPage.value - 1) * BROWSE_PAGE_SIZE;
+  return filteredAnalyses.value.slice(start, start + BROWSE_PAGE_SIZE);
 });
 
 const pages = computed(() =>
@@ -31,6 +40,15 @@ const pages = computed(() =>
     label: String(i + 1),
     title: `Page ${i + 1}`,
   })),
+);
+
+watch(
+  [currentPage, isSearching],
+  async ([page, searching]) => {
+    if (searching) await fetchList(1, SEARCH_PAGE_SIZE);
+    else await fetchList(page, BROWSE_PAGE_SIZE);
+  },
+  { immediate: true },
 );
 
 function onSearch(query: string) {
@@ -66,7 +84,7 @@ function onAnalyseCreated() {
       @search="onSearch"
     />
 
-    <p v-if="filteredAnalyses.length === 0" class="fr-text--sm">Aucune analyse ne correspond à cette recherche.</p>
+    <p v-if="paginatedAnalyses.length === 0" class="fr-text--sm">Aucune analyse ne correspond à cette recherche.</p>
 
     <div v-else class="analyses-page__grid">
       <DsfrCard

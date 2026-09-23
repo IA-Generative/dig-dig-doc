@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import KeycloakSettings, SharingSettings
@@ -24,6 +24,7 @@ from app.schemas.analyse import (
     PromptUpdate,
     ToolsUpdate,
 )
+from app.schemas.pagination import Page
 
 router = APIRouter(prefix="/analyses", tags=["Analyses"], dependencies=[Depends(get_current_user)])
 
@@ -49,16 +50,21 @@ def _get_agent_or_404(repository: AnalyseRepository, analyse: Analyse, agent_id:
     return agent
 
 
-@router.get("", response_model=list[AnalyseListItem])
-async def list_analyses(db: Annotated[AsyncSession, Depends(get_db)]) -> list[AnalyseListItem]:
+@router.get("", response_model=Page[AnalyseListItem])
+async def list_analyses(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> Page[AnalyseListItem]:
     repository = AnalyseRepository(db)
-    analyses = await repository.list_all()
-    return [
+    analyses, total = await repository.list_paginated(page=page, page_size=page_size)
+    items = [
         AnalyseListItem(
             id=a.id, name=a.name, description=a.description, created_at=a.created_at, agent_count=len(a.agents)
         )
         for a in analyses
     ]
+    return Page.of(items, total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=AnalyseOut, status_code=status.HTTP_201_CREATED)
