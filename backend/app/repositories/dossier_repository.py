@@ -2,12 +2,19 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.analyse import Analyse
-from app.models.conversation import Conversation, Message, MessageRole, MessageSource
+from app.models.conversation import (
+    Conversation,
+    Message,
+    MessageRole,
+    MessageSource,
+    message_source_bounding_boxes,
+    message_source_pages,
+)
 from app.models.document_page import (
     BoundingBox,
     DocumentPage,
@@ -15,6 +22,8 @@ from app.models.document_page import (
     PredictionKind,
     PredictionValidation,
     PredictionValidationStatus,
+    prediction_bounding_boxes,
+    prediction_pages,
 )
 from app.models.dossier import (
     Dossier,
@@ -41,7 +50,7 @@ class DossierRepository:
             .options(
                 selectinload(Dossier.execution_steps).selectinload(ExecutionStep.logs),
                 pages_load.selectinload(DocumentPage.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.bounding_box),
+                predictions_load.selectinload(DocumentPrediction.bounding_boxes),
                 predictions_load.selectinload(DocumentPrediction.validations).selectinload(
                     PredictionValidation.bounding_box
                 ),
@@ -99,9 +108,13 @@ class DossierRepository:
         # the identity map (e.g. right after adding a message to it) would
         # keep the stale, already-loaded `messages` collection instead of
         # picking up the row just committed.
+        sources_load = selectinload(Conversation.messages).selectinload(Message.sources)
         return (
             select(Conversation)
-            .options(selectinload(Conversation.messages).selectinload(Message.sources))
+            .options(
+                sources_load.selectinload(MessageSource.pages),
+                sources_load.selectinload(MessageSource.bounding_boxes),
+            )
             .execution_options(populate_existing=True)
         )
 
@@ -131,14 +144,26 @@ class DossierRepository:
         self.db.add(message)
         await self.db.flush()
         for source in sources or []:
-            self.db.add(
-                MessageSource(
-                    message_id=message.id,
-                    dossier_document_id=source.get("dossier_document_id"),
-                    execution_step_id=source.get("execution_step_id"),
-                    excerpt=source.get("excerpt"),
-                )
+            message_source = MessageSource(
+                message_id=message.id,
+                dossier_document_id=source.get("dossier_document_id"),
+                execution_step_id=source.get("execution_step_id"),
+                excerpt=source.get("excerpt"),
             )
+            self.db.add(message_source)
+            await self.db.flush()
+            page_ids = source.get("page_ids") or []
+            if page_ids:
+                await self.db.execute(
+                    insert(message_source_pages),
+                    [{"message_source_id": message_source.id, "document_page_id": pid} for pid in page_ids],
+                )
+            bounding_box_ids = source.get("bounding_box_ids") or []
+            if bounding_box_ids:
+                await self.db.execute(
+                    insert(message_source_bounding_boxes),
+                    [{"message_source_id": message_source.id, "bounding_box_id": bid} for bid in bounding_box_ids],
+                )
         await self.db.commit()
         return await self.get_conversation(conversation.id)
 
@@ -188,7 +213,7 @@ class DossierRepository:
             select(DossierDocument)
             .options(
                 pages_load.selectinload(DocumentPage.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.bounding_box),
+                predictions_load.selectinload(DocumentPrediction.bounding_boxes),
                 predictions_load.selectinload(DocumentPrediction.validations).selectinload(
                     PredictionValidation.bounding_box
                 ),
@@ -232,7 +257,7 @@ class DossierRepository:
         predictions_load = selectinload(DocumentPage.predictions)
         return (
             selectinload(DocumentPage.bounding_boxes),
-            predictions_load.selectinload(DocumentPrediction.bounding_box),
+            predictions_load.selectinload(DocumentPrediction.bounding_boxes),
             predictions_load.selectinload(DocumentPrediction.validations).selectinload(
                 PredictionValidation.bounding_box
             ),
@@ -261,7 +286,8 @@ class DossierRepository:
     ) -> BoundingBox:
         bbox = BoundingBox(document_page_id=page.id, x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max)
         self.db.add(bbox)
-        await self.db.flush()
+        await self.db.commit()
+        await self.db.refresh(bbox)
         return bbox
 
     async def add_prediction(
@@ -272,26 +298,46 @@ class DossierRepository:
         name: str,
         value: str,
         confidence: float | None,
-        bounding_box: dict | None,
+        label_definition_id: uuid.UUID | None = None,
+        entity_definition_id: uuid.UUID | None = None,
+        page_ids: list[uuid.UUID] | None = None,
+        bounding_box_ids: list[uuid.UUID] | None = None,
     ) -> DocumentPrediction:
-        bbox = await self.add_bounding_box(page, **bounding_box) if bounding_box else None
+        """`page` est la page sous laquelle la route de création est
+        appelée (POST .../pages/{page_id}/predictions) - une classification
+        s'arrête là (l'ensemble ne fait qu'un élément). Une entité peut en
+        plus couvrir `page_ids` (d'autres pages) et référencer
+        `bounding_box_ids` (déjà créées via add_bounding_box), sur
+        potentiellement plusieurs pages."""
         prediction = DocumentPrediction(
-            document_page_id=page.id,
             kind=kind,
             name=name,
             value=value,
             confidence=confidence,
-            bounding_box=bbox,
+            label_definition_id=label_definition_id,
+            entity_definition_id=entity_definition_id,
             validations=[],
         )
         self.db.add(prediction)
+        await self.db.flush()
+
+        all_page_ids = {page.id, *(page_ids or [])}
+        await self.db.execute(
+            insert(prediction_pages),
+            [{"prediction_id": prediction.id, "document_page_id": pid} for pid in all_page_ids],
+        )
+        if bounding_box_ids:
+            await self.db.execute(
+                insert(prediction_bounding_boxes),
+                [{"prediction_id": prediction.id, "bounding_box_id": bid} for bid in bounding_box_ids],
+            )
         await self.db.commit()
-        # Pas de refresh(prediction) : même raison que pour add_page ci-dessus.
-        return prediction
+        return await self.get_prediction_by_id(prediction.id)
 
     def _prediction_options(self):
         return (
-            selectinload(DocumentPrediction.bounding_box),
+            selectinload(DocumentPrediction.pages),
+            selectinload(DocumentPrediction.bounding_boxes),
             selectinload(DocumentPrediction.validations).selectinload(PredictionValidation.bounding_box),
         )
 
@@ -299,7 +345,7 @@ class DossierRepository:
         result = await self.db.execute(
             select(DocumentPrediction)
             .options(*self._prediction_options())
-            .where(DocumentPrediction.id == prediction_id, DocumentPrediction.document_page_id == page_id)
+            .where(DocumentPrediction.id == prediction_id, DocumentPrediction.pages.any(DocumentPage.id == page_id))
             .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
@@ -325,8 +371,10 @@ class DossierRepository:
         # Toujours une nouvelle BoundingBox, jamais une mutation de celle de
         # la prédiction d'origine (ou d'une validation précédente) : l'idée
         # est de garder l'historique intact, comme le reste de
-        # PredictionValidation.
-        bbox = BoundingBox(document_page_id=prediction.document_page_id, **bounding_box) if bounding_box else None
+        # PredictionValidation. Rattachée à la première page de la
+        # prédiction (`prediction.pages` doit déjà être chargée : cette
+        # méthode reçoit toujours un objet issu de get_prediction/_by_id).
+        bbox = BoundingBox(document_page_id=prediction.pages[0].id, **bounding_box) if bounding_box else None
         self.db.add(
             PredictionValidation(
                 prediction_id=prediction.id,
@@ -337,7 +385,7 @@ class DossierRepository:
             )
         )
         await self.db.commit()
-        return await self.get_prediction(prediction.document_page_id, prediction.id)
+        return await self.get_prediction_by_id(prediction.id)
 
     async def launch(self, dossier: Dossier, analyse: Analyse) -> None:
         """Marks the dossier as running and lays down one execution step per

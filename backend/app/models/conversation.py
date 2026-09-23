@@ -2,14 +2,46 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy import Column, Enum, ForeignKey, String, Table, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.document_page import BoundingBox, DocumentPage
     from app.models.dossier import Dossier, DossierDocument, ExecutionStep
+
+# Granularité d'une source, du plus large au plus précis : au minimum le
+# document (dossier_document_id ci-dessous), éventuellement affinée à un
+# ensemble de pages, ou plus précisément à un ensemble de bbox sur ces pages.
+message_source_pages = Table(
+    "message_source_pages",
+    Base.metadata,
+    Column(
+        "message_source_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("message_sources.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "document_page_id", PG_UUID(as_uuid=True), ForeignKey("document_pages.id", ondelete="CASCADE"), primary_key=True
+    ),
+)
+
+message_source_bounding_boxes = Table(
+    "message_source_bounding_boxes",
+    Base.metadata,
+    Column(
+        "message_source_id",
+        PG_UUID(as_uuid=True),
+        ForeignKey("message_sources.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "bounding_box_id", PG_UUID(as_uuid=True), ForeignKey("bounding_boxes.id", ondelete="CASCADE"), primary_key=True
+    ),
+)
 
 
 class MessageRole(enum.StrEnum):
@@ -69,3 +101,9 @@ class MessageSource(UUIDMixin, TimestampMixin, Base):
     message: Mapped["Message"] = relationship(back_populates="sources")
     document: Mapped["DossierDocument | None"] = relationship()
     execution_step: Mapped["ExecutionStep | None"] = relationship()
+    pages: Mapped[list["DocumentPage"]] = relationship(
+        secondary=message_source_pages, order_by="DocumentPage.page_number"
+    )
+    bounding_boxes: Mapped[list["BoundingBox"]] = relationship(
+        secondary=message_source_bounding_boxes, order_by="BoundingBox.created_at"
+    )

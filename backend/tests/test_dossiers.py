@@ -120,23 +120,36 @@ def test_execution_step_logs_and_completion(client: TestClient) -> None:
     assert step["ended_at"] is not None
 
 
-def test_document_pages_predictions_and_validation(client: TestClient) -> None:
-    analyse_id = _create_analyse(client, "Analyse pages")
-    dossier = client.post("/api/dossiers", json={"name": "Dossier pages", "analyse_id": analyse_id}).json()
+def _create_page(client: TestClient, document_id: str, page_number: int, content: str) -> dict:
+    return client.post(
+        f"/api/internal/documents/{document_id}/pages",
+        json={"page_number": page_number, "width": 1000, "height": 1400, "content": content},
+        headers=INTERNAL_HEADERS,
+    ).json()
+
+
+def _create_bbox(client: TestClient, page_id: str, **coords) -> dict:
+    return client.post(f"/api/internal/pages/{page_id}/bounding-boxes", json=coords, headers=INTERNAL_HEADERS).json()
+
+
+def test_classification_prediction_linked_to_one_page_and_label(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse classification")
+    analyse = client.get(f"/api/analyses/{analyse_id}").json()
+    label = client.put(
+        f"/api/analyses/{analyse_id}/classification/labels",
+        json={"labels": [{"name": "CNI", "definition": "Carte nationale d'identité."}]},
+    ).json()["classification"]["labels"][0]
+
+    dossier = client.post("/api/dossiers", json={"name": "Dossier classification", "analyse_id": analyse_id}).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
     ).json()
     document_id = dossier["documents"][0]["id"]
 
-    page = client.post(
-        f"/api/internal/documents/{document_id}/pages",
-        json={"page_number": 1, "width": 1000, "height": 1400, "content": "REPUBLIQUE FRANCAISE ..."},
-        headers=INTERNAL_HEADERS,
-    ).json()
-    assert page["page_number"] == 1
-    assert page["content"].startswith("REPUBLIQUE")
+    page = _create_page(client, document_id, 1, "REPUBLIQUE FRANCAISE ...")
     assert page["predictions"] == []
+    bbox = _create_bbox(client, page["id"], x_min=0.1, y_min=0.1, x_max=0.9, y_max=0.5)
 
     prediction = client.post(
         f"/api/internal/pages/{page['id']}/predictions",
@@ -145,22 +158,26 @@ def test_document_pages_predictions_and_validation(client: TestClient) -> None:
             "name": "CNI",
             "value": "CNI",
             "confidence": 0.96,
-            "bounding_box": {"x_min": 0.1, "y_min": 0.1, "x_max": 0.9, "y_max": 0.5},
+            "label_definition_id": label["id"],
+            "bounding_box_ids": [bbox["id"]],
         },
         headers=INTERNAL_HEADERS,
     ).json()
-    assert prediction["kind"] == "label"
-    assert prediction["bounding_box"]["x_max"] == 0.9
-    assert prediction["bounding_box"]["id"] is not None
+    # Une classification reste "simplement liée à une page" : l'ensemble n'a
+    # qu'un seul élément.
+    assert [p["id"] for p in prediction["pages"]] == [page["id"]]
+    assert [b["id"] for b in prediction["bounding_boxes"]] == [bbox["id"]]
+    assert prediction["label_definition_id"] == label["id"]
+    assert prediction["entity_definition_id"] is None
     assert prediction["validations"] == []
+    assert analyse["id"] == analyse_id  # sanity: le label créé plus haut appartient bien à cette analyse
 
     dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
     fetched_page = dossier["documents"][0]["pages"][0]
     assert fetched_page["predictions"][0]["name"] == "CNI"
     # La bbox de la prédiction est aussi rattachée à la page (nouvelle table
     # dédiée) : même bbox visible aux deux endroits.
-    assert len(fetched_page["bounding_boxes"]) == 1
-    assert fetched_page["bounding_boxes"][0]["id"] == prediction["bounding_box"]["id"]
+    assert [b["id"] for b in fetched_page["bounding_boxes"]] == [bbox["id"]]
 
     validated = client.put(
         f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}"
@@ -176,8 +193,50 @@ def test_document_pages_predictions_and_validation(client: TestClient) -> None:
     assert validated["validator_user_id"] == "dev-user"
     # La correction crée sa propre bbox, distincte de celle de la prédiction
     # d'origine (l'historique reste intact).
-    assert validated["bounding_box"]["id"] != prediction["bounding_box"]["id"]
+    assert validated["bounding_box"]["id"] != bbox["id"]
     assert validated["bounding_box"]["x_min"] == 0.12
+
+
+def test_entity_prediction_can_span_several_pages_and_bboxes(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse extraction")
+    entity = client.put(
+        f"/api/analyses/{analyse_id}/extraction/entities",
+        json={"entities": [{"name": "adresse", "definition": "Adresse postale.", "type": "texte"}]},
+    ).json()["extraction"]["entities"][0]
+
+    dossier = client.post("/api/dossiers", json={"name": "Dossier extraction", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("avis.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document_id = dossier["documents"][0]["id"]
+
+    page1 = _create_page(client, document_id, 1, "... suite page suivante")
+    page2 = _create_page(client, document_id, 2, "12 rue de la République, 75011 Paris")
+    bbox1 = _create_bbox(client, page1["id"], x_min=0.1, y_min=0.8, x_max=0.9, y_max=0.95)
+    bbox2 = _create_bbox(client, page2["id"], x_min=0.1, y_min=0.05, x_max=0.9, y_max=0.2)
+
+    prediction = client.post(
+        f"/api/internal/pages/{page1['id']}/predictions",
+        json={
+            "kind": "entity",
+            "name": "adresse",
+            "value": "12 rue de la République, 75011 Paris",
+            "entity_definition_id": entity["id"],
+            "page_ids": [page2["id"]],
+            "bounding_box_ids": [bbox1["id"], bbox2["id"]],
+        },
+        headers=INTERNAL_HEADERS,
+    ).json()
+    assert {p["id"] for p in prediction["pages"]} == {page1["id"], page2["id"]}
+    assert {b["id"] for b in prediction["bounding_boxes"]} == {bbox1["id"], bbox2["id"]}
+    assert prediction["entity_definition_id"] == entity["id"]
+    assert prediction["label_definition_id"] is None
+
+    # La prédiction apparaît sur ses deux pages, pas seulement la première.
+    dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
+    pages = dossier["documents"][0]["pages"]
+    assert all(prediction["id"] in [p["id"] for p in page["predictions"]] for page in pages)
 
 
 def test_assistant_message_with_sources(client: TestClient) -> None:
@@ -189,21 +248,32 @@ def test_assistant_message_with_sources(client: TestClient) -> None:
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
     ).json()
     document_id = dossier["documents"][0]["id"]
+    page = _create_page(client, document_id, 1, "REPUBLIQUE FRANCAISE ...")
+    bbox = _create_bbox(client, page["id"], x_min=0.1, y_min=0.1, x_max=0.9, y_max=0.5)
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
 
     conversation = client.post(
         f"/api/internal/conversations/{conversation['id']}/messages",
         json={
             "content": "Le document est une CNI.",
-            "sources": [{"dossier_document_id": document_id, "excerpt": "REPUBLIQUE FRANCAISE"}],
+            "sources": [
+                # À minima : le document entier.
+                {"dossier_document_id": document_id, "excerpt": "REPUBLIQUE FRANCAISE"},
+                # Plus précis : un ensemble de pages, ou de bbox.
+                {"dossier_document_id": document_id, "page_ids": [page["id"]]},
+                {"dossier_document_id": document_id, "bounding_box_ids": [bbox["id"]]},
+            ],
         },
         headers=INTERNAL_HEADERS,
     ).json()
     assert len(conversation["messages"]) == 1
     message = conversation["messages"][0]
     assert message["role"] == "assistant"
-    assert len(message["sources"]) == 1
+    assert len(message["sources"]) == 3
     assert message["sources"][0]["dossier_document_id"] == document_id
+    assert message["sources"][0]["pages"] == []
+    assert [p["id"] for p in message["sources"][1]["pages"]] == [page["id"]]
+    assert [b["id"] for b in message["sources"][2]["bounding_boxes"]] == [bbox["id"]]
 
 
 def test_execution_stream_sends_terminal_state(client: TestClient) -> None:
