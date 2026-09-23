@@ -43,7 +43,16 @@ repos:
         files: ^backend/
         pass_filenames: false
 
-      # worker/document_process et worker/agent_execution n'ont pas encore
-      # de tests (issues #4/#5, pas construits) : pas de hook pytest pour
-      # eux tant qu'il n'y a rien à collecter, `pytest` sort en erreur sur
-      # une suite vide. Le lint (ruff, ci-dessus) les couvre déjà.
+      - id: worker-document-process-tests
+        name: worker/document_process - pytest
+        entry: bash -c 'cd worker/document_process && uv run pytest -q'
+        language: system
+        files: ^worker/document_process/
+        pass_filenames: false
+
+      - id: worker-agent-execution-tests
+        name: worker/agent_execution - pytest
+        entry: bash -c 'cd worker/agent_execution && uv run pytest -q'
+        language: system
+        files: ^worker/agent_execution/
+        pass_filenames: false
