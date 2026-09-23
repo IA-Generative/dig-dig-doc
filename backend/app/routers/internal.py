@@ -9,6 +9,8 @@ from app.db import get_db
 from app.models.conversation import MessageRole
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
+    BoundingBoxIn,
+    BoundingBoxOut,
     ConversationOut,
     DocumentPageIn,
     DocumentPageOut,
@@ -61,6 +63,15 @@ async def add_document_page(document_id: uuid.UUID, body: DocumentPageIn, db: An
     )
 
 
+@router.post("/pages/{page_id}/bounding-boxes", response_model=BoundingBoxOut, status_code=status.HTTP_201_CREATED)
+async def add_bounding_box(page_id: uuid.UUID, body: BoundingBoxIn, db: Annotated[AsyncSession, Depends(get_db)]):
+    repository = DossierRepository(db)
+    page = await repository.get_page_by_id(page_id)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
+    return await repository.add_bounding_box(page, **body.model_dump())
+
+
 @router.post("/pages/{page_id}/predictions", response_model=DocumentPredictionOut, status_code=status.HTTP_201_CREATED)
 async def add_document_prediction(
     page_id: uuid.UUID, body: DocumentPredictionIn, db: Annotated[AsyncSession, Depends(get_db)]
@@ -75,7 +86,10 @@ async def add_document_prediction(
         name=body.name,
         value=body.value,
         confidence=body.confidence,
-        bounding_box=body.bounding_box.model_dump() if body.bounding_box else None,
+        label_definition_id=body.label_definition_id,
+        entity_definition_id=body.entity_definition_id,
+        page_ids=body.page_ids,
+        bounding_box_ids=body.bounding_box_ids,
     )
 
 
