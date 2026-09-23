@@ -1,0 +1,34 @@
+# Patterns to ignore when packaging the Helm chart.
+# Source: https://helm.sh/docs/chart_template_guide/#the-chart-file-structure
+# Common VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.hgignore
+.svn/
+# Common backup files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# Various IDEs
+.idea/
+*.DS_Store
+.vscode/
+# CI/CD
+.github/
+.gitlab-ci-dso.yml
+# Project-specific (anchored to chart root with ^ to avoid matching
+# templates/frontend/, templates/backend/, templates/worker_*/)
+^ci/
+^docker/
+^docs/
+^backend/
+^frontend/
+^worker/
+# Chart dependencies are re-pulled by helm dependency build
+# (do NOT ignore charts/ here - helm template needs them)
+Chart.lock

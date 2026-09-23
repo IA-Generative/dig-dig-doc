@@ -233,10 +233,10 @@ frontend:
   image:
     # -- Registry to use for the app.
     # @section -- Frontend
-    registry: "docker.io"
+    registry: "ghcr.io"
     # -- Repository to use for the app.
     # @section -- Frontend
-    repository: "debian"
+    repository: "ia-generative/dig-dig-doc/frontend"
     # -- Image pull policy for the app.
     # @section -- Frontend
     pullPolicy: "IfNotPresent"
@@ -1068,7 +1068,7 @@ jobs:
       deletePolicy: "before-hook-creation,hook-succeeded"
     image:
       registry: "ghcr.io"
-      repository: "digdigdoc/backend"
+      repository: "ia-generative/dig-dig-doc/backend"
       pullPolicy: "IfNotPresent"
       tag: ""
       digest: ""
@@ -1333,10 +1333,10 @@ backend:
   image:
     # -- Registry to use for the app.
     # @section -- Backend
-    registry: "docker.io"
+    registry: "ghcr.io"
     # -- Repository to use for the app.
     # @section -- Backend
-    repository: "debian"
+    repository: "ia-generative/dig-dig-doc/backend"
     # -- Image pull policy for the app.
     # @section -- Backend
     pullPolicy: "IfNotPresent"
@@ -2167,10 +2167,10 @@ worker_agent:
   image:
     # -- Registry to use for the app.
     # @section -- Worker_agent
-    registry: "docker.io"
+    registry: "ghcr.io"
     # -- Repository to use for the app.
     # @section -- Worker_agent
-    repository: "debian"
+    repository: "ia-generative/dig-dig-doc/worker-agent-execution"
     # -- Image pull policy for the app.
     # @section -- Worker_agent
     pullPolicy: "IfNotPresent"
@@ -3001,10 +3001,10 @@ worker_document:
   image:
     # -- Registry to use for the app.
     # @section -- Worker_document
-    registry: "docker.io"
+    registry: "ghcr.io"
     # -- Repository to use for the app.
     # @section -- Worker_document
-    repository: "debian"
+    repository: "ia-generative/dig-dig-doc/worker-document-process"
     # -- Image pull policy for the app.
     # @section -- Worker_document
     pullPolicy: "IfNotPresent"

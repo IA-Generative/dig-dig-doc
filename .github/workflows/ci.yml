@@ -37,6 +37,7 @@ jobs:
       worker_document_process: ${{ steps.filter.outputs.worker_document_process }}
       worker_agent_execution: ${{ steps.filter.outputs.worker_agent_execution }}
       ci: ${{ steps.filter.outputs.ci }}
+      helm: ${{ steps.filter.outputs.helm }}
       services: ${{ steps.services.outputs.services }}
     steps:
       - name: Checks-out repository
@@ -57,6 +58,9 @@ jobs:
               - 'worker/agent_execution/**'
             ci:
               - '.github/workflows/**'
+            helm:
+              - 'digdigdoc/**'
+              - 'ct.yaml'
 
       - name: Select images to build
         id: services
@@ -225,6 +229,17 @@ jobs:
       GITHUB_SECURITY_TAB: true
       CATEGORY: trivy-image-${{ matrix.service.name }}
 
+  lint-helm:
+    uses: dnum-mi/fabnum-cicd/.github/workflows/lint-helm.yml@v0
+    needs:
+      - path-filter
+    if: ${{ needs.path-filter.outputs.helm == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    permissions:
+      contents: read
+    with:
+      CT_CONF_PATH: ct.yaml
+      CHARTS_DIR: digdigdoc
+
   # Workaround for required status check in protection branches (see. https://github.com/orgs/community/discussions/13690)
   all-jobs-passed:
     name: Check jobs status
@@ -243,6 +258,7 @@ jobs:
       - scan-trivy-conf
       - build-docker
       - scan-trivy-images
+      - lint-helm
     steps:
       - name: Check status of all required jobs
         run: |-
