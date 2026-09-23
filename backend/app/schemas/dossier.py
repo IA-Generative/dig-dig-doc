@@ -26,6 +26,17 @@ class BoundingBoxOut(BaseModel):
     y_max: float
 
 
+class DocumentPageSummaryOut(BaseModel):
+    """Référence légère à une page, utilisée dans les schémas qui pointent
+    vers un ensemble de pages (prédiction, source de message) - la page
+    complète (avec ses prédictions) est déjà accessible via DossierOut."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    page_number: int
+
+
 class PredictionValidationIn(BaseModel):
     status: PredictionValidationStatus
     corrected_value: str | None = None
@@ -43,7 +54,12 @@ class PredictionValidationOut(BaseModel):
     created_at: datetime
 
 
-class DocumentPredictionOut(BaseModel):
+class DocumentPredictionSummaryOut(BaseModel):
+    """Vue nichée dans DocumentPageOut.predictions : pas de `pages` ici (on
+    est déjà sous une page) - la liste complète des pages d'une entité qui
+    s'étend sur plusieurs d'entre elles n'est disponible que sur la
+    prédiction elle-même (DocumentPredictionOut, endpoints dédiés)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
@@ -51,8 +67,20 @@ class DocumentPredictionOut(BaseModel):
     name: str
     value: str
     confidence: float | None
-    bounding_box: BoundingBoxOut | None
+    # Présent seulement si la définition existe encore (voir le commentaire
+    # sur DocumentPrediction.label_definition_id/entity_definition_id).
+    label_definition_id: uuid.UUID | None
+    entity_definition_id: uuid.UUID | None
+    # Une classification n'a qu'un élément ; une entité peut n'être
+    # localisée que par plusieurs zones, potentiellement sur d'autres pages.
+    bounding_boxes: list[BoundingBoxOut]
     validations: list[PredictionValidationOut]
+
+
+class DocumentPredictionOut(DocumentPredictionSummaryOut):
+    # Une classification n'a qu'un élément ; une entité peut s'étendre sur
+    # plusieurs pages.
+    pages: list[DocumentPageSummaryOut]
 
 
 class DocumentPageIn(BaseModel):
@@ -67,13 +95,25 @@ class DocumentPredictionIn(BaseModel):
     name: str
     value: str
     confidence: float | None = None
-    bounding_box: BoundingBoxIn | None = None
+    label_definition_id: uuid.UUID | None = None
+    entity_definition_id: uuid.UUID | None = None
+    # Pages/bbox additionnelles au-delà de la page de l'URL (POST
+    # .../pages/{page_id}/predictions) : toujours incluse dans le résultat,
+    # inutile de la répéter ici. Les bbox doivent déjà exister (voir POST
+    # .../pages/{page_id}/bounding-boxes).
+    page_ids: list[uuid.UUID] = []
+    bounding_box_ids: list[uuid.UUID] = []
 
 
 class MessageSourceIn(BaseModel):
     dossier_document_id: uuid.UUID | None = None
     execution_step_id: uuid.UUID | None = None
     excerpt: str | None = None
+    # Du plus large au plus précis : le document ci-dessus suffit à minima,
+    # mais la réponse peut citer un ensemble de pages ou, plus précisément,
+    # un ensemble de bbox (déjà créées) sur ces pages.
+    page_ids: list[uuid.UUID] = []
+    bounding_box_ids: list[uuid.UUID] = []
 
 
 class InternalMessageIn(BaseModel):
@@ -90,7 +130,7 @@ class DocumentPageOut(BaseModel):
     height: int | None
     content: str | None
     bounding_boxes: list[BoundingBoxOut]
-    predictions: list[DocumentPredictionOut]
+    predictions: list[DocumentPredictionSummaryOut]
 
 
 class DossierDocumentIn(BaseModel):
@@ -123,6 +163,8 @@ class MessageSourceOut(BaseModel):
     dossier_document_id: uuid.UUID | None
     execution_step_id: uuid.UUID | None
     excerpt: str | None
+    pages: list[DocumentPageSummaryOut]
+    bounding_boxes: list[BoundingBoxOut]
 
 
 class MessageIn(BaseModel):
