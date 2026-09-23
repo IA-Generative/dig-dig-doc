@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0-rc.2](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc.1...v0.3.0-rc.2) (2026-09-23)
+
+
+### Features
+
+* **backend,worker,frontend:** chat task with streaming + sources, markdown rendering, analyse description ([49fd177](https://github.com/IA-Generative/dig-dig-doc/commit/49fd17747e71900304a64a5b88742e23bfd260f2))
+* **worker,backend:** classification & entity extraction tasks ([c1602b5](https://github.com/IA-Generative/dig-dig-doc/commit/c1602b55020fe744fa30f48d09f66cf457bb50c8))
+
 ## [0.3.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc...v0.3.0-rc.1) (2026-09-23)
 
 
