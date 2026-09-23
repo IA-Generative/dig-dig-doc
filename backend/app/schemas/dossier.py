@@ -9,7 +9,17 @@ from app.models.dossier import DossierStatus, ExecutionStepKind, ExecutionStepSt
 from app.models.execution_log import ExecutionLogLevel
 
 
-class BoundingBox(BaseModel):
+class BoundingBoxIn(BaseModel):
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
+
+
+class BoundingBoxOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
     x_min: float
     y_min: float
     x_max: float
@@ -19,7 +29,7 @@ class BoundingBox(BaseModel):
 class PredictionValidationIn(BaseModel):
     status: PredictionValidationStatus
     corrected_value: str | None = None
-    bbox: BoundingBox | None = None
+    bounding_box: BoundingBoxIn | None = None
 
 
 class PredictionValidationOut(BaseModel):
@@ -29,7 +39,7 @@ class PredictionValidationOut(BaseModel):
     validator_user_id: str
     status: PredictionValidationStatus
     corrected_value: str | None
-    bbox: BoundingBox | None
+    bounding_box: BoundingBoxOut | None
     created_at: datetime
 
 
@@ -41,7 +51,7 @@ class DocumentPredictionOut(BaseModel):
     name: str
     value: str
     confidence: float | None
-    bbox: BoundingBox | None
+    bounding_box: BoundingBoxOut | None
     validations: list[PredictionValidationOut]
 
 
@@ -49,7 +59,6 @@ class DocumentPageIn(BaseModel):
     page_number: int
     width: int | None = None
     height: int | None = None
-    bbox: BoundingBox | None = None
     content: str | None = None
 
 
@@ -58,7 +67,7 @@ class DocumentPredictionIn(BaseModel):
     name: str
     value: str
     confidence: float | None = None
-    bbox: BoundingBox | None = None
+    bounding_box: BoundingBoxIn | None = None
 
 
 class MessageSourceIn(BaseModel):
@@ -79,8 +88,8 @@ class DocumentPageOut(BaseModel):
     page_number: int
     width: int | None
     height: int | None
-    bbox: BoundingBox | None
     content: str | None
+    bounding_boxes: list[BoundingBoxOut]
     predictions: list[DocumentPredictionOut]
 
 

@@ -174,7 +174,7 @@ async def validate_prediction(
         validator_user_id=user.user_id,
         status=body.status,
         corrected_value=body.corrected_value,
-        bbox=body.bbox.model_dump() if body.bbox else None,
+        bounding_box=body.bounding_box.model_dump() if body.bounding_box else None,
     )
     return updated.validations[-1]
 

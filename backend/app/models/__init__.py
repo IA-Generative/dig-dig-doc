@@ -12,6 +12,7 @@ from .analyse_share import AnalyseShare, AnalyseShareKind
 from .base import Base
 from .conversation import Conversation, Message, MessageRole, MessageSource
 from .document_page import (
+    BoundingBox,
     DocumentPage,
     DocumentPrediction,
     PredictionKind,
@@ -28,6 +29,7 @@ __all__ = [
     "AnalyseShare",
     "AnalyseShareKind",
     "Base",
+    "BoundingBox",
     "Conversation",
     "DocumentPage",
     "DocumentPrediction",
