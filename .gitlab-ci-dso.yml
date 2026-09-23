@@ -69,9 +69,7 @@ lint-frontend:
     - pnpm install --no-frozen-lockfile
     - pnpm run typecheck
 
-# --- Tests : même commandes que .github/workflows/unit-tests.yml. Seul le
-# backend a des tests aujourd'hui (les workers sont encore des squelettes,
-# voir le commentaire équivalent dans .pre-commit-config.yaml). ---
+# --- Tests : même commandes que .github/workflows/unit-tests.yml. ---
 
 unit-tests-backend:
   stage: test
@@ -95,6 +93,26 @@ unit-tests-backend:
     - cd backend
     - uv sync --group test
     - uv run alembic upgrade head
+    - uv run pytest -q
+
+unit-tests-worker-document-process:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/document_process
+    - uv sync
+    - uv run pytest -q
+
+unit-tests-worker-agent-execution:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/agent_execution
+    - uv sync
     - uv run pytest -q
 
 .docker-build-common:
