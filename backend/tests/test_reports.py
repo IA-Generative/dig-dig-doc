@@ -4,7 +4,11 @@ from fastapi.testclient import TestClient
 def test_create_and_list_my_reports(client: TestClient) -> None:
     response = client.post(
         "/api/reports",
-        data={"type": "bug", "title": "La sidebar clignote", "description": "Ça clignote au chargement."},
+        data={
+            "type": "bug",
+            "title": "La sidebar clignote",
+            "description": "Ça clignote au chargement.",
+        },
     )
     assert response.status_code == 201
     report = response.json()
@@ -13,14 +17,20 @@ def test_create_and_list_my_reports(client: TestClient) -> None:
     assert report["has_screenshot"] is False
     assert report["admin_response"] is None
 
-    listed = client.get("/api/reports").json()
+    listed = client.get("/api/reports").json()["items"]
     assert report["id"] in [r["id"] for r in listed]
 
 
-def test_create_report_with_screenshot_is_relayed_through_the_backend(client: TestClient) -> None:
+def test_create_report_with_screenshot_is_relayed_through_the_backend(
+    client: TestClient,
+) -> None:
     response = client.post(
         "/api/reports",
-        data={"type": "idea", "title": "Export PDF", "description": "Pouvoir exporter en PDF."},
+        data={
+            "type": "idea",
+            "title": "Export PDF",
+            "description": "Pouvoir exporter en PDF.",
+        },
         files={"screenshot": ("capture.png", b"fake-png-bytes", "image/png")},
     )
     assert response.status_code == 201
@@ -37,21 +47,29 @@ def test_reports_list_is_private_to_its_user(client: TestClient) -> None:
     from app.core.security.factory import RequestContext, get_current_user
     from app.main import app
 
-    client.post("/api/reports", data={"type": "question", "title": "Comment...", "description": "..."})
+    client.post(
+        "/api/reports",
+        data={"type": "question", "title": "Comment...", "description": "..."},
+    )
 
     def as_other_user() -> RequestContext:
         return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:
-        assert client.get("/api/reports").json() == []
+        assert client.get("/api/reports").json()["items"] == []
     finally:
         del app.dependency_overrides[get_current_user]
 
 
 def test_admin_can_list_and_respond_to_reports(client: TestClient) -> None:
     created = client.post(
-        "/api/reports", data={"type": "bug", "title": "Titre unique pour le test admin", "description": "Description"}
+        "/api/reports",
+        data={
+            "type": "bug",
+            "title": "Titre unique pour le test admin",
+            "description": "Description",
+        },
     ).json()
 
     listed = client.get("/api/admin/reports", params={"page_size": 100}).json()
@@ -73,7 +91,12 @@ def test_admin_reports_route_is_forbidden_for_non_admin(client: TestClient) -> N
     from app.main import app
 
     def as_non_admin() -> RequestContext:
-        return RequestContext(user_id="regular-user", email="regular@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="regular-user",
+            email="regular@example.com",
+            roles=[],
+            is_admin=False,
+        )
 
     app.dependency_overrides[get_current_user] = as_non_admin
     try:

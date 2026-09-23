@@ -8,14 +8,20 @@ def _create_analyse(client: TestClient, name: str = "Analyse dossier test") -> s
 
 
 def test_dossier_requires_an_existing_analyse(client: TestClient) -> None:
-    response = client.post("/api/dossiers", json={"name": "Dossier orphelin", "analyse_id": str(uuid.uuid4())})
+    response = client.post(
+        "/api/dossiers",
+        json={"name": "Dossier orphelin", "analyse_id": str(uuid.uuid4())},
+    )
     assert response.status_code == 400
 
 
 def test_list_dossiers_is_paginated(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse pagination dossiers")
     for i in range(5):
-        client.post("/api/dossiers", json={"name": f"Dossier pagination {i}", "analyse_id": analyse_id})
+        client.post(
+            "/api/dossiers",
+            json={"name": f"Dossier pagination {i}", "analyse_id": analyse_id},
+        )
 
     first_page = client.get("/api/dossiers", params={"page": 1, "page_size": 2}).json()
     assert len(first_page["items"]) == 2
@@ -51,7 +57,12 @@ def test_launch_adds_one_step_per_agent(client: TestClient) -> None:
     analyse_id = _create_analyse(client, "Analyse avec agent")
     client.post(
         f"/api/analyses/{analyse_id}/agents",
-        json={"name": "Cohérence", "prompt": "Vérifie la cohérence.", "tools": [], "output": True},
+        json={
+            "name": "Cohérence",
+            "prompt": "Vérifie la cohérence.",
+            "tools": [],
+            "output": True,
+        },
     )
 
     dossier = client.post("/api/dossiers", json={"name": "Dossier avec agent", "analyse_id": analyse_id}).json()
@@ -77,7 +88,8 @@ def test_document_upload_and_label(client: TestClient) -> None:
     assert document["label"] is None
 
     updated = client.put(
-        f"/api/dossiers/{dossier['id']}/documents/{document['id']}/label", json={"label": "CNI"}
+        f"/api/dossiers/{dossier['id']}/documents/{document['id']}/label",
+        json={"label": "CNI"},
     ).json()
     assert updated["label"] == "CNI"
 
@@ -110,7 +122,9 @@ def test_internal_set_extraction_status(client: TestClient) -> None:
     headers = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
 
     started = client.put(
-        f"/api/internal/documents/{document_id}/extraction-status", json={"status": "en_cours"}, headers=headers
+        f"/api/internal/documents/{document_id}/extraction-status",
+        json={"status": "en_cours"},
+        headers=headers,
     ).json()
     assert started["text_extraction_status"] == "en_cours"
 
@@ -133,7 +147,8 @@ def test_internal_get_document_returns_s3_key_for_worker(client: TestClient) -> 
     document = dossier["documents"][0]
 
     response = client.get(
-        f"/api/internal/documents/{document['id']}", headers={"X-App-Token": "dev-only-worker-token-not-for-prod"}
+        f"/api/internal/documents/{document['id']}",
+        headers={"X-App-Token": "dev-only-worker-token-not-for-prod"},
     )
     assert response.status_code == 200
     body = response.json()
@@ -161,7 +176,7 @@ def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     assert conversation["messages"][0]["role"] == "user"
     assert conversation["messages"][0]["content"] == "Quel est le statut du dossier ?"
 
-    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(listed) == 1
     assert listed[0]["id"] == conversation["id"]
 
@@ -179,7 +194,7 @@ def test_create_conversation_is_idempotent_per_user(client: TestClient) -> None:
     second = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     assert first["id"] == second["id"]
 
-    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(listed) == 1
 
 
@@ -205,7 +220,7 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     app.dependency_overrides[get_current_user] = as_other_user
     try:
         # Pas dans la liste de l'autre utilisateur...
-        other_listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+        other_listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
         assert other_listed == []
 
         # ...et une nouvelle conversation pour cet utilisateur, pas la même.
@@ -223,7 +238,7 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
         del app.dependency_overrides[get_current_user]
 
     # Le message de l'autre utilisateur n'a pas fuité dans la conversation du propriétaire.
-    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(owner_view) == 1
     assert len(owner_view[0]["messages"]) == 1
     assert owner_view[0]["messages"][0]["content"] == "Message du propriétaire"
@@ -237,11 +252,12 @@ def test_conversation_model_can_be_chosen(client: TestClient) -> None:
     assert conversation["model"] is None
 
     updated = client.put(
-        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/model", json={"model": "gpt-4o"}
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/model",
+        json={"model": "gpt-4o"},
     ).json()
     assert updated["model"] == "gpt-4o"
 
-    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert listed[0]["model"] == "gpt-4o"
 
 
@@ -249,9 +265,7 @@ def test_delete_conversation_only_removes_the_conversation(client: TestClient) -
     """Supprimer une conversation ne doit toucher qu'elle (et ses messages) :
     le dossier et ses documents restent intacts."""
     analyse_id = _create_analyse(client, "Analyse suppression conversation")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier à garder", "analyse_id": analyse_id}).json()[
-        "id"
-    ]
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier à garder", "analyse_id": analyse_id}).json()["id"]
     client.post(
         f"/api/dossiers/{dossier_id}/documents",
         files={"files": ("note.txt", b"contenu", "text/plain")},
@@ -266,7 +280,7 @@ def test_delete_conversation_only_removes_the_conversation(client: TestClient) -
     response = client.delete(f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}")
     assert response.status_code == 204
 
-    assert client.get(f"/api/dossiers/{dossier_id}/conversations").json() == []
+    assert client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"] == []
 
     dossier = client.get(f"/api/dossiers/{dossier_id}").json()
     assert dossier["id"] == dossier_id
@@ -280,9 +294,7 @@ def test_delete_conversation_is_private_to_its_user(client: TestClient) -> None:
     from app.main import app
 
     analyse_id = _create_analyse(client, "Analyse suppression privée")
-    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé 2", "analyse_id": analyse_id}).json()[
-        "id"
-    ]
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé 2", "analyse_id": analyse_id}).json()["id"]
     owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
 
     def as_other_user() -> RequestContext:
@@ -295,7 +307,7 @@ def test_delete_conversation_is_private_to_its_user(client: TestClient) -> None:
     finally:
         del app.dependency_overrides[get_current_user]
 
-    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(owner_view) == 1
     assert owner_view[0]["id"] == owner_conversation["id"]
 
@@ -342,13 +354,22 @@ def test_execution_step_logs_and_completion(client: TestClient) -> None:
 def _create_page(client: TestClient, document_id: str, page_number: int, content: str) -> dict:
     return client.post(
         f"/api/internal/documents/{document_id}/pages",
-        json={"page_number": page_number, "width": 1000, "height": 1400, "content": content},
+        json={
+            "page_number": page_number,
+            "width": 1000,
+            "height": 1400,
+            "content": content,
+        },
         headers=INTERNAL_HEADERS,
     ).json()
 
 
 def _create_bbox(client: TestClient, page_id: str, **coords) -> dict:
-    return client.post(f"/api/internal/pages/{page_id}/bounding-boxes", json=coords, headers=INTERNAL_HEADERS).json()
+    return client.post(
+        f"/api/internal/pages/{page_id}/bounding-boxes",
+        json=coords,
+        headers=INTERNAL_HEADERS,
+    ).json()
 
 
 def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> None:
@@ -363,7 +384,9 @@ def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> N
     document_id = dossier["documents"][0]["id"]
 
     page_without_screenshot = client.post(
-        f"/api/internal/documents/{document_id}/pages", json={"page_number": 1}, headers=INTERNAL_HEADERS
+        f"/api/internal/documents/{document_id}/pages",
+        json={"page_number": 1},
+        headers=INTERNAL_HEADERS,
     ).json()
     assert page_without_screenshot["has_screenshot"] is False
     response = client.get(
@@ -388,7 +411,9 @@ def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> N
     assert response.headers["content-type"] == "image/png"
 
 
-def test_classification_prediction_linked_to_one_page_and_label(client: TestClient) -> None:
+def test_classification_prediction_linked_to_one_page_and_label(
+    client: TestClient,
+) -> None:
     analyse_id = _create_analyse(client, "Analyse classification")
     analyse = client.get(f"/api/analyses/{analyse_id}").json()
     label = client.put(
@@ -396,7 +421,10 @@ def test_classification_prediction_linked_to_one_page_and_label(client: TestClie
         json={"labels": [{"name": "CNI", "definition": "Carte nationale d'identité."}]},
     ).json()["classification"]["labels"][0]
 
-    dossier = client.post("/api/dossiers", json={"name": "Dossier classification", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers",
+        json={"name": "Dossier classification", "analyse_id": analyse_id},
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -453,7 +481,9 @@ def test_classification_prediction_linked_to_one_page_and_label(client: TestClie
     assert validated["bounding_box"]["x_min"] == 0.12
 
 
-def test_entity_prediction_can_span_several_pages_and_bboxes(client: TestClient) -> None:
+def test_entity_prediction_can_span_several_pages_and_bboxes(
+    client: TestClient,
+) -> None:
     analyse_id = _create_analyse(client, "Analyse extraction")
     entity = client.put(
         f"/api/analyses/{analyse_id}/extraction/entities",
@@ -561,7 +591,8 @@ def _create_conversation_with_message(client: TestClient, dossier_name: str) -> 
     dossier_id = client.post("/api/dossiers", json={"name": dossier_name, "analyse_id": analyse_id}).json()["id"]
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     conversation = client.post(
-        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages", json={"content": "Un message"}
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages",
+        json={"content": "Un message"},
     ).json()
     message_id = conversation["messages"][0]["id"]
     return dossier_id, conversation["id"], message_id
@@ -570,12 +601,16 @@ def _create_conversation_with_message(client: TestClient, dossier_name: str) -> 
 def test_message_feedback_lifecycle(client: TestClient) -> None:
     dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour")
 
-    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()[0]
+    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"][0]
     assert conversation["messages"][0]["feedback"] is None
 
     conversation = client.put(
         f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
-        json={"value": "down", "reasons": ["incorrect_answer", "not_useful"], "comment": "Pas la bonne réponse"},
+        json={
+            "value": "down",
+            "reasons": ["incorrect_answer", "not_useful"],
+            "comment": "Pas la bonne réponse",
+        },
     ).json()
     feedback = conversation["messages"][0]["feedback"]
     assert feedback["value"] == "down"

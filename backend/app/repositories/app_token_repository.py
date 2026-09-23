@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.share_token import generate_token, hash_token
@@ -24,6 +24,13 @@ class AppTokenRepository:
     async def list_all(self) -> Sequence[AppToken]:
         result = await self.db.execute(select(AppToken).order_by(AppToken.created_at.desc()))
         return result.scalars().all()
+
+    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[AppToken], int]:
+        total = await self.db.scalar(select(func.count()).select_from(AppToken))
+        result = await self.db.execute(
+            select(AppToken).order_by(AppToken.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+        )
+        return result.scalars().all(), total or 0
 
     async def get(self, token_id: uuid.UUID) -> AppToken | None:
         result = await self.db.execute(select(AppToken).where(AppToken.id == token_id))

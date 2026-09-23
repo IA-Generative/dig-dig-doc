@@ -10,7 +10,7 @@ def test_create_list_and_use_app_token(client: TestClient) -> None:
     token = created["token"]
     assert token
 
-    listed = client.get("/api/app-tokens").json()
+    listed = client.get("/api/app-tokens").json()["items"]
     assert any(t["id"] == created["id"] for t in listed)
     # Le jeton en clair n'est jamais renvoyé une seconde fois.
     assert all("token" not in t for t in listed)

@@ -47,6 +47,20 @@ class AnalyseRepository:
         )
         return result.scalars().all(), total or 0
 
+    async def list_shares_paginated(
+        self, *, analyse_id: uuid.UUID, page: int, page_size: int
+    ) -> tuple[Sequence[AnalyseShare], int]:
+        count_query = select(func.count()).select_from(AnalyseShare).where(AnalyseShare.analyse_id == analyse_id)
+        total = await self.db.scalar(count_query)
+        result = await self.db.execute(
+            select(AnalyseShare)
+            .where(AnalyseShare.analyse_id == analyse_id)
+            .order_by(AnalyseShare.created_at.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
+        )
+        return result.scalars().all(), total or 0
+
     async def get(self, analyse_id: uuid.UUID) -> Analyse | None:
         result = await self.db.execute(self._base_query().where(Analyse.id == analyse_id))
         return result.scalar_one_or_none()
@@ -60,9 +74,20 @@ class AnalyseRepository:
 
     # --- Versioning: a single mechanism reused for every editable field ---
 
-    def _record_version(self, analyse: Analyse, field: VersionedField, content, agent: Agent | None = None) -> None:
+    def _record_version(
+        self,
+        analyse: Analyse,
+        field: VersionedField,
+        content,
+        agent: Agent | None = None,
+    ) -> None:
         self.db.add(
-            FieldVersion(analyse_id=analyse.id, agent_id=agent.id if agent else None, field=field, content=content)
+            FieldVersion(
+                analyse_id=analyse.id,
+                agent_id=agent.id if agent else None,
+                field=field,
+                content=content,
+            )
         )
 
     def field_versions(self, analyse: Analyse, field: VersionedField, agent_id: uuid.UUID | None = None):
@@ -71,7 +96,11 @@ class AnalyseRepository:
         ]
 
     async def restore_field_version(
-        self, analyse: Analyse, field: VersionedField, version_id: uuid.UUID, agent: Agent | None = None
+        self,
+        analyse: Analyse,
+        field: VersionedField,
+        version_id: uuid.UUID,
+        agent: Agent | None = None,
     ) -> None:
         agent_id = agent.id if agent else None
         version = next(
@@ -139,7 +168,12 @@ class AnalyseRepository:
         for existing in list(analyse.entities):
             await self.db.delete(existing)
         analyse.entities = [
-            EntityDefinition(analyse_id=analyse.id, name=ent.name, definition=ent.definition, type=ent.type)
+            EntityDefinition(
+                analyse_id=analyse.id,
+                name=ent.name,
+                definition=ent.definition,
+                type=ent.type,
+            )
             for ent in entities
         ]
         await self.db.commit()
@@ -158,7 +192,12 @@ class AnalyseRepository:
         model: str | None = None,
     ) -> Agent:
         agent = Agent(
-            analyse_id=analyse.id, name=name, prompt=prompt, tools=[t.value for t in tools], output=output, model=model
+            analyse_id=analyse.id,
+            name=name,
+            prompt=prompt,
+            tools=[t.value for t in tools],
+            output=output,
+            model=model,
         )
         self.db.add(agent)
         await self.db.commit()
@@ -213,7 +252,10 @@ class AnalyseRepository:
     # built by hand here rather than relying on Pydantic's from_attributes. ---
 
     def to_agent_schema(self, analyse: Analyse, agent: Agent) -> "AgentOut":
-        from app.schemas.analyse import AgentOut, LabelDefinitionOut, Version  # noqa: F401
+        from app.schemas.analyse import (
+            AgentOut,
+            Version,
+        )  # noqa: F401
 
         return AgentOut(
             id=agent.id,
@@ -225,7 +267,11 @@ class AnalyseRepository:
             ],
             tools=[AgentTool(t) for t in agent.tools],
             tools_versions=[
-                Version(id=v.id, content=[AgentTool(t) for t in v.content], created_at=v.created_at)
+                Version(
+                    id=v.id,
+                    content=[AgentTool(t) for t in v.content],
+                    created_at=v.created_at,
+                )
                 for v in self.field_versions(analyse, VersionedField.AGENT_TOOLS, agent.id)
             ],
             output=agent.output,
