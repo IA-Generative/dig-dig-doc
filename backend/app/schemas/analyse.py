@@ -55,6 +55,9 @@ class AgentCreate(BaseModel):
     prompt: str
     tools: list[AgentTool] = []
     output: bool = True
+    # Identifiant de modèle tel que renvoyé par GET /models ; None = pas de
+    # préférence, le hub par défaut sera utilisé.
+    model: str | None = None
 
 
 class AgentOut(BaseModel):
@@ -68,6 +71,8 @@ class AgentOut(BaseModel):
     tools_versions: list[Version[list[AgentTool]]]
     output: bool
     output_versions: list[Version[bool]]
+    model: str | None
+    model_versions: list[Version[str | None]]
 
 
 class AnalyseCreate(BaseModel):
@@ -115,6 +120,10 @@ class ToolsUpdate(BaseModel):
 
 class OutputUpdate(BaseModel):
     output: bool
+
+
+class ModelUpdate(BaseModel):
+    model: str | None
 
 
 class AnalyseShareCreate(BaseModel):

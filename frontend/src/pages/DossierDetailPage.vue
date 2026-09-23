@@ -7,6 +7,7 @@ import DossierResults from "@/components/dossiers/DossierResults.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
+import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
@@ -14,8 +15,20 @@ const route = useRoute();
 const dossierId = String(route.params.id);
 const { list: dossiers, addDocuments, fetchDossier, streamDossier } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
-const { conversation, ensureConversation, sendMessage } = useConversations(dossierId);
+const { conversation, ensureConversation, sendMessage, deleteConversation, setModel } = useConversations(dossierId);
 const { fetchList: refreshSidebarConversations } = useMyConversations();
+const { models, fetchModels } = useModels();
+
+// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
+// pas de valeur null pour une option.
+const modelOptions = computed(() => [
+  { value: "", text: "Modèle par défaut du hub" },
+  ...models.value.map((id) => ({ value: id, text: id })),
+]);
+
+function onModelChange(value: string) {
+  setModel(value || null);
+}
 
 const dossier = computed(() => dossiers.value.find((d) => d.id === dossierId));
 const analyse = computed(() => (dossier.value ? getAnalyseById(dossier.value.analyseId) : undefined));
@@ -31,6 +44,7 @@ onMounted(async () => {
   // dans la sidebar (voir App.vue, qui rafraîchit aussi sur la navigation).
   await ensureConversation();
   refreshSidebarConversations();
+  fetchModels();
   // Le dossier n'est pas forcément dans la page actuellement chargée par
   // DossiersPage (pagination côté serveur) : on le charge directement.
   const loaded = await fetchDossier(dossierId);
@@ -70,6 +84,12 @@ const draft = ref("");
 const pendingFiles = ref<File[]>([]);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const isDetailsModalOpened = ref(false);
+
+function formatDateTime(iso?: string) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}
 
 function resizeTextarea() {
   const el = textareaRef.value;
@@ -116,6 +136,15 @@ async function submit() {
   // Le libellé/l'horodatage affichés dans la sidebar viennent de changer.
   refreshSidebarConversations();
 }
+
+async function onDeleteConversation() {
+  if (!confirm("Supprimer cette conversation ? Le dossier et ses documents ne seront pas affectés.")) return;
+  // Ne supprime que la conversation : le dossier reste ouvert, on en
+  // recrée aussitôt une nouvelle (vide) pour pouvoir continuer à échanger.
+  await deleteConversation();
+  await ensureConversation();
+  refreshSidebarConversations();
+}
 </script>
 
 <template>
@@ -126,13 +155,43 @@ async function submit() {
 
     <div class="dossier-detail__header">
       <div>
-        <h1 class="fr-h2">{{ dossier.name }}</h1>
+        <div class="dossier-detail__title">
+          <h1 class="fr-h2">{{ dossier.name }}</h1>
+          <button
+            type="button"
+            class="dossier-detail__icon-button"
+            aria-label="Voir le détail du dossier"
+            title="Voir le détail du dossier"
+            @click="isDetailsModalOpened = true"
+          >
+            <VIcon name="ri-information-line" />
+          </button>
+        </div>
         <p class="fr-text--sm">
           Analyse : <RouterLink :to="`/analyses/${dossier.analyseId}`">{{ analyse?.name ?? "introuvable" }}</RouterLink>
           · Version {{ dossier.analyseVersion }}
         </p>
       </div>
-      <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
+      <div class="dossier-detail__header-actions">
+        <DsfrSelect
+          :model-value="conversation?.model ?? ''"
+          label="Modèle"
+          hide-label
+          :options="modelOptions"
+          class="dossier-detail__model-select"
+          @update:model-value="onModelChange"
+        />
+        <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
+        <button
+          type="button"
+          class="dossier-detail__icon-button"
+          aria-label="Supprimer cette conversation"
+          title="Supprimer cette conversation"
+          @click="onDeleteConversation"
+        >
+          <VIcon name="ri-delete-bin-line" />
+        </button>
+      </div>
     </div>
 
     <DossierDocuments :documents="dossier.documents" />
@@ -211,6 +270,53 @@ async function submit() {
         </div>
       </form>
     </section>
+
+    <DsfrModal
+      :opened="isDetailsModalOpened"
+      @close="isDetailsModalOpened = false"
+      title="Détail du dossier"
+      icon="ri-folder-info-line"
+      size="lg"
+    >
+      <dl class="dossier-details-modal__info">
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Nom</dt>
+          <dd>{{ dossier.name }}</dd>
+        </div>
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Statut</dt>
+          <dd>
+            <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small />
+          </dd>
+        </div>
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Créé le</dt>
+          <dd>{{ formatDateTime(dossier.createdAt) }}</dd>
+        </div>
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Lancé le</dt>
+          <dd>{{ formatDateTime(dossier.startedAt) }}</dd>
+        </div>
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Terminé le</dt>
+          <dd>{{ formatDateTime(dossier.endedAt) }}</dd>
+        </div>
+        <div class="dossier-details-modal__row">
+          <dt class="fr-text--sm">Analyse</dt>
+          <dd>
+            <RouterLink :to="`/analyses/${dossier.analyseId}`" class="fr-link" @click="isDetailsModalOpened = false">
+              {{ analyse?.name ?? "introuvable" }}
+            </RouterLink>
+            · Version {{ dossier.analyseVersion }}
+          </dd>
+        </div>
+      </dl>
+
+      <p v-if="dossier.documents.length === 0" class="fr-text--sm dossier-details-modal__no-files">
+        Aucun fichier pour l'instant.
+      </p>
+      <DossierDocuments v-else :documents="dossier.documents" />
+    </DsfrModal>
   </div>
   <div v-else>
     <p>Dossier introuvable.</p>
@@ -238,6 +344,49 @@ async function submit() {
   gap: 1rem;
   margin-bottom: 1.5rem;
   flex-shrink: 0;
+}
+
+.dossier-detail__title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dossier-detail__title .fr-h2 {
+  margin-bottom: 0;
+}
+
+.dossier-detail__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dossier-detail__model-select {
+  min-width: 10rem;
+}
+
+.dossier-detail__model-select :deep(.fr-select-group) {
+  margin: 0;
+}
+
+.dossier-detail__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border-default-grey);
+  border-radius: 50%;
+  background: var(--background-default-grey);
+  color: var(--text-default-grey);
+  cursor: pointer;
+}
+
+.dossier-detail__icon-button:hover {
+  background: var(--background-alt-grey-hover);
 }
 
 /* Style repris de Muffin (frontend/src/components/ChatWindow.vue et
@@ -402,5 +551,35 @@ async function submit() {
   background: var(--background-disabled-grey);
   color: var(--text-disabled-grey);
   cursor: not-allowed;
+}
+
+.dossier-details-modal__info {
+  margin: 0 0 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.dossier-details-modal__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.625rem;
+  border-bottom: 1px solid var(--border-default-grey);
+}
+
+.dossier-details-modal__row dt {
+  color: var(--text-mention-grey);
+  flex-shrink: 0;
+}
+
+.dossier-details-modal__row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.dossier-details-modal__no-files {
+  color: var(--text-mention-grey);
 }
 </style>

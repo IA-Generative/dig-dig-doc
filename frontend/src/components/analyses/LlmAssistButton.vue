@@ -1,21 +1,76 @@
 <script setup lang="ts">
-withDefaults(defineProps<{ label?: string; compact?: boolean }>(), { label: "Aide LLM", compact: false });
+import { computed, onMounted } from "vue";
+
+import { useModels } from "@/composables/useModels";
+
+withDefaults(defineProps<{ label?: string; compact?: boolean; loading?: boolean }>(), {
+  label: "Aide LLM",
+  compact: false,
+  loading: false,
+});
+const emit = defineEmits<{ click: [model: string | null] }>();
+
+// Préférence de modèle partagée par toute l'application (voir useModels.ts) :
+// un bouton compact (aide inline sur un champ) réutilise la dernière valeur
+// choisie ailleurs plutôt que d'afficher son propre sélecteur.
+const { models, fetchModels, assistModel } = useModels();
+onMounted(fetchModels);
+
+const modelOptions = computed(() => [
+  { value: "", text: "Modèle par défaut du hub" },
+  ...models.value.map((id) => ({ value: id, text: id })),
+]);
+
+function onClick() {
+  emit("click", assistModel.value || null);
+}
 </script>
 
 <template>
-  <button
-    type="button"
-    class="llm-assist-button"
-    :class="{ 'llm-assist-button--compact': compact }"
-    :title="compact ? label : undefined"
-  >
-    <VIcon name="ri-sparkling-2-fill" class="llm-assist-button__icon" />
-    <span v-if="!compact">{{ label }}</span>
-    <span v-else class="fr-sr-only">{{ label }}</span>
-  </button>
+  <div class="llm-assist" :class="{ 'llm-assist--compact': compact }">
+    <DsfrSelect
+      v-if="!compact"
+      v-model="assistModel"
+      label="Modèle"
+      hide-label
+      :options="modelOptions"
+      :disabled="loading"
+      class="llm-assist__model"
+    />
+    <button
+      type="button"
+      class="llm-assist-button"
+      :class="{ 'llm-assist-button--compact': compact }"
+      :title="compact ? label : undefined"
+      :disabled="loading"
+      @click="onClick"
+    >
+      <VIcon
+        :name="loading ? 'ri-loader-4-line' : 'ri-sparkling-2-fill'"
+        class="llm-assist-button__icon"
+        :class="{ 'llm-assist-button__icon--spin': loading }"
+      />
+      <span v-if="!compact">{{ loading ? "Génération..." : label }}</span>
+      <span v-else class="fr-sr-only">{{ label }}</span>
+    </button>
+  </div>
 </template>
 
 <style scoped>
+.llm-assist {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.llm-assist__model {
+  min-width: 10rem;
+}
+
+.llm-assist__model :deep(.fr-select-group) {
+  margin: 0;
+}
+
 .llm-assist-button {
   display: inline-flex;
   align-items: center;
@@ -56,7 +111,25 @@ withDefaults(defineProps<{ label?: string; compact?: boolean }>(), { label: "Aid
   outline-offset: 2px;
 }
 
+.llm-assist-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .llm-assist-button__icon {
   font-size: 1rem;
+}
+
+.llm-assist-button__icon--spin {
+  animation: llm-assist-spin 0.8s linear infinite;
+}
+
+@keyframes llm-assist-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

@@ -20,6 +20,7 @@ from app.schemas.analyse import (
     AnalyseShareOut,
     EntitiesUpdate,
     LabelsUpdate,
+    ModelUpdate,
     OutputUpdate,
     PromptUpdate,
     ToolsUpdate,
@@ -169,7 +170,7 @@ async def add_agent(analyse_id: uuid.UUID, body: AgentCreate, db: Annotated[Asyn
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
     agent = await repository.add_agent(
-        analyse, name=body.name, prompt=body.prompt, tools=body.tools, output=body.output
+        analyse, name=body.name, prompt=body.prompt, tools=body.tools, output=body.output, model=body.model
     )
     analyse = await _get_or_404(repository, analyse_id)
     return repository.to_agent_schema(analyse, repository.get_agent(analyse, agent.id))
@@ -238,6 +239,28 @@ async def restore_agent_output(
     analyse = await _get_or_404(repository, analyse_id)
     agent = _get_agent_or_404(repository, analyse, agent_id)
     await repository.restore_field_version(analyse, VersionedField.AGENT_OUTPUT, version_id, agent)
+    return repository.to_agent_schema(analyse, agent)
+
+
+@router.put("/{analyse_id}/agents/{agent_id}/model", response_model=AgentOut)
+async def update_agent_model(
+    analyse_id: uuid.UUID, agent_id: uuid.UUID, body: ModelUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+) -> AgentOut:
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    agent = _get_agent_or_404(repository, analyse, agent_id)
+    await repository.update_agent_model(analyse, agent, body.model)
+    return repository.to_agent_schema(analyse, agent)
+
+
+@router.post("/{analyse_id}/agents/{agent_id}/model/restore/{version_id}", response_model=AgentOut)
+async def restore_agent_model(
+    analyse_id: uuid.UUID, agent_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+) -> AgentOut:
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    agent = _get_agent_or_404(repository, analyse, agent_id)
+    await repository.restore_field_version(analyse, VersionedField.AGENT_MODEL, version_id, agent)
     return repository.to_agent_schema(analyse, agent)
 
 

@@ -183,6 +183,12 @@ class MessageIn(BaseModel):
     content: str
 
 
+class ConversationModelUpdate(BaseModel):
+    # Identifiant de modèle tel que renvoyé par GET /models ; None = pas de
+    # préférence, le hub par défaut sera utilisé.
+    model: str | None
+
+
 class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -200,6 +206,7 @@ class ConversationOut(BaseModel):
     dossier_id: uuid.UUID
     user_id: str
     created_at: datetime
+    model: str | None
     messages: list[MessageOut]
 
 

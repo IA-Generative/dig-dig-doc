@@ -97,6 +97,8 @@ class AnalyseRepository:
             await self.update_agent_tools(analyse, agent, [AgentTool(t) for t in content])
         elif field == VersionedField.AGENT_OUTPUT and agent:
             await self.update_agent_output(analyse, agent, content)
+        elif field == VersionedField.AGENT_MODEL and agent:
+            await self.update_agent_model(analyse, agent, content)
 
     # --- Classification ---
 
@@ -146,9 +148,18 @@ class AnalyseRepository:
     # --- Agents ---
 
     async def add_agent(
-        self, analyse: Analyse, *, name: str, prompt: str, tools: list[AgentTool], output: bool
+        self,
+        analyse: Analyse,
+        *,
+        name: str,
+        prompt: str,
+        tools: list[AgentTool],
+        output: bool,
+        model: str | None = None,
     ) -> Agent:
-        agent = Agent(analyse_id=analyse.id, name=name, prompt=prompt, tools=[t.value for t in tools], output=output)
+        agent = Agent(
+            analyse_id=analyse.id, name=name, prompt=prompt, tools=[t.value for t in tools], output=output, model=model
+        )
         self.db.add(agent)
         await self.db.commit()
         await self.db.refresh(analyse)
@@ -179,6 +190,14 @@ class AnalyseRepository:
             return
         self._record_version(analyse, VersionedField.AGENT_OUTPUT, agent.output, agent)
         agent.output = output
+        await self.db.commit()
+        await self.db.refresh(analyse)
+
+    async def update_agent_model(self, analyse: Analyse, agent: Agent, model: str | None) -> None:
+        if agent.model == model:
+            return
+        self._record_version(analyse, VersionedField.AGENT_MODEL, agent.model, agent)
+        agent.model = model
         await self.db.commit()
         await self.db.refresh(analyse)
 
@@ -213,6 +232,11 @@ class AnalyseRepository:
             output_versions=[
                 Version(id=v.id, content=v.content, created_at=v.created_at)
                 for v in self.field_versions(analyse, VersionedField.AGENT_OUTPUT, agent.id)
+            ],
+            model=agent.model,
+            model_versions=[
+                Version(id=v.id, content=v.content, created_at=v.created_at)
+                for v in self.field_versions(analyse, VersionedField.AGENT_MODEL, agent.id)
             ],
         )
 

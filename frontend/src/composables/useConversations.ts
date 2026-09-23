@@ -13,6 +13,7 @@ function mapConversation(api: any): Conversation {
     dossierId: api.dossier_id,
     userId: api.user_id,
     createdAt: api.created_at,
+    model: api.model,
     messages: api.messages.map(mapMessage),
   };
 }
@@ -58,5 +59,23 @@ export function useConversations(dossierId: string) {
     conversation.value = mapConversation(data);
   };
 
-  return { conversation, ensureConversation, sendMessage };
+  // Supprime uniquement la conversation (et ses messages) : le dossier, ses
+  // documents et l'analyse associée ne sont pas touchés.
+  const deleteConversation = async () => {
+    const current = conversation.value;
+    if (!current) return;
+    await apiFetch(`/api/dossiers/${dossierId}/conversations/${current.id}`, { method: "DELETE" });
+    conversation.value = undefined;
+  };
+
+  const setModel = async (model: string | null) => {
+    const current = await ensureConversation();
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}/conversations/${current.id}/model`, {
+      method: "PUT",
+      body: JSON.stringify({ model }),
+    });
+    conversation.value = mapConversation(data);
+  };
+
+  return { conversation, ensureConversation, sendMessage, deleteConversation, setModel };
 }

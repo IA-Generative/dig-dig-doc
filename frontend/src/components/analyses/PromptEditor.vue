@@ -9,7 +9,7 @@ const props = withDefaults(
   defineProps<{
     prompt: string;
     versions: PromptVersion[];
-    suggestPrompt?: () => string;
+    suggestPrompt?: (model: string | null) => Promise<string>;
     suggestLabel?: string;
   }>(),
   { suggestLabel: "Aide à la rédaction du prompt" },
@@ -19,6 +19,7 @@ const emit = defineEmits<{ save: [string]; restore: [string] }>();
 
 const draft = ref(props.prompt);
 const isDirty = ref(false);
+const isSuggesting = ref(false);
 
 watch(
   () => props.prompt,
@@ -32,8 +33,16 @@ watch(draft, (value) => {
   isDirty.value = value !== props.prompt;
 });
 
-function applySuggestion() {
-  if (props.suggestPrompt) draft.value = props.suggestPrompt();
+async function applySuggestion(model: string | null) {
+  if (!props.suggestPrompt) return;
+  isSuggesting.value = true;
+  try {
+    draft.value = await props.suggestPrompt(model);
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    isSuggesting.value = false;
+  }
 }
 
 function save() {
@@ -55,7 +64,7 @@ function formatVersionContent(content: string) {
       :hint="`Version actuelle. ${versions.length} version(s) précédente(s).`"
     />
     <div class="prompt-editor__actions">
-      <LlmAssistButton v-if="suggestPrompt" :label="suggestLabel" @click="applySuggestion" />
+      <LlmAssistButton v-if="suggestPrompt" :label="suggestLabel" :loading="isSuggesting" @click="applySuggestion" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
 

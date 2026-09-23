@@ -35,6 +35,8 @@ function mapAgent(api: any): Agent {
     toolsVersions: api.tools_versions.map((v: any) => mapVersion(v, identity<AgentTool[]>)),
     output: api.output,
     outputVersions: api.output_versions.map((v: any) => mapVersion(v, identity<boolean>)),
+    model: api.model,
+    modelVersions: api.model_versions.map((v: any) => mapVersion(v, identity<string | null>)),
   };
 }
 
@@ -186,10 +188,17 @@ export function useAnalyses() {
 
   // --- Agents (créés librement par l'utilisateur pour un but métier) ---
 
-  const addAgent = async (analyseId: string, name: string, prompt: string, tools: AgentTool[] = [], output = true) => {
+  const addAgent = async (
+    analyseId: string,
+    name: string,
+    prompt: string,
+    tools: AgentTool[] = [],
+    output = true,
+    model: string | null = null,
+  ) => {
     const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents`, {
       method: "POST",
-      body: JSON.stringify({ name, prompt, tools, output }),
+      body: JSON.stringify({ name, prompt, tools, output, model }),
     });
     const agent = mapAgent(data);
     replaceAgent(analyseId, agent);
@@ -243,6 +252,21 @@ export function useAnalyses() {
     replaceAgent(analyseId, mapAgent(data));
   };
 
+  const updateAgentModel = async (analyseId: string, agentId: string, model: string | null) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/model`, {
+      method: "PUT",
+      body: JSON.stringify({ model }),
+    });
+    replaceAgent(analyseId, mapAgent(data));
+  };
+
+  const restoreAgentModelVersion = async (analyseId: string, agentId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/agents/${agentId}/model/restore/${versionId}`, {
+      method: "POST",
+    });
+    replaceAgent(analyseId, mapAgent(data));
+  };
+
   return {
     list,
     total,
@@ -268,5 +292,7 @@ export function useAnalyses() {
     restoreAgentToolsVersion,
     updateAgentOutput,
     restoreAgentOutputVersion,
+    updateAgentModel,
+    restoreAgentModelVersion,
   };
 }

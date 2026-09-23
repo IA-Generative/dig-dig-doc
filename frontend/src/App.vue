@@ -8,7 +8,12 @@ import { useMyConversations } from "@/composables/useMyConversations";
 
 const route = useRoute();
 const { fetchProfile } = useAuth();
-const { list: conversations, fetchList: fetchConversations } = useMyConversations();
+const { list: conversations, fetchList: fetchConversations, deleteConversation } = useMyConversations();
+
+async function onDeleteConversation(dossierId: string, conversationId: string) {
+  if (!confirm("Supprimer cette conversation ? Le dossier et ses documents ne seront pas affectés.")) return;
+  await deleteConversation(dossierId, conversationId);
+}
 
 // Au démarrage de l'app, on vérifie si une session est déjà active (cookie
 // HttpOnly). Le route guard attend que `loading` passe à false avant de
@@ -121,6 +126,15 @@ const navItems = [
               </span>
             </span>
             <span class="app-sidebar__conversation-time">{{ formatRelativeTime(item.lastActivityAt) }}</span>
+            <button
+              type="button"
+              class="app-sidebar__conversation-delete"
+              aria-label="Supprimer cette conversation"
+              title="Supprimer cette conversation"
+              @click.stop.prevent="onDeleteConversation(item.dossierId, item.id)"
+            >
+              <VIcon name="ri-delete-bin-line" />
+            </button>
           </RouterLink>
         </nav>
       </div>
@@ -338,6 +352,30 @@ const navItems = [
   font-size: 0.6875rem;
   color: var(--text-mention-grey);
   white-space: nowrap;
+}
+
+.app-sidebar__conversation-delete {
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--text-mention-grey);
+  cursor: pointer;
+}
+
+.app-sidebar__conversation-item:hover .app-sidebar__conversation-delete {
+  display: flex;
+}
+
+.app-sidebar__conversation-delete:hover {
+  background: var(--background-alt-grey-hover);
+  color: var(--text-default-grey);
 }
 
 /* Contenu principal */
