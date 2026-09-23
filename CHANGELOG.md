@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0-rc.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc.2...v0.3.0-rc.3) (2026-09-23)
+
+
+### Features
+
+* **helm:** add Helm chart with redis/postgres deps and migration job ([5e3ca80](https://github.com/IA-Generative/dig-dig-doc/commit/5e3ca800274726e44f1d75b21806e795745da701))
+* page d'accueil ([ba872f8](https://github.com/IA-Generative/dig-dig-doc/commit/ba872f846f26c829dd1f37134e80f4c023aa34e6))
+
+
+### Bug Fixes
+
+* remove duplicate migration file with same revision ID ([7eb72e8](https://github.com/IA-Generative/dig-dig-doc/commit/7eb72e81bbbb46ab79d374da3545a80d0d674747))
+
 ## [0.3.0-rc.2](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0-rc.1...v0.3.0-rc.2) (2026-09-23)
 
 
