@@ -142,7 +142,8 @@ function scrollCarousel(direction: 1 | -1) {
 
     <DsfrModal
       v-if="selectedCard"
-      v-model:opened="isDetailOpened"
+      :opened="isDetailOpened"
+      @close="isDetailOpened = false"
       :title="selectedCard.title"
       :icon="selectedCard.icon"
     >

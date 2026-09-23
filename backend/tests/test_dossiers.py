@@ -229,6 +229,77 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     assert owner_view[0]["messages"][0]["content"] == "Message du propriétaire"
 
 
+def test_conversation_model_can_be_chosen(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse modèle conversation")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier modèle", "analyse_id": analyse_id}).json()["id"]
+
+    conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert conversation["model"] is None
+
+    updated = client.put(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/model", json={"model": "gpt-4o"}
+    ).json()
+    assert updated["model"] == "gpt-4o"
+
+    listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert listed[0]["model"] == "gpt-4o"
+
+
+def test_delete_conversation_only_removes_the_conversation(client: TestClient) -> None:
+    """Supprimer une conversation ne doit toucher qu'elle (et ses messages) :
+    le dossier et ses documents restent intacts."""
+    analyse_id = _create_analyse(client, "Analyse suppression conversation")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier à garder", "analyse_id": analyse_id}).json()[
+        "id"
+    ]
+    client.post(
+        f"/api/dossiers/{dossier_id}/documents",
+        files={"files": ("note.txt", b"contenu", "text/plain")},
+    )
+
+    conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    client.post(
+        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages",
+        json={"content": "Un message"},
+    )
+
+    response = client.delete(f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}")
+    assert response.status_code == 204
+
+    assert client.get(f"/api/dossiers/{dossier_id}/conversations").json() == []
+
+    dossier = client.get(f"/api/dossiers/{dossier_id}").json()
+    assert dossier["id"] == dossier_id
+    assert len(dossier["documents"]) == 1
+
+
+def test_delete_conversation_is_private_to_its_user(client: TestClient) -> None:
+    """Un autre utilisateur ne doit pas pouvoir supprimer la conversation
+    d'un autre, même en devinant son id."""
+    from app.core.security.factory import RequestContext, get_current_user
+    from app.main import app
+
+    analyse_id = _create_analyse(client, "Analyse suppression privée")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier privé 2", "analyse_id": analyse_id}).json()[
+        "id"
+    ]
+    owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+
+    def as_other_user() -> RequestContext:
+        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+
+    app.dependency_overrides[get_current_user] = as_other_user
+    try:
+        response = client.delete(f"/api/dossiers/{dossier_id}/conversations/{owner_conversation['id']}")
+        assert response.status_code == 404
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()
+    assert len(owner_view) == 1
+    assert owner_view[0]["id"] == owner_conversation["id"]
+
+
 INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
 
 

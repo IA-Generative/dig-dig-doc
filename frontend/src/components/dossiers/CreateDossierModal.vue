@@ -52,7 +52,8 @@ async function submit() {
 
 <template>
   <DsfrModal
-    v-model:opened="opened"
+    :opened="opened"
+    @close="opened = false"
     title="Créer un dossier"
     size="lg"
     :actions="[

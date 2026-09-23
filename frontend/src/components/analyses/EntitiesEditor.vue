@@ -15,6 +15,8 @@ const pageSize = 3;
 const draftEntities = ref<EntityDefinition[]>(cloneEntities(props.entities));
 const isDirty = ref(false);
 const currentPage = ref(1);
+const isSuggestingList = ref(false);
+const suggestingDefinitionId = ref<string | null>(null);
 
 function cloneEntities(entities: EntityDefinition[]): EntityDefinition[] {
   return entities.map((entity) => ({ ...entity }));
@@ -58,15 +60,30 @@ function removeEntity(id: string) {
   nextTick(() => (currentPage.value = Math.min(currentPage.value, pageCount.value)));
 }
 
-function applySuggestions() {
-  draftEntities.value = suggestEntities();
-  nextTick(() => (currentPage.value = 1));
+async function applySuggestions(model: string | null) {
+  isSuggestingList.value = true;
+  try {
+    const suggestions = await suggestEntities(model);
+    draftEntities.value = suggestions.map((entity, index) => ({ ...entity, id: `entity-suggestion-${index}` }));
+    nextTick(() => (currentPage.value = 1));
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    isSuggestingList.value = false;
+  }
 }
 
-function applyDefinitionSuggestion(entity: EntityDefinition) {
-  const suggestion = suggestEntityDefinition(entity.name);
-  entity.definition = suggestion.definition;
-  entity.type = suggestion.type;
+async function applyDefinitionSuggestion(entity: EntityDefinition, model: string | null) {
+  suggestingDefinitionId.value = entity.id;
+  try {
+    const suggestion = await suggestEntityDefinition(entity.name, model);
+    entity.definition = suggestion.definition;
+    entity.type = suggestion.type;
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    suggestingDefinitionId.value = null;
+  }
 }
 
 function save() {
@@ -108,7 +125,12 @@ function formatVersionContent(entities: EntityDefinition[]) {
               label-visible
               class="entities-editor__definition"
             />
-            <LlmAssistButton compact label="Suggérer une définition" @click="applyDefinitionSuggestion(entity)" />
+            <LlmAssistButton
+              compact
+              label="Suggérer une définition"
+              :loading="suggestingDefinitionId === entity.id"
+              @click="(model) => applyDefinitionSuggestion(entity, model)"
+            />
           </div>
         </li>
       </ul>
@@ -123,7 +145,7 @@ function formatVersionContent(entities: EntityDefinition[]) {
 
     <div class="entities-editor__actions">
       <DsfrButton label="Ajouter une entité" tertiary icon="ri-add-line" size="sm" @click="addEntity" />
-      <LlmAssistButton @click="applySuggestions" />
+      <LlmAssistButton :loading="isSuggestingList" @click="applySuggestions" />
       <DsfrButton label="Enregistrer" :disabled="!isDirty" size="sm" @click="save" />
     </div>
 

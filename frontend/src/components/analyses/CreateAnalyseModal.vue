@@ -28,7 +28,8 @@ async function submit() {
 
 <template>
   <DsfrModal
-    v-model:opened="opened"
+    :opened="opened"
+    @close="opened = false"
     title="Créer une analyse"
     :actions="[
       { label: 'Annuler', secondary: true, onClick: () => (opened = false) },

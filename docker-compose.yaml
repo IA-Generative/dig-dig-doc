@@ -51,6 +51,11 @@ services:
       S3_BUCKET: dig-dig-doc
       SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
       INTERNAL_WORKER_TOKEN: ${INTERNAL_WORKER_TOKEN:-dev-only-worker-token-not-for-prod}
+      # Hub LLM (compatible API OpenAI) pour GET /api/models et le choix de
+      # modèle d'une conversation/agent - vide par défaut (503 tant que non
+      # configuré, voir app/config/llm.py).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

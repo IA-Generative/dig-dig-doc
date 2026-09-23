@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestAgentPrompt } from "@/composables/useLlmAssist";
+import { useModels } from "@/composables/useModels";
 import { AGENT_TOOL_LABELS, type AgentTool } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string }>();
@@ -11,6 +12,7 @@ const opened = defineModel<boolean>("opened", { default: false });
 const emit = defineEmits<{ created: [] }>();
 
 const { addAgent } = useAnalyses();
+const { models, fetchModels } = useModels();
 
 const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) => ({
   name: tool,
@@ -18,10 +20,19 @@ const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) =
   label: AGENT_TOOL_LABELS[tool],
 }));
 
+// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
+// pas de valeur null pour une option.
+const modelOptions = computed(() => [
+  { value: "", text: "Modèle par défaut du hub" },
+  ...models.value.map((id) => ({ value: id, text: id })),
+]);
+
 const name = ref("");
 const prompt = ref("");
 const tools = ref<AgentTool[]>([]);
 const output = ref(true);
+const model = ref("");
+const isSuggesting = ref(false);
 
 watch(opened, (isOpened) => {
   if (isOpened) {
@@ -29,16 +40,32 @@ watch(opened, (isOpened) => {
     prompt.value = "";
     tools.value = [];
     output.value = true;
+    model.value = "";
+    fetchModels();
   }
 });
 
-function applySuggestion() {
-  prompt.value = suggestAgentPrompt();
+async function applySuggestion(suggestionModel: string | null) {
+  isSuggesting.value = true;
+  try {
+    prompt.value = await suggestAgentPrompt(suggestionModel);
+  } catch (error) {
+    alert(error instanceof Error ? error.message : "Échec de l'aide LLM.");
+  } finally {
+    isSuggesting.value = false;
+  }
 }
 
 async function submit() {
   if (!name.value.trim() || !prompt.value.trim()) return;
-  await addAgent(props.analyseId, name.value.trim(), prompt.value.trim(), tools.value, output.value);
+  await addAgent(
+    props.analyseId,
+    name.value.trim(),
+    prompt.value.trim(),
+    tools.value,
+    output.value,
+    model.value || null,
+  );
   opened.value = false;
   emit("created");
 }
@@ -46,7 +73,8 @@ async function submit() {
 
 <template>
   <DsfrModal
-    v-model:opened="opened"
+    :opened="opened"
+    @close="opened = false"
     title="Créer un agent"
     size="lg"
     :actions="[
@@ -61,7 +89,12 @@ async function submit() {
     </p>
     <DsfrInput v-model="name" label="Nom de l'agent" label-visible required />
     <DsfrInput v-model="prompt" label="Prompt" label-visible is-textarea required class="fr-mt-2w" />
-    <LlmAssistButton label="Aide à la rédaction du prompt" class="fr-mt-2w" @click="applySuggestion" />
+    <LlmAssistButton
+      label="Aide à la rédaction du prompt"
+      class="fr-mt-2w"
+      :loading="isSuggesting"
+      @click="applySuggestion"
+    />
     <DsfrCheckboxSet
       v-model="tools"
       legend="Outils disponibles"
@@ -75,5 +108,6 @@ async function submit() {
       label="Présenter le résultat de cet agent dans la page de résultat du dossier"
       class="fr-mt-2w"
     />
+    <DsfrSelect v-model="model" label="Modèle" :options="modelOptions" class="fr-mt-2w" />
   </DsfrModal>
 </template>

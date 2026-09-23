@@ -1,14 +1,46 @@
 <script setup lang="ts">
+import { computed, onMounted } from "vue";
+
 import AgentToolsEditor from "@/components/analyses/AgentToolsEditor.vue";
 import PromptEditor from "@/components/analyses/PromptEditor.vue";
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestAgentPrompt } from "@/composables/useLlmAssist";
+import { useModels } from "@/composables/useModels";
 import type { Agent } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
 
-const { updateAgentPrompt, restoreAgentPromptVersion, updateAgentOutput, restoreAgentOutputVersion } = useAnalyses();
+const {
+  updateAgentPrompt,
+  restoreAgentPromptVersion,
+  updateAgentOutput,
+  restoreAgentOutputVersion,
+  updateAgentModel,
+  restoreAgentModelVersion,
+} = useAnalyses();
+const { models, fetchModels } = useModels();
+
+onMounted(fetchModels);
+
+// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
+// pas de valeur null pour une option.
+const modelOptions = computed(() => [
+  { value: "", text: "Modèle par défaut du hub" },
+  ...models.value.map((id) => ({ value: id, text: id })),
+]);
+
+function setModel(value: string) {
+  updateAgentModel(props.analyseId, props.agent.id, value || null);
+}
+
+function restoreModelVersion(versionId: string) {
+  restoreAgentModelVersion(props.analyseId, props.agent.id, versionId);
+}
+
+function formatModelVersionContent(model: string | null) {
+  return model ?? "Modèle par défaut du hub";
+}
 
 function savePrompt(prompt: string) {
   updateAgentPrompt(props.analyseId, props.agent.id, prompt);
@@ -62,6 +94,22 @@ function formatOutputVersionContent(output: boolean) {
       @save="savePrompt"
       @restore="restorePromptVersion"
     />
+
+    <hr class="agent-card__divider" />
+    <div class="agent-card__model">
+      <DsfrSelect
+        :model-value="agent.model ?? ''"
+        label="Modèle"
+        :options="modelOptions"
+        @update:model-value="setModel"
+      />
+      <VersionHistory
+        v-if="agent.modelVersions.length > 0"
+        :versions="agent.modelVersions"
+        :format-content="formatModelVersionContent"
+        @restore="restoreModelVersion"
+      />
+    </div>
 
     <hr class="agent-card__divider" />
     <AgentToolsEditor :analyse-id="analyseId" :agent="agent" />
@@ -120,6 +168,12 @@ function formatOutputVersionContent(output: boolean) {
 
 .agent-card__title {
   margin: 0;
+}
+
+.agent-card__model {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .agent-card__divider {
