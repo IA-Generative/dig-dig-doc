@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import KeycloakSettings
+from app.routers.admin_reports import router as admin_reports_router
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
 from app.routers.app_tokens import router as app_tokens_router
@@ -12,6 +13,7 @@ from app.routers.dossiers import router as dossiers_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.routers.models import router as models_router
+from app.routers.reports import router as reports_router
 
 _keycloak_settings = KeycloakSettings()
 
@@ -30,6 +32,8 @@ app = FastAPI(
         {"name": "Assist", "description": "Chat completion générique utilisée par les boutons d'aide LLM du frontend."},
         {"name": "Internal", "description": "Callbacks des workers Celery (jeton partagé, pas d'auth Keycloak)."},
         {"name": "App tokens", "description": "Jetons permettant à une application externe d'appeler l'API."},
+        {"name": "Reports", "description": "Signalements libres (bug/idée/question) envoyés par les utilisateurs."},
+        {"name": "Admin", "description": "Vues et actions réservées aux administrateurs."},
     ],
 )
 
@@ -53,3 +57,5 @@ app.include_router(models_router, prefix="/api")
 app.include_router(assist_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
 app.include_router(app_tokens_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
+app.include_router(admin_reports_router, prefix="/api")
