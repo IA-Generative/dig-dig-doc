@@ -73,9 +73,7 @@ class AgentTools:
                 result.append(src)
         return result
 
-    def _record_source(
-        self, *, page_id: str | None = None, excerpt: str | None = None
-    ) -> None:
+    def _record_source(self, *, page_id: str | None = None, excerpt: str | None = None) -> None:
         """Enregistre une source consultée (page d'un document)."""
         if page_id is None:
             return
@@ -100,11 +98,7 @@ class AgentTools:
             return "Aucun résultat trouvé pour cette recherche."
         lines = [f"{len(results)} résultat(s) trouvé(s) :\n"]
         for r in results:
-            lines.append(
-                f"📄 Page {r.page_number} ({r.document_name}) "
-                f"[score: {r.score:.2f}]\n"
-                f"   {r.excerpt}\n"
-            )
+            lines.append(f"📄 Page {r.page_number} ({r.document_name}) [score: {r.score:.2f}]\n   {r.excerpt}\n")
             # Enregistre chaque page trouvée comme source consultée.
             self._record_source(page_id=r.page_id, excerpt=r.excerpt)
         return "\n".join(lines)
@@ -129,8 +123,7 @@ class AgentTools:
             for pred in page.get("predictions", []):
                 if pred.get("kind") == "label":
                     entries.append(
-                        f"  Page {page['page_number']}: "
-                        f"{pred['name']} (confiance: {pred.get('confidence', '?')})"
+                        f"  Page {page['page_number']}: {pred['name']} (confiance: {pred.get('confidence', '?')})"
                     )
         if not entries:
             return "Aucune classification disponible."

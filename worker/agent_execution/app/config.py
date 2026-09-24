@@ -35,9 +35,7 @@ class WorkerSettings(BaseSettings):
     # Nombre de résultats retournés par la recherche BM25.
     BM25_TOP_K: int = 5
 
-    model_config = SettingsConfigDict(
-        case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore"
-    )
+    model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")
 
     @property
     def is_configured(self) -> bool:

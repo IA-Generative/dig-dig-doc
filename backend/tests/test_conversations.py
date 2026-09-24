@@ -2,12 +2,8 @@ from fastapi.testclient import TestClient
 
 
 def _create_dossier(client: TestClient, name: str) -> str:
-    analyse_id = client.post(
-        "/api/analyses", json={"name": f"Analyse {name}", "description": "Test"}
-    ).json()["id"]
-    return client.post(
-        "/api/dossiers", json={"name": name, "analyse_id": analyse_id}
-    ).json()["id"]
+    analyse_id = client.post("/api/analyses", json={"name": f"Analyse {name}", "description": "Test"}).json()["id"]
+    return client.post("/api/dossiers", json={"name": name, "analyse_id": analyse_id}).json()["id"]
 
 
 def test_list_my_conversations_across_dossiers(client: TestClient) -> None:
@@ -24,9 +20,7 @@ def test_list_my_conversations_across_dossiers(client: TestClient) -> None:
     listed_ids = {c["dossier_id"] for c in listed}
     assert {dossier_a, dossier_b} <= listed_ids
     # Pas encore de message sur ces deux-là : pas de preview.
-    mine = {
-        c["dossier_id"]: c for c in listed if c["dossier_id"] in {dossier_a, dossier_b}
-    }
+    mine = {c["dossier_id"]: c for c in listed if c["dossier_id"] in {dossier_a, dossier_b}}
     assert mine[dossier_a]["last_message_preview"] is None
     assert mine[dossier_b]["last_message_preview"] is None
 

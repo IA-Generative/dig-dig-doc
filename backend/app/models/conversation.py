@@ -60,11 +60,7 @@ class MessageRole(enum.StrEnum):
 
 class Conversation(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
-    __table_args__ = (
-        UniqueConstraint(
-            "dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("dossier_id", "user_id", name="uq_conversations_dossier_id_user_id"),)
 
     dossier_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -117,9 +113,7 @@ class Message(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    role: Mapped[MessageRole] = mapped_column(
-        Enum(MessageRole, name="message_role"), nullable=False
-    )
+    role: Mapped[MessageRole] = mapped_column(Enum(MessageRole, name="message_role"), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

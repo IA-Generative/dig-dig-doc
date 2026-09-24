@@ -42,9 +42,7 @@ def _extract_syntheses(dossier: dict) -> list[dict]:
     syntheses: list[dict] = []
     for step in dossier.get("execution_steps", []):
         if step.get("kind") == "agent" and step.get("output"):
-            syntheses.append(
-                {"label": step.get("label", "Agent"), "output": step["output"]}
-            )
+            syntheses.append({"label": step.get("label", "Agent"), "output": step["output"]})
     return syntheses
 
 
@@ -84,9 +82,7 @@ def run_chat(self, conversation_id: str, dossier_id: str) -> None:
             # relayé au frontend via SSE.
             def on_event(kind: str, data: dict) -> None:
                 try:
-                    api_client.add_chat_event(
-                        client, conversation_id, kind=kind, data=data
-                    )
+                    api_client.add_chat_event(client, conversation_id, kind=kind, data=data)
                 except Exception:
                     logger.warning(
                         "Failed to emit chat event %s for conversation %s",

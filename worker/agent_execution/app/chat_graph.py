@@ -90,9 +90,7 @@ def _agent_node(state: ChatState) -> ChatState:
     model = state.get("model") or settings.LLM_MODEL
     tools = state["tools"]
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": state["system_prompt"]}
-    ]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": state["system_prompt"]}]
     messages.extend(state["messages"])
 
     response = client.chat.completions.create(
@@ -215,9 +213,7 @@ def run_chat(
     Les événements intermédiaires (tool_call, tool_result) sont émis via
     on_event pour le streaming temps réel vers le frontend.
     """
-    system_prompt = _build_system_prompt(
-        conversation_history, syntheses or [], analyse_description
-    )
+    system_prompt = _build_system_prompt(conversation_history, syntheses or [], analyse_description)
 
     graph = build_chat_graph()
     initial_state: ChatState = {
