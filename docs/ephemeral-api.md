@@ -120,7 +120,7 @@ Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-
 2. [GitHub #21](https://github.com/IA-Generative/dig-dig-doc/issues/21) — suppression complète d'un `Dossier` : DB (cascade déjà câblée) + nettoyage S3. ✅ implémenté (`S3Connector.delete`, `DossierRepository.delete_dossier`).
 3. [GitHub #22](https://github.com/IA-Generative/dig-dig-doc/issues/22) — `POST/GET/DELETE /api/ephemeral/analyses`. ✅ implémenté (`app/routers/ephemeral.py`, `app/repositories/ephemeral_repository.py`, `app/core/security/ephemeral.py`).
 4. [GitHub #23](https://github.com/IA-Generative/dig-dig-doc/issues/23) — `POST/GET /api/ephemeral/runs` (flux A + B). ✅ implémenté (`_create_run` dans `app/routers/ephemeral.py`, CRUD `DossierEphemere` dans `ephemeral_repository.py`).
-5. [`05-stop-delete-run.md`](issues/05-stop-delete-run.md) — `POST .../stop` et `DELETE /api/ephemeral/runs/{id}`.
+5. [GitHub #24](https://github.com/IA-Generative/dig-dig-doc/issues/24) — `POST .../stop` et `DELETE /api/ephemeral/runs/{id}`. ✅ implémenté.
 6. [`06-calcul-ttl.md`](issues/06-calcul-ttl.md) — logique `expires_at` sur fin de run, propagation vers `analyse_ephemere`.
 7. [`07-tache-purge.md`](issues/07-tache-purge.md) — tâche Celery + planification Celery beat.
 8. [`08-auth-visibilite.md`](issues/08-auth-visibilite.md) — double support token API / Keycloak + règles de visibilité.
