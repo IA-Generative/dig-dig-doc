@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.4.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.0-rc...v0.4.0-rc.1) (2026-09-24)
+
+
+### Features
+
+* **backend:** add Dossier deletion with S3 cleanup ([#21](https://github.com/IA-Generative/dig-dig-doc/issues/21)) ([69f47a1](https://github.com/IA-Generative/dig-dig-doc/commit/69f47a17b3f80e52c59550e5d9909e100cbf266e))
+* **backend:** add ephemeral analysis endpoints ([#22](https://github.com/IA-Generative/dig-dig-doc/issues/22)) ([ff165a0](https://github.com/IA-Generative/dig-dig-doc/commit/ff165a09ee960bd2ced248b281b10e4a493a94f6))
+* **backend:** add ephemeral purge task via Celery beat ([#26](https://github.com/IA-Generative/dig-dig-doc/issues/26)) ([1e82b60](https://github.com/IA-Generative/dig-dig-doc/commit/1e82b60387f817389a9291028208b630c9f81b9f))
+* **backend:** add ephemeral run endpoints ([#23](https://github.com/IA-Generative/dig-dig-doc/issues/23)) ([5663273](https://github.com/IA-Generative/dig-dig-doc/commit/5663273c2482bbe8f6d10d3bba47a4521e48f99e))
+* **backend:** add MCP server over the ephemeral API ([#29](https://github.com/IA-Generative/dig-dig-doc/issues/29)) ([21dffba](https://github.com/IA-Generative/dig-dig-doc/commit/21dffba03289c07ece78891493834a40236c62ef))
+* **backend:** add stop and delete endpoints for ephemeral runs ([#24](https://github.com/IA-Generative/dig-dig-doc/issues/24)) ([d8a8ff0](https://github.com/IA-Generative/dig-dig-doc/commit/d8a8ff0348feff834f04195d17fa097fa4652062))
+* **backend:** compute and set the ephemeral TTL on run completion ([#25](https://github.com/IA-Generative/dig-dig-doc/issues/25)) ([dbb4817](https://github.com/IA-Generative/dig-dig-doc/commit/dbb4817fd20fe1808b7eff674170a2d8c9165406))
+
+
+### Bug Fixes
+
+* **backend:** make Keycloak auth respect dependency_overrides in ephemeral routes ([#27](https://github.com/IA-Generative/dig-dig-doc/issues/27)) ([a423d46](https://github.com/IA-Generative/dig-dig-doc/commit/a423d46d974e0e7d90995c8ef81389dd0d6cd5bf))
+* **ci:** reformat backend/worker to match ruff config, allowlist Helm test fixture in gitleaks ([b1fe492](https://github.com/IA-Generative/dig-dig-doc/commit/b1fe4922b998696c67607e83888a9a7decbea156))
+
 ## [0.4.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0...v0.4.0-rc) (2026-09-24)
 
 
