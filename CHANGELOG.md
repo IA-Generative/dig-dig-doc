@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0...v0.4.0-rc) (2026-09-24)
+
+
+### Features
+
+* **backend:** add ephemeral analysis/dossier association tables ([#20](https://github.com/IA-Generative/dig-dig-doc/issues/20)) ([229e1c4](https://github.com/IA-Generative/dig-dig-doc/commit/229e1c4972783a8a86106a9f466b5a406e7b5b19))
+
 ## [0.3.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.2.0...v0.3.0) (2026-09-23)
 
 
