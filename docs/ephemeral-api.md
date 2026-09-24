@@ -115,7 +115,7 @@ Les endpoints `/api/ephemeral/*` acceptent **les deux** mécanismes d'auth exist
 Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-doc/issues?q=is%3Aissue+20..29). Détaillées individuellement dans `docs/issues/` tant qu'elles ne sont pas implémentées (le fichier est supprimé une fois le code mergé, l'issue GitHub reste la référence) :
 
 1. [GitHub #20](https://github.com/IA-Generative/dig-dig-doc/issues/20) — création des tables d'association `analyse_ephemere` et `dossier_ephemere` (Alembic). ✅ implémenté (`backend/app/models/analyse_ephemere.py`, `dossier_ephemere.py`, migration `7f1e8bb1c9da`).
-2. [`02-suppression-dossier.md`](issues/02-suppression-dossier.md) — (pré-requis, à construire from scratch) suppression complète d'un `Dossier` : DB (cascade déjà câblée) + nettoyage S3 (inexistant aujourd'hui).
+2. [GitHub #21](https://github.com/IA-Generative/dig-dig-doc/issues/21) — suppression complète d'un `Dossier` : DB (cascade déjà câblée) + nettoyage S3. ✅ implémenté (`S3Connector.delete`, `DossierRepository.delete_dossier`).
 3. [`03-endpoints-definition-analyse.md`](issues/03-endpoints-definition-analyse.md) — `POST/GET/DELETE /api/ephemeral/analyses`.
 4. [`04-endpoints-run.md`](issues/04-endpoints-run.md) — `POST/GET /api/ephemeral/runs` (flux A + B).
 5. [`05-stop-delete-run.md`](issues/05-stop-delete-run.md) — `POST .../stop` et `DELETE /api/ephemeral/runs/{id}`.
