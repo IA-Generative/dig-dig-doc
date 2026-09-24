@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -6,6 +7,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.connectors import s3_connector
 from app.models.analyse import Analyse
 from app.models.chat_event import ChatEvent, ChatEventKind
 from app.models.conversation import (
@@ -671,3 +673,31 @@ class DossierRepository:
         dossier.ended_at = datetime.now(UTC)
         await self.db.commit()
         await self.db.refresh(dossier)
+
+    async def delete_dossier(self, dossier: Dossier) -> None:
+        """Supprime un dossier et tout ce qui en dépend : fichiers S3 (les
+        documents eux-mêmes et les captures de page), puis la ligne Dossier -
+        le cascade DB (execution_steps, documents, pages, bounding_boxes,
+        conversations...) s'occupe du reste. `dossier` doit venir de get()
+        (documents/pages déjà chargés, cf. _base_query).
+
+        S3 est nettoyé avant la ligne DB : si la suppression S3 d'une clé
+        échoue silencieusement (S3Connector.delete avale les erreurs), on
+        préfère risquer un fichier orphelin sur S3 plutôt qu'une ligne DB
+        pointant vers des fichiers déjà supprimés.
+
+        Un dossier encore actif (en_attente/en_cours) ne peut pas être
+        supprimé directement : il doit d'abord être arrêté (stop()) - à
+        l'appelant (endpoint, tâche de purge) de le faire avant d'appeler
+        cette méthode, pas à elle de le faire implicitement."""
+        if dossier.status in (DossierStatus.EN_ATTENTE, DossierStatus.EN_COURS):
+            raise ValueError(
+                f"Cannot delete dossier {dossier.id}: still {dossier.status} - stop it first"
+            )
+        for document in dossier.documents:
+            await asyncio.to_thread(s3_connector.delete, document.s3_key)
+            for page in document.pages:
+                if page.screenshot_key:
+                    await asyncio.to_thread(s3_connector.delete, page.screenshot_key)
+        await self.db.delete(dossier)
+        await self.db.commit()
