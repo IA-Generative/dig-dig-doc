@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.3.0...v0.4.0) (2026-09-24)
+
+
+### Features
+
+* **backend:** add Dossier deletion with S3 cleanup ([#21](https://github.com/IA-Generative/dig-dig-doc/issues/21)) ([17f6b2d](https://github.com/IA-Generative/dig-dig-doc/commit/17f6b2d2ca571845fb809b278f4b18050ba8ec74))
+* **backend:** add ephemeral analysis endpoints ([#22](https://github.com/IA-Generative/dig-dig-doc/issues/22)) ([9e1c854](https://github.com/IA-Generative/dig-dig-doc/commit/9e1c854469c620a31cf3b79db386d3eb3a8b73ce))
+* **backend:** add ephemeral analysis/dossier association tables ([#20](https://github.com/IA-Generative/dig-dig-doc/issues/20)) ([720177e](https://github.com/IA-Generative/dig-dig-doc/commit/720177efa01b91f1d5a77586ad866dddb2f6eb89))
+* **backend:** add ephemeral purge task via Celery beat ([#26](https://github.com/IA-Generative/dig-dig-doc/issues/26)) ([8f811f6](https://github.com/IA-Generative/dig-dig-doc/commit/8f811f6cf1a21b0fd5bc412146c98918ce892aa2))
+* **backend:** add ephemeral run endpoints ([#23](https://github.com/IA-Generative/dig-dig-doc/issues/23)) ([604984b](https://github.com/IA-Generative/dig-dig-doc/commit/604984b1074d9362449ffc8cca8385eed6c184d8))
+* **backend:** add MCP server over the ephemeral API ([#29](https://github.com/IA-Generative/dig-dig-doc/issues/29)) ([bc38e80](https://github.com/IA-Generative/dig-dig-doc/commit/bc38e803296500748399f99ee834489a9b587642))
+* **backend:** add stop and delete endpoints for ephemeral runs ([#24](https://github.com/IA-Generative/dig-dig-doc/issues/24)) ([acf4030](https://github.com/IA-Generative/dig-dig-doc/commit/acf403056433a3d605a89cb67eb9f79bccb9e5c2))
+* **backend:** compute and set the ephemeral TTL on run completion ([#25](https://github.com/IA-Generative/dig-dig-doc/issues/25)) ([2753f5f](https://github.com/IA-Generative/dig-dig-doc/commit/2753f5fe5fd4a5a275d669da357ff8428c802c23))
+
+
+### Bug Fixes
+
+* **backend:** make Keycloak auth respect dependency_overrides in ephemeral routes ([#27](https://github.com/IA-Generative/dig-dig-doc/issues/27)) ([cb81ac9](https://github.com/IA-Generative/dig-dig-doc/commit/cb81ac995fe73b9d3879a843735ff666143c2a49))
+* **ci:** reformat backend/worker to match ruff config, allowlist Helm test fixture in gitleaks ([78ad8d1](https://github.com/IA-Generative/dig-dig-doc/commit/78ad8d192247df8bf96999e1d9d8cf8045d4f314))
+
 ## [0.4.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.0-rc...v0.4.0-rc.1) (2026-09-24)
 
 

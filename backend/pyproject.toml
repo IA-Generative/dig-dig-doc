@@ -1,6 +1,6 @@
 [project]
 name = "dig-dig-doc-backend"
-version = "0.4.0-rc.1"
+version = "0.4.0"
 description = "BFF (Backend For Frontend) de dig-dig-doc"
 requires-python = ">=3.12"
 dependencies = [
