@@ -28,9 +28,7 @@ _POLL_INTERVAL = 5  # secondes entre chaque vérification
 _POLL_TIMEOUT = 600  # 10 minutes max à attendre classification + extraction
 
 
-def _wait_for_steps(
-    client, dossier: dict, step_kinds: list[str]
-) -> dict[str, str | None]:
+def _wait_for_steps(client, dossier: dict, step_kinds: list[str]) -> dict[str, str | None]:
     """Attend que les étapes spécifiées soient terminées (status=terminé ou
     échec). Renvoie un mapping kind -> status. Si une étape est en échec,
     on continue quand même : l'agent peut fonctionner avec des données
@@ -50,9 +48,7 @@ def _wait_for_steps(
             return result
         time.sleep(_POLL_INTERVAL)
 
-    logger.warning(
-        "Timed out waiting for steps %s after %ds", step_kinds, _POLL_TIMEOUT
-    )
+    logger.warning("Timed out waiting for steps %s after %ds", step_kinds, _POLL_TIMEOUT)
     return result
 
 
@@ -78,9 +74,7 @@ def _run_single_agent(client, dossier: dict, agent: dict, step_id: str | None) -
     )
 
     if step_id:
-        api_client.complete_execution_step(
-            client, step_id, status=_STATUS_TERMINE, output=answer
-        )
+        api_client.complete_execution_step(client, step_id, status=_STATUS_TERMINE, output=answer)
     logger.info("Agent '%s' completed: %d chars", agent["name"], len(answer))
     return answer
 

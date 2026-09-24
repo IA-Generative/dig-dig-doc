@@ -48,9 +48,7 @@ def _agent_node(state: AgentState) -> AgentState:
     model = state.get("model") or settings.LLM_MODEL
     tools = state["tools"]
 
-    messages: list[dict[str, Any]] = [
-        {"role": "system", "content": state["agent_prompt"]}
-    ]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": state["agent_prompt"]}]
     messages.extend(state["messages"])
 
     response = client.chat.completions.create(

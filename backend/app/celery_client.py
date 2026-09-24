@@ -20,18 +20,14 @@ def dispatch_classification(dossier_id: str) -> None:
     agent_execution. Le worker télécharge les captures de pages depuis S3,
     les décrit via un VLM, puis classifie chaque page via un LLM en
     structured output."""
-    celery_client.send_task(
-        "app.tasks.classify_dossier", args=[dossier_id], queue="agent_execution"
-    )
+    celery_client.send_task("app.tasks.classify_dossier", args=[dossier_id], queue="agent_execution")
 
 
 def dispatch_entity_extraction(dossier_id: str) -> None:
     """Dépose la tâche d'extraction d'entités sur la file agent_execution.
     Le worker regroupe les pages par batch et extrait les entités via un
     LLM en structured output."""
-    celery_client.send_task(
-        "app.tasks.extract_dossier_entities", args=[dossier_id], queue="agent_execution"
-    )
+    celery_client.send_task("app.tasks.extract_dossier_entities", args=[dossier_id], queue="agent_execution")
 
 
 def dispatch_agent_execution(dossier_id: str) -> None:
@@ -39,9 +35,7 @@ def dispatch_agent_execution(dossier_id: str) -> None:
     Le worker attend que la classification et l'extraction soient terminées,
     puis exécute chaque agent via un graphe LangGraph avec des outils de
     recherche (BM25), lecture de pages, et consultation des prédictions."""
-    celery_client.send_task(
-        "app.tasks.run_agents", args=[dossier_id], queue="agent_execution"
-    )
+    celery_client.send_task("app.tasks.run_agents", args=[dossier_id], queue="agent_execution")
 
 
 def dispatch_chat_response(conversation_id: str, dossier_id: str) -> None:

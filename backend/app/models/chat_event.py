@@ -46,9 +46,7 @@ class ChatEvent(UUIDMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    kind: Mapped[ChatEventKind] = mapped_column(
-        Enum(ChatEventKind, name="chat_event_kind"), nullable=False
-    )
+    kind: Mapped[ChatEventKind] = mapped_column(Enum(ChatEventKind, name="chat_event_kind"), nullable=False)
     # Payload flexible : {tool_name, arguments} pour tool_call,
     # {tool_name, preview} pour tool_result, {message} pour thinking/error,
     # {message_id} pour done.

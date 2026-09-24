@@ -48,9 +48,7 @@ class BM25Index:
     _metadata: list[dict] = field(default_factory=list)
     _bm25: BM25Okapi | None = None
 
-    def add_page(
-        self, page_id: str, page_number: int, document_name: str, content: str
-    ) -> None:
+    def add_page(self, page_id: str, page_number: int, document_name: str, content: str) -> None:
         """Ajoute une page à l'index."""
         tokens = _tokenize(content)
         self._tokens.append(tokens)
