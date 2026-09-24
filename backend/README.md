@@ -79,6 +79,14 @@ Ces deux variables sont aussi ce qui alimente les sélecteurs de modèle
 d'une conversation et d'un agent (`model` stocké sur `Conversation`/`Agent`,
 voir `PUT .../conversations/{id}/model` et `PUT .../agents/{id}/model`).
 
+## API éphémère et serveur MCP
+
+`/api/ephemeral/*` expose une API d'analyse à la demande, temporaire par
+défaut (TTL) - voir [docs/ephemeral-api.md](../docs/ephemeral-api.md).
+Elle est aussi exposée via [MCP](https://modelcontextprotocol.io/) sous
+`/mcp`, pour qu'un agent puisse l'utiliser directement - voir
+[app/mcp/README.md](app/mcp/README.md).
+
 ## Configuration locale
 
 Depuis la racine du repo :

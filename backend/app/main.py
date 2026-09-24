@@ -1,7 +1,12 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.config import KeycloakSettings
+from app.mcp.auth import BearerTokenAuthMiddleware
+from app.mcp.server import mcp_server
 from app.routers.admin_reports import router as admin_reports_router
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
@@ -18,11 +23,40 @@ from app.routers.reports import router as reports_router
 
 _keycloak_settings = KeycloakSettings()
 
+# Streamable HTTP monté sous /mcp (voir mcp/README.md). L'app Starlette
+# renvoyée par streamable_http_app() porte son propre lifespan
+# (session_manager.run()) : Starlette ne le déclenche jamais tout seul pour
+# une sous-app montée via app.mount(), il faut l'entrer explicitement dans
+# le lifespan du process qui l'héberge - ici celui du backend.
+# streamable_http_path="/" : la route interne est à la racine de cette
+# sous-app, montée elle-même sous /mcp juste en dessous - sans ça, l'URL
+# finale serait /mcp/mcp (préfixe en double).
+#
+# transport_security : la protection anti DNS-rebinding du SDK MCP (activée
+# par défaut dès que host="127.0.0.1"/"localhost") valide le header Host
+# contre une liste fixe - inadaptée ici, ce endpoint est servi derrière le
+# même reverse proxy/domaine que le reste de l'API (BACKEND_PUBLIC_URL,
+# configurable par déploiement) et protégé par le même Bearer token que
+# n'importe quelle route /api/*, pas par du same-origin. Désactivée plutôt
+# que maintenue en synchronisation avec BACKEND_PUBLIC_URL.
+mcp_app = mcp_server.streamable_http_app(
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with mcp_app.router.lifespan_context(mcp_app):
+        yield
+
+
 app = FastAPI(
     title="dig-dig-doc BFF",
     docs_url="/api/docs",
     redoc_url="/api/redocs",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
     openapi_tags=[
         {"name": "Auth", "description": "Login/logout via Keycloak, session management."},
         {"name": "Health", "description": "Liveness/readiness of the API and its dependencies."},
@@ -66,3 +100,4 @@ app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
+app.mount("/mcp", BearerTokenAuthMiddleware(mcp_app))
