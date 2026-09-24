@@ -124,7 +124,7 @@ Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-
 6. [GitHub #25](https://github.com/IA-Generative/dig-dig-doc/issues/25) — logique `expires_at` sur fin de run, propagation vers `analyse_ephemere`. ✅ implémenté. A aussi nécessité de combler un trou plateforme : rien ne faisait passer `Dossier.status` à `terminé`/`échec` (seul `stop()` manuel existait) - ajouté dans `DossierRepository._complete_dossier_if_all_steps_done`, déclenché par le callback worker existant.
 7. [GitHub #26](https://github.com/IA-Generative/dig-dig-doc/issues/26) — tâche Celery + planification Celery beat. ✅ implémenté (`backend/app/tasks.py`, service `backend-maintenance` dans `docker-compose.yaml`, beat embarqué `-B` sur la file `maintenance`).
 8. [GitHub #27](https://github.com/IA-Generative/dig-dig-doc/issues/27) — double support token API / Keycloak + règles de visibilité. ✅ implémenté. A débusqué un vrai bug en écrivant les tests multi-utilisateurs : `get_ephemeral_identity` appelait `get_current_user(request)` directement plutôt que via `Depends()`, ce qui contournait silencieusement `app.dependency_overrides` - deux comptes Keycloak différents se voyaient mutuellement. Corrigé.
-9. [`09-documentation-openapi.md`](issues/09-documentation-openapi.md) — documentation OpenAPI du tag "Ephemeral".
+9. [GitHub #28](https://github.com/IA-Generative/dig-dig-doc/issues/28) — documentation OpenAPI du tag "Ephemeral". ✅ implémenté (summary/description/responses sur chaque endpoint, exemples et descriptions de champs dans `app/schemas/ephemeral.py`).
 10. [`10-mcp-server.md`](issues/10-mcp-server.md) — serveur MCP au-dessus de l'API éphémère, pour qu'un agent puisse l'appeler directement.
 
 ## Points tranchés

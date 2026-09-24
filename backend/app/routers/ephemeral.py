@@ -51,7 +51,18 @@ async def _get_analyse_ephemere_or_404(
     return record
 
 
-@router.post("/analyses", response_model=EphemeralAnalyseCreated, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/analyses",
+    response_model=EphemeralAnalyseCreated,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crée une analyse éphémère complète en un seul appel",
+    description="Crée une analyse (classification, extraction, agents) en une seule requête, contrairement au "
+    "flux standard de la plateforme (POST /api/analyses puis un appel par champ à configurer). "
+    "`persist=false` (défaut) : purgée automatiquement une fois son TTL écoulé, calculé à la fin du "
+    "dernier run l'ayant utilisée (jamais à la création) - voir docs/ephemeral-api.md. `persist=true` : "
+    "conservée indéfiniment, comme une Analyse classique. L'id renvoyé est toujours celui d'une "
+    "`Analyse` normale de la plateforme (une ligne `analyse_ephemere` y est simplement associée).",
+)
 async def create_ephemeral_analyse(
     body: EphemeralAnalyseCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -93,7 +104,16 @@ async def create_ephemeral_analyse(
     return EphemeralAnalyseCreated(analyse_id=analyse.id)
 
 
-@router.get("/analyses/{analyse_id}", response_model=EphemeralAnalyseOut)
+@router.get(
+    "/analyses/{analyse_id}",
+    response_model=EphemeralAnalyseOut,
+    summary="Consulte une analyse éphémère",
+    description="Scope strict : ne renvoie que les analyses créées via POST /api/ephemeral/analyses, et "
+    "seulement à leur créateur (404 dans les deux autres cas - jamais 403, pour ne pas laisser deviner "
+    "qu'un id existe mais appartient à quelqu'un d'autre). Une Analyse classique de la plateforme, même "
+    "avec un id valide, tombe dans le même 404.",
+    responses={404: {"description": "Analyse introuvable, pas éphémère, ou appartenant à un autre créateur."}},
+)
 async def get_ephemeral_analyse(
     analyse_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -113,7 +133,19 @@ async def get_ephemeral_analyse(
     )
 
 
-@router.delete("/analyses/{analyse_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/analyses/{analyse_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Supprime une analyse éphémère immédiatement",
+    description="Suppression immédiate, sans attendre le TTL. Même scope strict que le GET (404 si pas "
+    "éphémère ou pas créée par l'appelant). 409 si des runs (dossier_ephemere) référencent encore cette "
+    "analyse - supprimez-les d'abord (DELETE /api/ephemeral/runs/{id}) : la contrainte est portée par la "
+    "base (FK Dossier.analyse_id, ondelete=RESTRICT), pas une vérification applicative séparée.",
+    responses={
+        404: {"description": "Analyse introuvable, pas éphémère, ou appartenant à un autre créateur."},
+        409: {"description": "Des dossiers référencent encore cette analyse."},
+    },
+)
 async def delete_ephemeral_analyse(
     analyse_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -205,6 +237,15 @@ async def _create_run(
     "/analyses/{analyse_id}/runs",
     response_model=EphemeralRunCreated,
     status_code=status.HTTP_201_CREATED,
+    summary="Lance un run sur une analyse déjà créée (flux A)",
+    description="Multipart : fichiers + persist (form, défaut false) + ttl_hours (query, défaut 24h, max "
+    "17520h/2 ans, 400 si hors bornes). `analyse_id` peut être une analyse éphémère ou une `Analyse` "
+    "classique de la plateforme (dans ce dernier cas, l'analyse n'est jamais modifiée). Le pipeline "
+    "complet (classification, extraction, agents) démarre immédiatement, sans appel `launch` séparé.",
+    responses={
+        400: {"description": "ttl_hours hors bornes (doit être entre 1 et 17520)."},
+        404: {"description": "analyse_id introuvable (ni éphémère, ni classique)."},
+    },
 )
 async def create_ephemeral_run_for_analyse(
     analyse_id: uuid.UUID,
@@ -228,7 +269,19 @@ async def create_ephemeral_run_for_analyse(
     return EphemeralRunCreated(run_id=dossier.id)
 
 
-@router.post("/runs", response_model=EphemeralRunCreated, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/runs",
+    response_model=EphemeralRunCreated,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crée l'analyse et lance le run en un seul appel (flux B)",
+    description="Équivalent du flux A (POST .../analyses/{id}/runs) sans passer par la création préalable "
+    "de l'analyse : `analyse_id` (form) référence une analyse déjà existante, éphémère ou classique. Mêmes "
+    "règles de TTL/persist et même déclenchement immédiat du pipeline complet que le flux A.",
+    responses={
+        400: {"description": "ttl_hours hors bornes (doit être entre 1 et 17520)."},
+        404: {"description": "analyse_id introuvable (ni éphémère, ni classique)."},
+    },
+)
 async def create_ephemeral_run(
     files: list[UploadFile],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -274,7 +327,15 @@ def _to_run_schema(dossier: Dossier, record: DossierEphemere) -> EphemeralRunOut
     )
 
 
-@router.get("/runs/{run_id}", response_model=EphemeralRunOut)
+@router.get(
+    "/runs/{run_id}",
+    response_model=EphemeralRunOut,
+    summary="Consulte un run éphémère (statut + résultats)",
+    description="Statut en cours, puis résultats complets (classification, entités, sorties des agents) une "
+    "fois terminé. Scope strict : ne renvoie que les runs créés via ce routeur, et seulement à leur "
+    "créateur (404 dans les deux autres cas).",
+    responses={404: {"description": "Run introuvable, pas éphémère, ou appartenant à un autre créateur."}},
+)
 async def get_ephemeral_run(
     run_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -284,7 +345,16 @@ async def get_ephemeral_run(
     return _to_run_schema(dossier, record)
 
 
-@router.post("/runs/{run_id}/stop", response_model=EphemeralRunOut)
+@router.post(
+    "/runs/{run_id}/stop",
+    response_model=EphemeralRunOut,
+    summary="Arrête un run en cours",
+    description="No-op si le run est déjà dans un état terminal (terminé/arrêté/échec) - même comportement "
+    "que POST /api/dossiers/{id}/stop. Pose expires_at (voir docs/ephemeral-api.md) si ce n'est pas déjà "
+    "fait. N'efface rien : le run reste consultable via GET, et sera purgé normalement au TTL, ou "
+    "supprimable immédiatement via DELETE.",
+    responses={404: {"description": "Run introuvable, pas éphémère, ou appartenant à un autre créateur."}},
+)
 async def stop_ephemeral_run(
     run_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -305,7 +375,16 @@ async def stop_ephemeral_run(
     return _to_run_schema(dossier, record)
 
 
-@router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/runs/{run_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Arrête (si besoin) et supprime un run immédiatement",
+    description="Si le run est encore en_cours, l'arrête d'abord (même effet que POST .../stop), puis "
+    "supprime immédiatement le dossier (documents, étapes d'exécution, résultats, fichiers S3), sans "
+    "attendre expires_at. Ne touche pas à l'analyse liée (analyse_ephemere conservée). Même scope strict "
+    "que le GET.",
+    responses={404: {"description": "Run introuvable, pas éphémère, ou appartenant à un autre créateur."}},
+)
 async def delete_ephemeral_run(
     run_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
