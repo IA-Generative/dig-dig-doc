@@ -1,5 +1,6 @@
 import uuid
-from datetime import timedelta
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,3 +72,37 @@ class EphemeralRepository:
                 analyse_ephemere.last_run_ended_at = dossier.ended_at
                 analyse_ephemere.expires_at = dossier.ended_at + timedelta(hours=record.ttl_hours)
         await self.db.commit()
+
+    async def list_expired_dossier_ephemeres(self) -> Sequence[DossierEphemere]:
+        """dossier_ephemere expirés à purger. persist=False répété ici en
+        toute rigueur, même si mark_dossier_terminal ne pose jamais
+        expires_at sur une ligne persist=True (defense in depth : garantit
+        qu'un persist=True n'est jamais purgé même si cet invariant venait à
+        être violé ailleurs)."""
+        result = await self.db.execute(
+            select(DossierEphemere).where(
+                DossierEphemere.persist.is_(False),
+                DossierEphemere.expires_at < datetime.now(UTC),
+            )
+        )
+        return result.scalars().all()
+
+    async def list_expired_analyse_ephemeres_without_runs(self) -> Sequence[AnalyseEphemere]:
+        """analyse_ephemere expirées à purger - jamais si un dossier_ephemere
+        la référence encore (même règle que le 409 de DELETE
+        /api/ephemeral/analyses/{id}, cf. docs/ephemeral-api.md) : la purge
+        automatique ne doit pas violer la même contrainte que la suppression
+        manuelle. En pratique la purge des dossier_ephemere tourne toujours
+        avant celle-ci (list_expired_dossier_ephemeres) dans la même tâche,
+        donc les runs expirés sont déjà partis au moment de cet appel."""
+        still_referenced = select(DossierEphemere.analyse_ephemere_id).where(
+            DossierEphemere.analyse_ephemere_id.is_not(None)
+        )
+        result = await self.db.execute(
+            select(AnalyseEphemere).where(
+                AnalyseEphemere.persist.is_(False),
+                AnalyseEphemere.expires_at < datetime.now(UTC),
+                AnalyseEphemere.analyse_id.not_in(still_referenced),
+            )
+        )
+        return result.scalars().all()
