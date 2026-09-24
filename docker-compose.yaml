@@ -119,6 +119,43 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Purge des ressources éphémères expirées (analyses/dossiers créés via
+  # /api/ephemeral/*, voir docs/ephemeral-api.md) : réutilise l'image et les
+  # modèles/repositories du backend (accès direct DB + S3), avec Celery beat
+  # embarqué (-B) plutôt qu'un service séparé - un seul consommateur sur la
+  # file "maintenance", pas de contention à éviter en embarquant beat ici.
+  backend-maintenance:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # -s : /app n'est pas inscriptible par l'utilisateur non-root du
+    # conteneur (Dockerfile) - le fichier de planification de beat va donc
+    # dans /tmp plutôt que le cwd par défaut.
+    command:
+      [
+        "celery", "-A", "app.tasks:celery_client", "worker", "-B",
+        "-s", "/tmp/celerybeat-schedule",
+        "--loglevel=info", "--queues=maintenance",
+      ]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
+      S3_BUCKET: dig-dig-doc
+      SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   postgres:
     image: postgres:16-alpine
     environment:
