@@ -1,8 +1,10 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas.analyse import AgentCreate, EntityDefinitionIn, LabelDefinitionIn
+from app.schemas.analyse import AgentCreate, AnalyseOut, EntityDefinitionIn, LabelDefinitionIn
+from app.schemas.dossier import DossierOut
 
 
 class EphemeralAnalyseCreate(BaseModel):
@@ -29,5 +31,24 @@ class EphemeralAnalyseCreated(BaseModel):
     analyse_id: uuid.UUID
 
 
+class EphemeralAnalyseOut(AnalyseOut):
+    """AnalyseOut + les métadonnées propres à l'analyse éphémère
+    (analyse_ephemere) - expires_at suit le TTL du dernier run l'ayant
+    utilisée (voir docs/ephemeral-api.md, section "Principe du TTL")."""
+
+    persist: bool
+    expires_at: datetime | None
+
+
 class EphemeralRunCreated(BaseModel):
     run_id: uuid.UUID
+
+
+class EphemeralRunOut(DossierOut):
+    """DossierOut + les métadonnées propres au run éphémère (dossier_ephemere)
+    - expires_at reste `None` tant que le run n'a pas atteint un état
+    terminal (voir docs/ephemeral-api.md, section "Principe du TTL")."""
+
+    persist: bool
+    ttl_hours: int | None
+    expires_at: datetime | None

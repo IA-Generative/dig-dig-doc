@@ -397,11 +397,35 @@ class DossierRepository:
         step.status = status
         step.output = output
         step.ended_at = datetime.now(UTC)
+        await self._complete_dossier_if_all_steps_done(step.dossier_id)
         await self.db.commit()
         # Pas de refresh(step) : réexpirerait `logs` (déjà chargée par
         # get_execution_step_by_id) et redéclencherait un lazy-load hors
         # contexte async à la sérialisation - même raison que add_page.
         return step
+
+    async def _complete_dossier_if_all_steps_done(self, dossier_id: uuid.UUID) -> None:
+        """Rien ne faisait jusqu'ici la synthèse "toutes les étapes sont
+        terminées -> le Dossier lui-même est terminé" : le worker complète
+        chaque ExecutionStep indépendamment (add_log/complete_execution_step
+        ci-dessus) mais le Dossier restait en_cours indéfiniment une fois le
+        pipeline fini. Fait passer le Dossier à terminé (ou échec si au
+        moins une étape a échoué) dès que plus aucune étape n'est en_cours.
+        Même transaction que le complete_execution_step qui vient de
+        déclencher la vérification : l'autoflush rend la mutation du step
+        ci-dessus déjà visible à la requête ci-dessous, pas de commit
+        intermédiaire nécessaire."""
+        result = await self.db.execute(select(ExecutionStep).where(ExecutionStep.dossier_id == dossier_id))
+        steps = result.scalars().all()
+        if not steps or any(s.status == ExecutionStepStatus.EN_COURS for s in steps):
+            return
+        dossier = await self.db.get(Dossier, dossier_id)
+        if dossier is None or dossier.status != DossierStatus.EN_COURS:
+            return
+        dossier.status = (
+            DossierStatus.ECHEC if any(s.status == ExecutionStepStatus.ECHEC for s in steps) else DossierStatus.TERMINE
+        )
+        dossier.ended_at = datetime.now(UTC)
 
     # --- Pages, prédictions et validation humaine ---
 

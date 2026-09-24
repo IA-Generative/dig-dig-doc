@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.conversation import MessageRole
+from app.models.dossier import DossierStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
+from app.repositories.ephemeral_repository import EphemeralRepository
 from app.schemas.dossier import (
     BoundingBoxIn,
     BoundingBoxOut,
@@ -64,7 +66,15 @@ async def complete_execution_step(
     step = await repository.get_execution_step_by_id(step_id)
     if step is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
-    return await repository.complete_execution_step(step, body.status, body.output)
+    completed = await repository.complete_execution_step(step, body.status, body.output)
+    # Pose du TTL dès que le Dossier vient de passer à un état terminal (cf.
+    # docs/ephemeral-api.md) - no-op immédiat si ce n'est pas encore le cas
+    # (mark_dossier_terminal vérifie ended_at) ou si le dossier n'est pas
+    # éphémère.
+    dossier = await repository.get(completed.dossier_id)
+    if dossier is not None and dossier.status != DossierStatus.EN_COURS:
+        await EphemeralRepository(db).mark_dossier_terminal(dossier)
+    return completed
 
 
 @router.get("/documents/{document_id}", response_model=DossierDocumentOut)
