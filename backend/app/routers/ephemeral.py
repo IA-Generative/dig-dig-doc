@@ -180,29 +180,36 @@ def _validate_ttl_hours(ttl_hours: int | None) -> int:
     return value
 
 
+async def _read_upload_files(files: list[UploadFile]) -> list[tuple[str, bytes, str]]:
+    return [(f.filename or "document", await f.read(), f.content_type or "application/octet-stream") for f in files]
+
+
 async def _create_run(
     *,
     db: AsyncSession,
     identity: EphemeralIdentity,
     analyse: Analyse,
-    files: list[UploadFile],
+    files: list[tuple[str, bytes, str]],
     persist: bool,
     ttl_hours: int,
 ) -> Dossier:
-    """Cœur commun aux flux A et B : upload + lancement immédiat du pipeline
-    complet (pas d'étape `launch` séparée, contrairement à /api/dossiers),
-    puis pose de la ligne dossier_ephemere. Réutilise telle quelle la
-    logique d'upload/lancement de dossiers.py."""
+    """Cœur commun aux flux A et B (et au serveur MCP, cf. app/mcp/server.py) :
+    upload + lancement immédiat du pipeline complet (pas d'étape `launch`
+    séparée, contrairement à /api/dossiers), puis pose de la ligne
+    dossier_ephemere. Réutilise telle quelle la logique d'upload/lancement
+    de dossiers.py.
+
+    `files` : (nom, contenu, type MIME) déjà lus en mémoire - pas de
+    `UploadFile` FastAPI ici, pour rester appelable depuis un contexte qui
+    n'en a pas (le serveur MCP décode du base64, pas un multipart HTTP)."""
     dossier_repository = DossierRepository(db)
     dossier = await dossier_repository.create(name=f"Run éphémère {uuid.uuid4()}", analyse=analyse)
 
     documents = []
-    for f in files:
-        data = await f.read()
-        s3_key = f"dossiers/{dossier.id}/{uuid.uuid4()}-{f.filename or 'document'}"
-        mimetype = f.content_type or "application/octet-stream"
+    for name, data, mimetype in files:
+        s3_key = f"dossiers/{dossier.id}/{uuid.uuid4()}-{name or 'document'}"
         await run_in_threadpool(s3_connector.upload, s3_key, data, mimetype)
-        documents.append({"name": f.filename or "document", "size": len(data), "s3_key": s3_key, "mimetype": mimetype})
+        documents.append({"name": name or "document", "size": len(data), "s3_key": s3_key, "mimetype": mimetype})
     created = await dossier_repository.add_documents(dossier, documents)
     for document in created:
         dispatch_text_extraction(str(document.id))
@@ -262,7 +269,7 @@ async def create_ephemeral_run_for_analyse(
         db=db,
         identity=identity,
         analyse=analyse,
-        files=files,
+        files=await _read_upload_files(files),
         persist=persist,
         ttl_hours=_validate_ttl_hours(ttl_hours),
     )
@@ -297,7 +304,7 @@ async def create_ephemeral_run(
         db=db,
         identity=identity,
         analyse=analyse,
-        files=files,
+        files=await _read_upload_files(files),
         persist=persist,
         ttl_hours=_validate_ttl_hours(ttl_hours),
     )
