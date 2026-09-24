@@ -27,3 +27,7 @@ class EphemeralAnalyseCreate(BaseModel):
 
 class EphemeralAnalyseCreated(BaseModel):
     analyse_id: uuid.UUID
+
+
+class EphemeralRunCreated(BaseModel):
+    run_id: uuid.UUID

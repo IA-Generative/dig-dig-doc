@@ -1,8 +1,27 @@
+import pytest
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def _no_real_celery_dispatch_for_ephemeral_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Même raison que le fixture équivalent pour /api/dossiers dans
+    conftest.py : app/routers/ephemeral.py importe les dispatch_* dans son
+    propre namespace, le monkeypatch de dossiers.py ne les couvre pas."""
+    for name in (
+        "dispatch_text_extraction",
+        "dispatch_classification",
+        "dispatch_entity_extraction",
+        "dispatch_agent_execution",
+    ):
+        monkeypatch.setattr(f"app.routers.ephemeral.{name}", lambda *args, **kwargs: None)
 
 
 def _create_app_token(client: TestClient, name: str) -> str:
     return client.post("/api/app-tokens", json={"name": name}).json()["token"]
+
+
+def _create_ephemeral_analyse(client: TestClient, name: str = "Analyse run test") -> str:
+    return client.post("/api/ephemeral/analyses", json={"name": name, "description": ""}).json()["analyse_id"]
 
 
 def test_create_and_get_ephemeral_analyse(client: TestClient) -> None:
@@ -89,3 +108,117 @@ def test_invalid_app_token_is_rejected(client: TestClient) -> None:
         headers={"X-App-Token": "not-a-real-token"},
     )
     assert response.status_code == 401
+
+
+def test_create_run_flux_a_launches_pipeline_immediately(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+
+    created = client.post(
+        f"/api/ephemeral/analyses/{analyse_id}/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"persist": "false"},
+    )
+    assert created.status_code == 201
+    run_id = created.json()["run_id"]
+    assert run_id
+
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["analyse_id"] == analyse_id
+    assert run["status"] == "en_cours"
+    assert run["started_at"] is not None
+    assert len(run["documents"]) == 1
+    kinds = {step["kind"] for step in run["execution_steps"]}
+    assert kinds == {"classification", "extraction"}
+
+
+def test_create_run_flux_b_in_one_call(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id, "persist": "false"},
+    )
+    assert created.status_code == 201
+    run_id = created.json()["run_id"]
+
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["analyse_id"] == analyse_id
+    assert run["status"] == "en_cours"
+
+
+def test_run_against_a_classic_analyse(client: TestClient) -> None:
+    classic_analyse_id = client.post(
+        "/api/analyses", json={"name": "Analyse classique run", "description": "Test"}
+    ).json()["id"]
+
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": classic_analyse_id},
+    )
+    assert created.status_code == 201
+    run_id = created.json()["run_id"]
+
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["analyse_id"] == classic_analyse_id
+
+
+def test_run_with_unknown_analyse_id_is_404(client: TestClient) -> None:
+    response = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert response.status_code == 404
+
+
+def test_run_ttl_hours_validation(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+
+    too_high = client.post(
+        "/api/ephemeral/runs",
+        params={"ttl_hours": 999999},
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    assert too_high.status_code == 400
+
+    zero = client.post(
+        "/api/ephemeral/runs",
+        params={"ttl_hours": 0},
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    assert zero.status_code == 400
+
+    ok = client.post(
+        "/api/ephemeral/runs",
+        params={"ttl_hours": 48},
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    assert ok.status_code == 201
+
+
+def test_get_unknown_run_is_404(client: TestClient) -> None:
+    response = client.get("/api/ephemeral/runs/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
+
+
+def test_run_is_scoped_to_its_creator(client: TestClient) -> None:
+    token_a = _create_app_token(client, "run-app-a")
+    token_b = _create_app_token(client, "run-app-b")
+    analyse_id = _create_ephemeral_analyse(client)
+
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+        headers={"X-App-Token": token_a},
+    )
+    run_id = created.json()["run_id"]
+
+    assert client.get(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_a}).status_code == 200
+    assert client.get(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_b}).status_code == 404
+    assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 404
