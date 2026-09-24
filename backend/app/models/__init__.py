@@ -8,6 +8,7 @@ from .analyse import (
     LabelDefinition,
     VersionedField,
 )
+from .analyse_ephemere import AnalyseEphemere
 from .analyse_share import AnalyseShare, AnalyseShareKind
 from .app_token import AppToken
 from .base import Base
@@ -30,6 +31,7 @@ from .dossier import (
     ExecutionStepStatus,
     TextExtractionStatus,
 )
+from .dossier_ephemere import DossierEphemere
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
 from .report import Report, ReportStatus, ReportType
@@ -38,6 +40,7 @@ __all__ = [
     "Agent",
     "AgentTool",
     "Analyse",
+    "AnalyseEphemere",
     "AnalyseShare",
     "AnalyseShareKind",
     "AppToken",
@@ -50,6 +53,7 @@ __all__ = [
     "DocumentPrediction",
     "Dossier",
     "DossierDocument",
+    "DossierEphemere",
     "DossierStatus",
     "EntityDefinition",
     "EntityType",
