@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -308,3 +310,103 @@ def test_delete_run_is_scoped_to_its_creator(client: TestClient) -> None:
 
     assert client.delete(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_b}).status_code == 404
     assert client.delete(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_a}).status_code == 204
+
+
+INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
+
+
+def _complete_all_steps(client: TestClient, run_id: str, step_status: str = "terminé") -> None:
+    steps = client.get(f"/api/ephemeral/runs/{run_id}").json()["execution_steps"]
+    for step in steps:
+        client.post(
+            f"/api/internal/execution-steps/{step['id']}/complete",
+            json={"status": step_status, "output": "ok"},
+            headers=INTERNAL_HEADERS,
+        )
+
+
+def test_run_expires_at_is_null_while_running(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["status"] == "en_cours"
+    assert run["expires_at"] is None
+
+
+def test_run_expires_at_set_on_successful_completion(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+    created = client.post(
+        "/api/ephemeral/runs",
+        params={"ttl_hours": 48},
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    run_id = created.json()["run_id"]
+
+    _complete_all_steps(client, run_id, "terminé")
+
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["status"] == "terminé"
+    assert run["ended_at"] is not None
+    assert run["expires_at"] is not None
+
+    ended_at = datetime.fromisoformat(run["ended_at"])
+    expires_at = datetime.fromisoformat(run["expires_at"])
+    assert expires_at - ended_at == timedelta(hours=48)
+
+
+def test_run_status_is_echec_when_a_step_fails(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+    _complete_all_steps(client, run_id, "échec")
+
+    run = client.get(f"/api/ephemeral/runs/{run_id}").json()
+    assert run["status"] == "échec"
+    assert run["expires_at"] is not None
+
+
+def test_run_expires_at_set_on_manual_stop(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+    created = client.post(
+        "/api/ephemeral/runs",
+        params={"ttl_hours": 1},
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    run_id = created.json()["run_id"]
+
+    stopped = client.post(f"/api/ephemeral/runs/{run_id}/stop").json()
+    assert stopped["status"] == "arrêté"
+    assert stopped["expires_at"] is not None
+
+
+def test_run_expires_at_stays_null_when_persist_true(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id, "persist": "true"},
+    )
+    run_id = created.json()["run_id"]
+
+    stopped = client.post(f"/api/ephemeral/runs/{run_id}/stop").json()
+    assert stopped["status"] == "arrêté"
+    assert stopped["persist"] is True
+    assert stopped["expires_at"] is None
+
+
+def test_analyse_ephemere_expires_at_follows_last_completed_run(client: TestClient) -> None:
+    analyse_id = _create_ephemeral_analyse(client)
+    assert client.get(f"/api/ephemeral/analyses/{analyse_id}").json()["expires_at"] is None
+
+    run_id = _create_run(client, analyse_id)
+    client.post(f"/api/ephemeral/runs/{run_id}/stop")
+
+    analyse = client.get(f"/api/ephemeral/analyses/{analyse_id}").json()
+    assert analyse["expires_at"] is not None
+
+    # Un second run qui termine plus tard recule l'expiration de l'analyse.
+    first_expires_at = analyse["expires_at"]
+    second_run_id = _create_run(client, analyse_id)
+    client.post(f"/api/ephemeral/runs/{second_run_id}/stop")
+
+    analyse = client.get(f"/api/ephemeral/analyses/{analyse_id}").json()
+    assert analyse["expires_at"] >= first_expires_at

@@ -121,7 +121,7 @@ Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-
 3. [GitHub #22](https://github.com/IA-Generative/dig-dig-doc/issues/22) — `POST/GET/DELETE /api/ephemeral/analyses`. ✅ implémenté (`app/routers/ephemeral.py`, `app/repositories/ephemeral_repository.py`, `app/core/security/ephemeral.py`).
 4. [GitHub #23](https://github.com/IA-Generative/dig-dig-doc/issues/23) — `POST/GET /api/ephemeral/runs` (flux A + B). ✅ implémenté (`_create_run` dans `app/routers/ephemeral.py`, CRUD `DossierEphemere` dans `ephemeral_repository.py`).
 5. [GitHub #24](https://github.com/IA-Generative/dig-dig-doc/issues/24) — `POST .../stop` et `DELETE /api/ephemeral/runs/{id}`. ✅ implémenté.
-6. [`06-calcul-ttl.md`](issues/06-calcul-ttl.md) — logique `expires_at` sur fin de run, propagation vers `analyse_ephemere`.
+6. [GitHub #25](https://github.com/IA-Generative/dig-dig-doc/issues/25) — logique `expires_at` sur fin de run, propagation vers `analyse_ephemere`. ✅ implémenté. A aussi nécessité de combler un trou plateforme : rien ne faisait passer `Dossier.status` à `terminé`/`échec` (seul `stop()` manuel existait) - ajouté dans `DossierRepository._complete_dossier_if_all_steps_done`, déclenché par le callback worker existant.
 7. [`07-tache-purge.md`](issues/07-tache-purge.md) — tâche Celery + planification Celery beat.
 8. [`08-auth-visibilite.md`](issues/08-auth-visibilite.md) — double support token API / Keycloak + règles de visibilité.
 9. [`09-documentation-openapi.md`](issues/09-documentation-openapi.md) — documentation OpenAPI du tag "Ephemeral".

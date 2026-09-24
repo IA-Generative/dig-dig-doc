@@ -572,18 +572,16 @@ def test_execution_stream_sends_terminal_state(client: TestClient) -> None:
             json={"status": "terminé", "output": "ok"},
             headers=INTERNAL_HEADERS,
         )
-    # Un dossier n'a pas de transition automatique "toutes les étapes sont
-    # terminées -> dossier terminé" pour l'instant (ça viendra avec le
-    # worker) : on l'arrête explicitement pour obtenir un statut terminal et
-    # que le flux SSE se termine.
-    dossier = client.post(f"/api/dossiers/{dossier['id']}/stop").json()
-    assert dossier["status"] == "arrêté"
+    # Compléter la dernière étape fait passer le Dossier lui-même à
+    # "terminé" (toutes les étapes sont dans un état terminal).
+    dossier = client.get(f"/api/dossiers/{dossier['id']}").json()
+    assert dossier["status"] == "terminé"
 
     with client.stream("GET", f"/api/dossiers/{dossier['id']}/stream") as response:
         assert response.status_code == 200
         body = "".join(response.iter_text())
     assert "execution-update" in body
-    assert "arr" in body  # "arrêté", échappé ou non selon l'encodage JSON
+    assert "termin" in body  # "terminé", échappé ou non selon l'encodage JSON
 
 
 def _create_conversation_with_message(client: TestClient, dossier_name: str) -> tuple[str, str, str]:
