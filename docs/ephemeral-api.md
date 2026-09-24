@@ -125,7 +125,7 @@ Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-
 7. [GitHub #26](https://github.com/IA-Generative/dig-dig-doc/issues/26) — tâche Celery + planification Celery beat. ✅ implémenté (`backend/app/tasks.py`, service `backend-maintenance` dans `docker-compose.yaml`, beat embarqué `-B` sur la file `maintenance`).
 8. [GitHub #27](https://github.com/IA-Generative/dig-dig-doc/issues/27) — double support token API / Keycloak + règles de visibilité. ✅ implémenté. A débusqué un vrai bug en écrivant les tests multi-utilisateurs : `get_ephemeral_identity` appelait `get_current_user(request)` directement plutôt que via `Depends()`, ce qui contournait silencieusement `app.dependency_overrides` - deux comptes Keycloak différents se voyaient mutuellement. Corrigé.
 9. [GitHub #28](https://github.com/IA-Generative/dig-dig-doc/issues/28) — documentation OpenAPI du tag "Ephemeral". ✅ implémenté (summary/description/responses sur chaque endpoint, exemples et descriptions de champs dans `app/schemas/ephemeral.py`).
-10. [`10-mcp-server.md`](issues/10-mcp-server.md) — serveur MCP au-dessus de l'API éphémère, pour qu'un agent puisse l'appeler directement.
+10. [GitHub #29](https://github.com/IA-Generative/dig-dig-doc/issues/29) — serveur MCP au-dessus de l'API éphémère, pour qu'un agent puisse l'appeler directement. ✅ implémenté (`backend/app/mcp/`, monté sous `/mcp` dans le process backend). Doc client : [backend/app/mcp/README.md](../backend/app/mcp/README.md).
 
 ## Points tranchés
 
