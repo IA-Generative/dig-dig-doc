@@ -1,10 +1,12 @@
+import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.factory import get_current_user
+from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.repositories.app_token_repository import AppTokenRepository
 
@@ -31,5 +33,16 @@ async def get_ephemeral_identity(request: Request, db: Annotated[AsyncSession, D
         if app_token is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Jeton invalide")
         return EphemeralIdentity(id=str(app_token.id), is_app_token=True)
-    user = get_current_user(request)
+    # get_current_user n'est pas déclaré comme Depends() sur cette fonction
+    # (l'auth par jeton API doit marcher sans lui) : FastAPI ne le résout
+    # donc jamais tout seul, et un appel direct get_current_user(request)
+    # contournerait silencieusement app.dependency_overrides[get_current_user]
+    # (utilisé par les tests pour simuler un autre utilisateur Keycloak) -
+    # on consulte les overrides nous-mêmes pour rester compatible.
+    verifier: Callable[..., RequestContext] = request.app.dependency_overrides.get(get_current_user, get_current_user)
+    # Un override de test suit la convention de ce repo (ex.
+    # test_dossiers.py: `def as_other_user() -> RequestContext`, zéro
+    # paramètre) plutôt que la signature réelle de get_current_user - on ne
+    # peut pas passer `request` en aveugle aux deux.
+    user = verifier(request) if inspect.signature(verifier).parameters else verifier()
     return EphemeralIdentity(id=user.user_id, is_app_token=False)
