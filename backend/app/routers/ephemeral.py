@@ -1,20 +1,39 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_client import (
+    dispatch_agent_execution,
+    dispatch_classification,
+    dispatch_entity_extraction,
+    dispatch_text_extraction,
+)
+from app.connectors import s3_connector
 from app.core.security.ephemeral import EphemeralIdentity, get_ephemeral_identity
 from app.db import get_db
-from app.models.analyse import AgentTool, EntityDefinition, LabelDefinition
+from app.models.analyse import AgentTool, Analyse, EntityDefinition, LabelDefinition
 from app.models.analyse_ephemere import AnalyseEphemere
+from app.models.dossier import Dossier
 from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
 from app.schemas.analyse import AnalyseOut
-from app.schemas.ephemeral import EphemeralAnalyseCreate, EphemeralAnalyseCreated
+from app.schemas.dossier import DossierOut
+from app.schemas.ephemeral import (
+    EphemeralAnalyseCreate,
+    EphemeralAnalyseCreated,
+    EphemeralRunCreated,
+)
 
 router = APIRouter(prefix="/ephemeral", tags=["Ephemeral"], dependencies=[Depends(get_ephemeral_identity)])
+
+# Cf. docs/ephemeral-api.md, section "Principe du TTL".
+TTL_DEFAULT_HOURS = 24
+TTL_MAX_HOURS = 17520  # 2 ans
 
 
 async def _get_analyse_ephemere_or_404(
@@ -111,3 +130,133 @@ async def delete_ephemeral_analyse(
             status_code=status.HTTP_409_CONFLICT,
             detail="Des dossiers référencent encore cette analyse - supprimez-les d'abord",
         ) from error
+
+
+def _validate_ttl_hours(ttl_hours: int | None) -> int:
+    value = TTL_DEFAULT_HOURS if ttl_hours is None else ttl_hours
+    if value <= 0 or value > TTL_MAX_HOURS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"ttl_hours doit être compris entre 1 et {TTL_MAX_HOURS} (2 ans)",
+        )
+    return value
+
+
+async def _create_run(
+    *,
+    db: AsyncSession,
+    identity: EphemeralIdentity,
+    analyse: Analyse,
+    files: list[UploadFile],
+    persist: bool,
+    ttl_hours: int,
+) -> Dossier:
+    """Cœur commun aux flux A et B : upload + lancement immédiat du pipeline
+    complet (pas d'étape `launch` séparée, contrairement à /api/dossiers),
+    puis pose de la ligne dossier_ephemere. Réutilise telle quelle la
+    logique d'upload/lancement de dossiers.py."""
+    dossier_repository = DossierRepository(db)
+    dossier = await dossier_repository.create(name=f"Run éphémère {uuid.uuid4()}", analyse=analyse)
+
+    documents = []
+    for f in files:
+        data = await f.read()
+        s3_key = f"dossiers/{dossier.id}/{uuid.uuid4()}-{f.filename or 'document'}"
+        mimetype = f.content_type or "application/octet-stream"
+        await run_in_threadpool(s3_connector.upload, s3_key, data, mimetype)
+        documents.append({"name": f.filename or "document", "size": len(data), "s3_key": s3_key, "mimetype": mimetype})
+    created = await dossier_repository.add_documents(dossier, documents)
+    for document in created:
+        dispatch_text_extraction(str(document.id))
+    # add_documents() finit par un refresh(dossier) qui périme execution_steps
+    # (accédée par launch() juste après) - même raison que le commentaire
+    # équivalent dans dossiers.py:add_documents, un re-fetch recharge tout
+    # via _base_query (populate_existing=True).
+    dossier = await dossier_repository.get(dossier.id)
+
+    await dossier_repository.launch(dossier, analyse)
+    dispatch_classification(str(dossier.id))
+    dispatch_entity_extraction(str(dossier.id))
+    dispatch_agent_execution(str(dossier.id))
+
+    ephemeral_repository = EphemeralRepository(db)
+    analyse_ephemere = await ephemeral_repository.get_analyse_ephemere(analyse.id)
+    await ephemeral_repository.create_dossier_ephemere(
+        dossier_id=dossier.id,
+        analyse_ephemere_id=analyse_ephemere.analyse_id if analyse_ephemere else None,
+        persist=persist,
+        ttl_hours=ttl_hours,
+        created_by=identity.id,
+    )
+    # Pas `return dossier` : add_documents()/launch() réexpirent les
+    # relations déjà chargées (même raison que le commentaire équivalent
+    # dans dossiers.py:add_documents) - un re-fetch a le eager loading
+    # complet de DossierRepository._base_query.
+    return await dossier_repository.get(dossier.id)
+
+
+@router.post(
+    "/analyses/{analyse_id}/runs",
+    response_model=EphemeralRunCreated,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_ephemeral_run_for_analyse(
+    analyse_id: uuid.UUID,
+    files: list[UploadFile],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
+    persist: Annotated[bool, Form()] = False,
+    ttl_hours: Annotated[int | None, Query()] = None,
+) -> EphemeralRunCreated:
+    analyse = await AnalyseRepository(db).get(analyse_id)
+    if analyse is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable")
+    dossier = await _create_run(
+        db=db,
+        identity=identity,
+        analyse=analyse,
+        files=files,
+        persist=persist,
+        ttl_hours=_validate_ttl_hours(ttl_hours),
+    )
+    return EphemeralRunCreated(run_id=dossier.id)
+
+
+@router.post("/runs", response_model=EphemeralRunCreated, status_code=status.HTTP_201_CREATED)
+async def create_ephemeral_run(
+    files: list[UploadFile],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
+    analyse_id: Annotated[uuid.UUID, Form()],
+    persist: Annotated[bool, Form()] = False,
+    ttl_hours: Annotated[int | None, Query()] = None,
+) -> EphemeralRunCreated:
+    analyse = await AnalyseRepository(db).get(analyse_id)
+    if analyse is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable")
+    dossier = await _create_run(
+        db=db,
+        identity=identity,
+        analyse=analyse,
+        files=files,
+        persist=persist,
+        ttl_hours=_validate_ttl_hours(ttl_hours),
+    )
+    return EphemeralRunCreated(run_id=dossier.id)
+
+
+@router.get("/runs/{run_id}", response_model=DossierOut)
+async def get_ephemeral_run(
+    run_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
+) -> Dossier:
+    ephemeral_repository = EphemeralRepository(db)
+    record = await ephemeral_repository.get_dossier_ephemere(run_id)
+    if record is None or record.created_by != identity.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+
+    dossier = await DossierRepository(db).get(run_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+    return dossier
