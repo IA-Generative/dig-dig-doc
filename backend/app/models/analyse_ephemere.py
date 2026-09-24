@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, ForeignKey
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,10 @@ class AnalyseEphemere(TimestampMixin, Base):
         PG_UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="CASCADE"), primary_key=True
     )
     persist: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Identité du créateur (RequestContext.user_id Keycloak, ou AppToken.id en
+    # str) - sert au scoping de visibilité (voir docs/ephemeral-api.md,
+    # section Authentification / Visibilité).
+    created_by: Mapped[str] = mapped_column(String, nullable=False)
     # Mis à jour à chaque fin de run référençant cette analyse ; expires_at en
     # découle (last_run_ended_at + ttl_hours du run). Voir docs/ephemeral-api.md.
     last_run_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

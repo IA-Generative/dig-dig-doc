@@ -110,13 +110,15 @@ Les endpoints `/api/ephemeral/*` acceptent **les deux** mécanismes d'auth exist
 - Un token API (compte de service) voit/peut agir sur les ressources éphémères qu'il a créées.
 - Pas de visibilité croisée entre comptes Keycloak et comptes de service en dehors de ces règles d'association/propriété.
 
+**État actuel (implémenté par #22)** : scoping simplifié au créateur uniquement (`created_by` = `RequestContext.user_id` ou `AppToken.id`) pour les deux mécanismes — un compte Keycloak ne voit que ce qu'il a lui-même créé, pas encore de notion de "partage"/association élargie comme sur les analyses classiques (`AnalyseShare`). #08 affinera cette règle si le besoin apparaît (ex. partage d'une analyse éphémère entre plusieurs comptes d'une même équipe).
+
 ## Découpage en issues
 
 Suivi sur GitHub : [issues #20 à #29](https://github.com/IA-Generative/dig-dig-doc/issues?q=is%3Aissue+20..29). Détaillées individuellement dans `docs/issues/` tant qu'elles ne sont pas implémentées (le fichier est supprimé une fois le code mergé, l'issue GitHub reste la référence) :
 
 1. [GitHub #20](https://github.com/IA-Generative/dig-dig-doc/issues/20) — création des tables d'association `analyse_ephemere` et `dossier_ephemere` (Alembic). ✅ implémenté (`backend/app/models/analyse_ephemere.py`, `dossier_ephemere.py`, migration `7f1e8bb1c9da`).
 2. [GitHub #21](https://github.com/IA-Generative/dig-dig-doc/issues/21) — suppression complète d'un `Dossier` : DB (cascade déjà câblée) + nettoyage S3. ✅ implémenté (`S3Connector.delete`, `DossierRepository.delete_dossier`).
-3. [`03-endpoints-definition-analyse.md`](issues/03-endpoints-definition-analyse.md) — `POST/GET/DELETE /api/ephemeral/analyses`.
+3. [GitHub #22](https://github.com/IA-Generative/dig-dig-doc/issues/22) — `POST/GET/DELETE /api/ephemeral/analyses`. ✅ implémenté (`app/routers/ephemeral.py`, `app/repositories/ephemeral_repository.py`, `app/core/security/ephemeral.py`).
 4. [`04-endpoints-run.md`](issues/04-endpoints-run.md) — `POST/GET /api/ephemeral/runs` (flux A + B).
 5. [`05-stop-delete-run.md`](issues/05-stop-delete-run.md) — `POST .../stop` et `DELETE /api/ephemeral/runs/{id}`.
 6. [`06-calcul-ttl.md`](issues/06-calcul-ttl.md) — logique `expires_at` sur fin de run, propagation vers `analyse_ephemere`.
