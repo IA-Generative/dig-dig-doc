@@ -31,13 +31,20 @@ Un serveur MCP (nouveau service ou module, à héberger à côté du backend) ex
 - [ ] Serveur MCP exposant au minimum les 6 tools listés ci-dessus.
 - [ ] Auth par token API, pas de session Keycloak côté MCP.
 - [ ] Un agent MCP peut réaliser le cycle complet : lister la config → créer/référencer une analyse → lancer un run avec des fichiers → suivre le statut → récupérer le résultat → supprimer.
-- [ ] Documentation d'usage du serveur MCP (comment le déclarer dans un client MCP, ex. config Claude Desktop/Claude Code).
+- [ ] `README.md` dédié au serveur MCP (dans son répertoire, ex. `mcp/README.md`), destiné à qui veut brancher un agent/client MCP dessus (pas au code du frontend React de la plateforme) :
+  - Ce qu'est ce serveur et à quoi il sert (résumé du contexte ci-dessus).
+  - Comment l'installer/lancer en local (dépendances, variables d'environnement, notamment le token API à fournir).
+  - Comment le déclarer dans un client MCP (exemple de config JSON pour Claude Desktop et Claude Code - transport stdio ou HTTP selon ce qui est retenu).
+  - Liste des tools exposés, avec pour chacun : son objectif, ses paramètres, un exemple d'appel et de réponse.
+  - Un exemple de cycle complet (créer une analyse → lancer un run avec des fichiers → suivre le statut → récupérer le résultat → supprimer), équivalent MCP du scénario déjà documenté pour l'API REST dans `docs/ephemeral-api.md`.
+- [ ] Lien vers ce `README.md` ajouté depuis `docs/ephemeral-api.md` et depuis le `README.md` racine du repo (section listant les services/composants du projet, si une telle section existe déjà).
 
 ## Fichiers concernés
 
-- Nouveau module/service MCP (emplacement à définir, ex. `backend/mcp/` ou service séparé)
+- Nouveau module/service MCP (emplacement à définir, ex. `backend/mcp/` ou service séparé) + son `README.md`
 - `backend/app/routers/ephemeral.py` (consommé via HTTP, pas modifié)
 - `backend/app/routers/app_tokens.py` (auth du serveur MCP)
+- `README.md` racine (lien vers la doc MCP, si pertinent)
 
 ## Dépendances
 
