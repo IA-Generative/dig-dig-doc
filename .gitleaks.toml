@@ -5,3 +5,8 @@ minVersion = "v8.25.0"
 
 [extend]
 useDefault = true
+
+[[allowlists]]
+description = "Helm chart test fixtures: fake Secret manifests used by `ct lint`/`helm template`, never real credentials."
+targetRules = ["kubernetes-secret-yaml"]
+paths = ['''digdigdoc/test-values\.yaml''']

@@ -210,9 +210,7 @@ def test_run_agents_agent_failure_completes_with_echec(monkeypatch) -> None:
     monkeypatch.setattr(
         agent_mod,
         "run_agent",
-        lambda agent_prompt, tools, model=None: (_ for _ in ()).throw(
-            RuntimeError("LLM error")
-        ),
+        lambda agent_prompt, tools, model=None: (_ for _ in ()).throw(RuntimeError("LLM error")),
     )
     monkeypatch.setattr(agent_mod, "_wait_for_steps", lambda client, dossier, kinds: {})
 

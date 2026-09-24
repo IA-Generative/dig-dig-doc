@@ -38,9 +38,7 @@ from app.schemas.dossier import (
 # Routes appelées par les workers Celery (pas par le navigateur) : le worker
 # dépose ici le résultat de son travail - logs en cours d'exécution, étape
 # terminée, pages/prédictions extraites d'un document, réponse de l'agent.
-router = APIRouter(
-    prefix="/internal", tags=["Internal"], dependencies=[Depends(verify_app_token)]
-)
+router = APIRouter(prefix="/internal", tags=["Internal"], dependencies=[Depends(verify_app_token)])
 
 
 @router.post("/execution-steps/{step_id}/logs", response_model=ExecutionStepOut)
@@ -52,9 +50,7 @@ async def add_execution_log(
     repository = DossierRepository(db)
     step = await repository.get_execution_step_by_id(step_id)
     if step is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
     return await repository.add_log(step, body.level, body.message)
 
 
@@ -67,27 +63,19 @@ async def complete_execution_step(
     repository = DossierRepository(db)
     step = await repository.get_execution_step_by_id(step_id)
     if step is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
     return await repository.complete_execution_step(step, body.status, body.output)
 
 
 @router.get("/documents/{document_id}", response_model=DossierDocumentOut)
-async def get_document(
-    document_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def get_document(document_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
     document = await DossierRepository(db).get_document_by_id(document_id)
     if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     return document
 
 
-@router.put(
-    "/documents/{document_id}/extraction-status", response_model=DossierDocumentOut
-)
+@router.put("/documents/{document_id}/extraction-status", response_model=DossierDocumentOut)
 async def set_document_extraction_status(
     document_id: uuid.UUID,
     body: TextExtractionStatusIn,
@@ -96,9 +84,7 @@ async def set_document_extraction_status(
     repository = DossierRepository(db)
     document = await repository.get_document_by_id(document_id)
     if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     await repository.set_text_extraction_status(document, body.status, body.error)
     return document
 
@@ -116,9 +102,7 @@ async def add_document_page(
     repository = DossierRepository(db)
     document = await repository.get_document_by_id(document_id)
     if document is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     return await repository.add_page(
         document,
         page_number=body.page_number,
@@ -142,9 +126,7 @@ async def add_bounding_box(
     repository = DossierRepository(db)
     page = await repository.get_page_by_id(page_id)
     if page is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
     return await repository.add_bounding_box(page, **body.model_dump())
 
 
@@ -161,9 +143,7 @@ async def add_document_prediction(
     repository = DossierRepository(db)
     page = await repository.get_page_by_id(page_id)
     if page is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
     return await repository.add_prediction(
         page,
         kind=body.kind,
@@ -177,9 +157,7 @@ async def add_document_prediction(
     )
 
 
-@router.post(
-    "/conversations/{conversation_id}/messages", response_model=ConversationOut
-)
+@router.post("/conversations/{conversation_id}/messages", response_model=ConversationOut)
 async def add_assistant_message(
     conversation_id: uuid.UUID,
     body: InternalMessageIn,
@@ -188,9 +166,7 @@ async def add_assistant_message(
     repository = DossierRepository(db)
     conversation = await repository.get_conversation(conversation_id)
     if conversation is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
     return await repository.add_message(
         conversation,
         MessageRole.ASSISTANT,
@@ -209,9 +185,7 @@ async def get_internal_conversation(
     du graphe LangGraph de chat."""
     conversation = await DossierRepository(db).get_conversation(conversation_id)
     if conversation is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
     return conversation
 
 
@@ -231,54 +205,38 @@ async def add_chat_event(
     repository = DossierRepository(db)
     conversation = await repository.get_conversation(conversation_id)
     if conversation is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
     return await repository.add_chat_event(conversation_id, body.kind, body.data)
 
 
 @router.get("/dossiers/{dossier_id}", response_model=InternalDossierOut)
-async def get_internal_dossier(
-    dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def get_internal_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
     """Dossier complet pour le worker agent_execution : documents, pages
     (avec clés S3 des captures), étapes d'exécution. Réservé à l'API
     interne - ne renvoie jamais les clés S3 côté frontend."""
     dossier = await DossierRepository(db).get(dossier_id)
     if dossier is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
     return dossier
 
 
 @router.get("/analyses/{analyse_id}", response_model=InternalAnalyseOut)
-async def get_internal_analyse(
-    analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
-):
+async def get_internal_analyse(analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
     """Définitions de l'analyse (labels, entités, prompts de classification
     et d'extraction) pour le worker agent_execution. Réservé à l'API
     interne."""
     analyse = await AnalyseRepository(db).get(analyse_id)
     if analyse is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable")
     return InternalAnalyseOut(
         id=analyse.id,
         classification=InternalClassificationOut(
             prompt=analyse.classification_prompt,
-            labels=[
-                InternalLabelDefinitionOut.model_validate(label)
-                for label in analyse.labels
-            ],
+            labels=[InternalLabelDefinitionOut.model_validate(label) for label in analyse.labels],
         ),
         extraction=InternalExtractionOut(
             prompt=analyse.extraction_prompt,
-            entities=[
-                InternalEntityDefinitionOut.model_validate(entity)
-                for entity in analyse.entities
-            ],
+            entities=[InternalEntityDefinitionOut.model_validate(entity) for entity in analyse.entities],
         ),
         agents=[InternalAgentOut.model_validate(agent) for agent in analyse.agents],
     )

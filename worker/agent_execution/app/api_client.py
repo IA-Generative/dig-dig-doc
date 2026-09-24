@@ -22,19 +22,13 @@ def get_client() -> httpx.Client:
 # --- Execution steps ---
 
 
-def add_execution_log(
-    client: httpx.Client, step_id: str, *, level: str = "info", message: str
-) -> dict:
-    response = client.post(
-        f"/execution-steps/{step_id}/logs", json={"level": level, "message": message}
-    )
+def add_execution_log(client: httpx.Client, step_id: str, *, level: str = "info", message: str) -> dict:
+    response = client.post(f"/execution-steps/{step_id}/logs", json={"level": level, "message": message})
     response.raise_for_status()
     return response.json()
 
 
-def complete_execution_step(
-    client: httpx.Client, step_id: str, *, status: str, output: str | None = None
-) -> dict:
+def complete_execution_step(client: httpx.Client, step_id: str, *, status: str, output: str | None = None) -> dict:
     response = client.post(
         f"/execution-steps/{step_id}/complete",
         json={"status": status, "output": output},
