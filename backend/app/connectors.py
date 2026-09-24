@@ -69,6 +69,17 @@ class S3Connector:
         content_type = response.get("ContentType") or "application/octet-stream"
         return response["Body"].read(), content_type
 
+    def delete(self, key: str) -> None:
+        # delete_object est idempotent côté S3 (pas d'erreur si la clé
+        # n'existe déjà plus) : rien à faire de spécial pour ce cas. On
+        # avale seulement les erreurs de connectivité/permission, pour
+        # qu'un objet inaccessible ne bloque jamais la suppression DB qui
+        # suit (voir DossierRepository.delete_dossier).
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        except (BotoCoreError, ClientError):
+            pass
+
 
 redis_settings = RedisSettings()
 redis_connector = RedisConnector(redis_settings.REDIS_URL)
