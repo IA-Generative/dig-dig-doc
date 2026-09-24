@@ -49,7 +49,8 @@ Dans les deux cas, `analyse_id` peut référencer soit une analyse créée via `
 - `backend/app/routers/ephemeral.py`
 - `backend/app/routers/dossiers.py` (réutilisation upload + launch)
 - `backend/app/celery_client.py` (dispatch pipeline)
-- `backend/app/repositories/dossier_repository.py`
+- `backend/app/repositories/dossier_repository.py` (réutilisation, non modifié)
+- `backend/app/repositories/ephemeral_repository.py` (créé par l'issue #22) : ajoute ici le CRUD `DossierEphemere` — créer la ligne, la lire (avec jointure `Dossier` + résultats), mettre à jour `expires_at`/`last_run_ended_at` (utilisé par l'issue #25).
 
 ## Dépendances
 
