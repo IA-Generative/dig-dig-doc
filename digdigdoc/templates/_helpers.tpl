@@ -42,8 +42,12 @@ Parameters:
 - root: The root context.
 - componentName: The component name (e.g. "servicename").
 */}}
+{{/* Kubernetes object names are DNS-1123 subdomains (lowercase alphanumeric and "-" only) - a
+componentName like "worker_agent" or "worker_document" (matching this repo's top-level values
+keys) would otherwise produce an invalid metadata.name. Underscores are fine in label values, so
+this only affects the name, not selector labels built from the same componentName. */}}
 {{- define "helper.componentFullname" -}}
-{{- printf "%s-%s" (include "helper.fullname" .root) .componentName | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-%s" (include "helper.fullname" .root) (.componentName | replace "_" "-") | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 
@@ -385,7 +389,7 @@ spec:
   initContainers: {{- tpl (toYaml $job.initContainers) $root | nindent 2 }}
   {{- end }}
   containers:
-  - name: {{ $name }}
+  - name: {{ $name | replace "_" "-" }}
     {{- if $job.securityContext }}
     securityContext: {{- toYaml $job.securityContext | nindent 6 }}
     {{- end }}
@@ -516,7 +520,7 @@ spec:
   initContainers: {{- tpl (toYaml $component.initContainers) $root | nindent 2 }}
   {{- end }}
   containers:
-  - name: {{ $name }}
+  - name: {{ $name | replace "_" "-" }}
     {{- if $component.securityContext }}
     securityContext: {{- toYaml $component.securityContext | nindent 6 }}
     {{- end }}
