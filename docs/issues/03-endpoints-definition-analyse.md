@@ -40,7 +40,8 @@ Nouveau router `backend/app/routers/ephemeral.py`, monté sous `/api/ephemeral`.
 
 - `backend/app/routers/ephemeral.py` (nouveau)
 - `backend/app/routers/analyses.py` (réutilisation de la logique de création/lecture)
-- `backend/app/repositories/analyse_repository.py`
+- `backend/app/repositories/analyse_repository.py` (réutilisation, non modifié)
+- `backend/app/repositories/ephemeral_repository.py` (**nouveau**) : CRUD sur `AnalyseEphemere` — créer la ligne, la lire (avec jointure `Analyse`), la supprimer, vérifier l'existence de `dossier_ephemere` liés avant suppression. Mutualisé avec l'issue #23 qui y ajoute le CRUD `DossierEphemere`.
 - `backend/app/main.py` (montage du router)
 
 ## Dépendances
