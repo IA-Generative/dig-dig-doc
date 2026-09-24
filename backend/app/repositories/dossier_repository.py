@@ -691,9 +691,7 @@ class DossierRepository:
         l'appelant (endpoint, tâche de purge) de le faire avant d'appeler
         cette méthode, pas à elle de le faire implicitement."""
         if dossier.status in (DossierStatus.EN_ATTENTE, DossierStatus.EN_COURS):
-            raise ValueError(
-                f"Cannot delete dossier {dossier.id}: still {dossier.status} - stop it first"
-            )
+            raise ValueError(f"Cannot delete dossier {dossier.id}: still {dossier.status} - stop it first")
         for document in dossier.documents:
             await asyncio.to_thread(s3_connector.delete, document.s3_key)
             for page in document.pages:
