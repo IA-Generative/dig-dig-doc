@@ -17,7 +17,7 @@ from app.core.security.ephemeral import EphemeralIdentity, get_ephemeral_identit
 from app.db import get_db
 from app.models.analyse import AgentTool, Analyse, EntityDefinition, LabelDefinition
 from app.models.analyse_ephemere import AnalyseEphemere
-from app.models.dossier import Dossier
+from app.models.dossier import Dossier, DossierStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
@@ -245,18 +245,53 @@ async def create_ephemeral_run(
     return EphemeralRunCreated(run_id=dossier.id)
 
 
+async def _get_owned_run_or_404(db: AsyncSession, run_id: uuid.UUID, identity: EphemeralIdentity) -> Dossier:
+    """404, pas 403 (même rationale que _get_analyse_ephemere_or_404) : scope
+    strict aux dossiers créés via ce routeur et à leur créateur."""
+    record = await EphemeralRepository(db).get_dossier_ephemere(run_id)
+    if record is None or record.created_by != identity.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+    dossier = await DossierRepository(db).get(run_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+    return dossier
+
+
 @router.get("/runs/{run_id}", response_model=DossierOut)
 async def get_ephemeral_run(
     run_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
 ) -> Dossier:
-    ephemeral_repository = EphemeralRepository(db)
-    record = await ephemeral_repository.get_dossier_ephemere(run_id)
-    if record is None or record.created_by != identity.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+    return await _get_owned_run_or_404(db, run_id, identity)
 
-    dossier = await DossierRepository(db).get(run_id)
-    if dossier is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
-    return dossier
+
+@router.post("/runs/{run_id}/stop", response_model=DossierOut)
+async def stop_ephemeral_run(
+    run_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
+) -> Dossier:
+    dossier = await _get_owned_run_or_404(db, run_id, identity)
+    dossier_repository = DossierRepository(db)
+    # No-op si déjà dans un état terminal (terminé/arrêté/échec) - même
+    # comportement que POST /api/dossiers/{id}/stop.
+    await dossier_repository.stop(dossier)
+    return await dossier_repository.get(run_id)
+
+
+@router.delete("/runs/{run_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_ephemeral_run(
+    run_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
+) -> None:
+    dossier = await _get_owned_run_or_404(db, run_id, identity)
+    dossier_repository = DossierRepository(db)
+    if dossier.status == DossierStatus.EN_COURS:
+        await dossier_repository.stop(dossier)
+        dossier = await dossier_repository.get(run_id)
+    # delete_dossier refuse encore en_attente/en_cours : un run éphémère est
+    # toujours lancé immédiatement à la création (_create_run), en_attente
+    # ne devrait jamais se produire en pratique - pas de branche dédiée.
+    await dossier_repository.delete_dossier(dossier)

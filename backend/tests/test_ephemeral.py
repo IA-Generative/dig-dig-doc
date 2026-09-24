@@ -222,3 +222,89 @@ def test_run_is_scoped_to_its_creator(client: TestClient) -> None:
     assert client.get(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_a}).status_code == 200
     assert client.get(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_b}).status_code == 404
     assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 404
+
+
+def _create_run(client: TestClient, analyse_id: str) -> str:
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+    )
+    return created.json()["run_id"]
+
+
+def test_stop_ephemeral_run(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+    assert client.get(f"/api/ephemeral/runs/{run_id}").json()["status"] == "en_cours"
+
+    stopped = client.post(f"/api/ephemeral/runs/{run_id}/stop")
+    assert stopped.status_code == 200
+    assert stopped.json()["status"] == "arrêté"
+    assert stopped.json()["ended_at"] is not None
+
+
+def test_stop_is_noop_once_already_stopped(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+    client.post(f"/api/ephemeral/runs/{run_id}/stop")
+    second = client.post(f"/api/ephemeral/runs/{run_id}/stop")
+    assert second.status_code == 200
+    assert second.json()["status"] == "arrêté"
+
+
+def test_stop_unknown_run_is_404(client: TestClient) -> None:
+    response = client.post("/api/ephemeral/runs/00000000-0000-0000-0000-000000000000/stop")
+    assert response.status_code == 404
+
+
+def test_delete_running_ephemeral_run_stops_then_deletes(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+
+    response = client.delete(f"/api/ephemeral/runs/{run_id}")
+    assert response.status_code == 204
+    assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 404
+
+
+def test_delete_already_stopped_ephemeral_run(client: TestClient) -> None:
+    run_id = _create_run(client, _create_ephemeral_analyse(client))
+    client.post(f"/api/ephemeral/runs/{run_id}/stop")
+
+    response = client.delete(f"/api/ephemeral/runs/{run_id}")
+    assert response.status_code == 204
+    assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 404
+
+
+def test_delete_unknown_run_is_404(client: TestClient) -> None:
+    response = client.delete("/api/ephemeral/runs/00000000-0000-0000-0000-000000000000")
+    assert response.status_code == 404
+
+
+def test_delete_ephemeral_run_removes_s3_files(client: TestClient) -> None:
+    from botocore.exceptions import ClientError
+
+    from app.connectors import s3_connector
+
+    analyse_id = _create_ephemeral_analyse(client)
+    run_id = _create_run(client, analyse_id)
+    s3_key = client.get(f"/api/ephemeral/runs/{run_id}").json()["documents"][0]["s3_key"]
+
+    client.delete(f"/api/ephemeral/runs/{run_id}")
+
+    with pytest.raises(ClientError):
+        s3_connector.download(s3_key)
+
+
+def test_delete_run_is_scoped_to_its_creator(client: TestClient) -> None:
+    token_a = _create_app_token(client, "delete-app-a")
+    token_b = _create_app_token(client, "delete-app-b")
+    analyse_id = _create_ephemeral_analyse(client)
+
+    created = client.post(
+        "/api/ephemeral/runs",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+        data={"analyse_id": analyse_id},
+        headers={"X-App-Token": token_a},
+    )
+    run_id = created.json()["run_id"]
+
+    assert client.delete(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_b}).status_code == 404
+    assert client.delete(f"/api/ephemeral/runs/{run_id}", headers={"X-App-Token": token_a}).status_code == 204
