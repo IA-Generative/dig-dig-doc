@@ -10,6 +10,7 @@ from app.routers.assist import router as assist_router
 from app.routers.auth import router as auth_router
 from app.routers.conversations import router as conversations_router
 from app.routers.dossiers import router as dossiers_router
+from app.routers.ephemeral import router as ephemeral_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.routers.models import router as models_router
@@ -34,6 +35,11 @@ app = FastAPI(
         {"name": "App tokens", "description": "Jetons permettant à une application externe d'appeler l'API."},
         {"name": "Reports", "description": "Signalements libres (bug/idée/question) envoyés par les utilisateurs."},
         {"name": "Admin", "description": "Vues et actions réservées aux administrateurs."},
+        {
+            "name": "Ephemeral",
+            "description": "Analyses et dossiers à la demande, temporaires par défaut (TTL) - "
+            "voir docs/ephemeral-api.md.",
+        },
     ],
 )
 
@@ -59,3 +65,4 @@ app.include_router(internal_router, prefix="/api")
 app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
+app.include_router(ephemeral_router, prefix="/api")

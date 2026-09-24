@@ -28,12 +28,22 @@ class AnalyseRepository:
         self.db = db
 
     def _base_query(self):
-        return select(Analyse).options(
-            selectinload(Analyse.labels),
-            selectinload(Analyse.entities),
-            selectinload(Analyse.agents),
-            selectinload(Analyse.field_versions),
-            selectinload(Analyse.shares),
+        # populate_existing: sans ça, un get() qui retombe sur un objet déjà
+        # dans l'identity map de la session (ex: get() juste après create(),
+        # ou plusieurs update_* enchaînés dans la même requête) renverrait ses
+        # relations telles que laissées par le dernier accès/refresh, pas
+        # rechargées depuis la DB - même raison que le commentaire équivalent
+        # dans DossierRepository._base_query.
+        return (
+            select(Analyse)
+            .options(
+                selectinload(Analyse.labels),
+                selectinload(Analyse.entities),
+                selectinload(Analyse.agents),
+                selectinload(Analyse.field_versions),
+                selectinload(Analyse.shares),
+            )
+            .execution_options(populate_existing=True)
         )
 
     async def list_all(self) -> Sequence[Analyse]:
@@ -71,6 +81,13 @@ class AnalyseRepository:
         await self.db.commit()
         await self.db.refresh(analyse)
         return analyse
+
+    async def delete(self, analyse: Analyse) -> None:
+        """Lève sqlalchemy.exc.IntegrityError si un Dossier référence encore
+        cette analyse (FK Dossier.analyse_id, ondelete="RESTRICT") - à
+        l'appelant de la traduire en réponse HTTP (409)."""
+        await self.db.delete(analyse)
+        await self.db.commit()
 
     # --- Versioning: a single mechanism reused for every editable field ---
 
