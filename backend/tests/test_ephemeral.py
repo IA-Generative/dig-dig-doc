@@ -410,3 +410,60 @@ def test_analyse_ephemere_expires_at_follows_last_completed_run(client: TestClie
 
     analyse = client.get(f"/api/ephemeral/analyses/{analyse_id}").json()
     assert analyse["expires_at"] >= first_expires_at
+
+
+def _as_other_keycloak_user():
+    from app.core.security.factory import RequestContext
+
+    return RequestContext(user_id="other-keycloak-user", email="other@example.com", roles=[], is_admin=False)
+
+
+def test_ephemeral_analyse_is_scoped_per_keycloak_user(client: TestClient) -> None:
+    """Même vérification que test_ephemeral_analyse_is_scoped_to_its_creator
+    mais côté Keycloak (dev-user en test) plutôt que token API : deux
+    identités Keycloak différentes ne doivent pas se voir non plus."""
+    from app.core.security.factory import get_current_user
+    from app.main import app
+
+    analyse_id = _create_ephemeral_analyse(client, "Analyse dev-user")
+
+    app.dependency_overrides[get_current_user] = _as_other_keycloak_user
+    try:
+        assert client.get(f"/api/ephemeral/analyses/{analyse_id}").status_code == 404
+        assert client.delete(f"/api/ephemeral/analyses/{analyse_id}").status_code == 404
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    # Le propriétaire d'origine (dev-user, sans override) y a toujours accès.
+    assert client.get(f"/api/ephemeral/analyses/{analyse_id}").status_code == 200
+
+
+def test_ephemeral_run_is_scoped_per_keycloak_user(client: TestClient) -> None:
+    from app.core.security.factory import get_current_user
+    from app.main import app
+
+    run_id = _create_run(client, _create_ephemeral_analyse(client, "Analyse run dev-user"))
+
+    app.dependency_overrides[get_current_user] = _as_other_keycloak_user
+    try:
+        assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 404
+        assert client.post(f"/api/ephemeral/runs/{run_id}/stop").status_code == 404
+        assert client.delete(f"/api/ephemeral/runs/{run_id}").status_code == 404
+    finally:
+        del app.dependency_overrides[get_current_user]
+
+    assert client.get(f"/api/ephemeral/runs/{run_id}").status_code == 200
+
+
+def test_ephemeral_analyse_created_via_app_token_is_not_visible_to_keycloak_user(client: TestClient) -> None:
+    """Pas de visibilité croisée entre les deux mécanismes d'auth (voir
+    docs/ephemeral-api.md, section Visibilité)."""
+    token = _create_app_token(client, "app-token-owner")
+    created = client.post(
+        "/api/ephemeral/analyses",
+        json={"name": "Analyse via token", "description": ""},
+        headers={"X-App-Token": token},
+    ).json()
+
+    # Session Keycloak (dev-user en test), sans le jeton API du créateur.
+    assert client.get(f"/api/ephemeral/analyses/{created['analyse_id']}").status_code == 404
