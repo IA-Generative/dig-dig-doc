@@ -9,6 +9,8 @@ from app.mcp.auth import BearerTokenAuthMiddleware
 from app.mcp.helper_server import mcp_server as helper_mcp_server
 from app.mcp.server import mcp_server
 from app.routers.admin_reports import router as admin_reports_router
+from app.routers.admin_stats import router as admin_stats_router
+from app.routers.admin_tasks import router as admin_tasks_router
 from app.routers.agent_conversations import router as agent_conversations_router
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
@@ -124,6 +126,8 @@ app.include_router(internal_agent_conversations_router, prefix="/api")
 app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
+app.include_router(admin_stats_router, prefix="/api")
+app.include_router(admin_tasks_router, prefix="/api")
 app.include_router(cgu_public_router, prefix="/api")
 app.include_router(cgu_admin_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
