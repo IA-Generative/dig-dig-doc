@@ -104,9 +104,7 @@ async def create_agent_conversation(title: str | None = None) -> dict[str, Any]:
 
 
 @mcp_server.tool()
-async def list_analyses(
-    page: int = 1, page_size: int = 20, conversation_id: str | None = None
-) -> dict[str, Any]:
+async def list_analyses(page: int = 1, page_size: int = 20, conversation_id: str | None = None) -> dict[str, Any]:
     """Liste paginée des analyses persistantes de la plateforme (classification, extraction, agents)."""
     identity = get_current_identity()
     arguments = {"page": page, "page_size": page_size}
