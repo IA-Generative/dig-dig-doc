@@ -73,19 +73,27 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
   (`docker compose down -v postgres` puis `up -d postgres`, confirmé avec l'utilisateur avant
   d'exécuter) - aucune donnée de prod concernée, uniquement la DB de dev locale.
 
-## Phase 2 — Repository
+## Phase 2 — Repository ✅ fait le 2026-09-25
 
-- [ ] `backend/app/repositories/agent_conversation_repository.py` (`AgentConversationRepository`),
+- [x] `backend/app/repositories/agent_conversation_repository.py` (`AgentConversationRepository`),
   sur le modèle de la partie conversation de `dossier_repository.py` :
-  - `create(created_by: str, title: str | None = None) -> AgentConversation`
-  - `get(id) -> AgentConversation | None` (eager load messages + sources)
-  - `list_for_user_paginated(created_by, page, page_size)`
-  - `delete(conversation)`
-  - `add_message(conversation, role, *, content=None, tool_name=None, data=None) -> AgentMessage`
-  - `add_message_sources(message, sources: list[dict])`
-  - `add_chat_event(conversation_id, kind, data) -> AgentChatEvent`
-  - `list_chat_events(conversation_id, after_id=None)`
-  - `delete_chat_events(conversation_id)`
+  - `create(created_by, title=None)`, `get(id)` (eager load messages + sources via
+    `selectinload` + `populate_existing`, même pattern que `_conversation_query`),
+  - `list_for_user_paginated(created_by, page, page_size)` — triée par `created_at desc` (pas de
+    notion de "dernier message" façon dossier chat pour la V1 ; à revoir si besoin plus tard),
+  - `delete(conversation)`,
+  - `add_message(conversation, role, *, content=None, tool_name=None, data=None, sources=None)` —
+    `sources` crée directement les `AgentMessageSource` (pas de méthode séparée, plus simple que
+    le pattern dossier qui gère aussi des tables d'association pages/bboxes ici absentes),
+  - `add_chat_event`/`list_chat_events`/`delete_chat_events`, identiques à leurs pendants
+    `ChatEvent` de `dossier_repository.py`.
+- [x] Vérifié `uv run ruff check` propre, puis exercé le repository de bout en bout contre la DB
+  réelle (create → add_message ×3 avec tool_call/sources → get → list_for_user_paginated →
+  add/list/delete chat_events → delete) via un script jetable (non committé) : tout se comporte
+  comme attendu.
+- [x] `uv run pytest` (backend) toujours à 97 passed après ce changement (le repository n'est pas
+  encore branché à un router, donc pas de nouveaux tests d'intégration à ce stade - viendront en
+  Phase 5 avec `agent_conversations` router).
 
 ## Phase 3 — API interne pour le worker (`/api/internal/agent/*`)
 
