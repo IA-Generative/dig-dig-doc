@@ -75,9 +75,7 @@ async def get_internal_agent_conversation(conversation_id: uuid.UUID, db: Annota
     return InternalAgentConversationOut(
         id=conversation.id,
         created_by=conversation.created_by,
-        messages=[
-            InternalAgentMessageOut.model_validate(m) for m in conversation.messages if m.role in dialogue_roles
-        ],
+        messages=[InternalAgentMessageOut.model_validate(m) for m in conversation.messages if m.role in dialogue_roles],
     )
 
 

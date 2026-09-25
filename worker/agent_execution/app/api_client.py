@@ -168,9 +168,7 @@ def deposit_agent_assistant_message(
 # --- Agent helper : tools (analyses, dossiers) ---
 
 
-def list_agent_analyses(
-    client: httpx.Client, *, page: int = 1, page_size: int = 20, q: str | None = None
-) -> dict:
+def list_agent_analyses(client: httpx.Client, *, page: int = 1, page_size: int = 20, q: str | None = None) -> dict:
     params: dict[str, str | int] = {"page": page, "page_size": page_size}
     if q:
         params["q"] = q
