@@ -1,7 +1,47 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref, type ComponentPublicInstance } from "vue";
+import { useRouter } from "vue-router";
+
 import { useAuth } from "@/composables/useAuth";
 
 const { isAuthenticated, loading, login } = useAuth();
+const router = useRouter();
+
+// Redirige automatiquement vers l'application si l'utilisateur est déjà
+// connecté (évite d'afficher la landing page inutilement).
+const { push } = router;
+onMounted(() => {
+  if (isAuthenticated.value) push("/analyses");
+});
+
+// Animations au scroll : on observe les sections et on ajoute une classe
+// `--visible` quand elles entrent dans le viewport.
+const animatedSections = ref<HTMLElement[]>([]);
+let observer: IntersectionObserver | undefined;
+
+onMounted(() => {
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("welcome--visible");
+          observer?.unobserve(entry.target);
+        }
+      }
+    },
+    { threshold: 0.15 },
+  );
+  for (const el of animatedSections.value) observer.observe(el);
+});
+
+onUnmounted(() => observer?.disconnect());
+
+function registerSection(el: Element | ComponentPublicInstance | null) {
+  if (el instanceof HTMLElement) {
+    animatedSections.value.push(el);
+    observer?.observe(el);
+  }
+}
 
 const features = [
   {
@@ -68,6 +108,34 @@ const steps = [
     description: "Consultez les résultats, corrigez si besoin et finalisez votre dossier.",
   },
 ];
+
+const useCases = [
+  {
+    icon: "ri-government-line",
+    title: "Administration publique",
+    description:
+      "Instruction de demandes (titres de séjour, aides sociales, permis) avec vérification automatique des pièces justificatives.",
+  },
+  {
+    icon: "ri-bank-line",
+    title: "Conformité bancaire",
+    description:
+      "Traitement KYC : extraction d'identité depuis CNI/passeport, vérification d'adresse et cohérence entre documents.",
+  },
+  {
+    icon: "ri-health-book-line",
+    title: "Santé et assurance",
+    description:
+      "Analyse de dossiers de remboursement : lecture de ordonnances, factures et courriers médicaux avec extraction structurée.",
+  },
+];
+
+// Logo Marianne (profil officiel français) — identique à celui de App.vue.
+const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Marianne">
+  <rect width="100" height="100" rx="6" fill="#000091"/>
+  <path d="M50 20 C39 20 31 29 31 41 C31 49 34 55 39 59 C35 63 33 69 33 77 L33 100 L67 100 L67 77 C67 69 65 63 61 59 C66 55 69 49 69 41 C69 29 61 20 50 20 Z" fill="#fff"/>
+  <path d="M31 41 C29 33 33 23 42 20 C38 27 36 34 38 41 L31 41 Z M69 41 C71 33 67 23 58 20 C62 27 64 34 62 41 L69 41 Z" fill="#e1000f"/>
+</svg>`;
 </script>
 
 <template>
@@ -109,7 +177,7 @@ const steps = [
     </section>
 
     <!-- Fonctionnalités -->
-    <section id="features" class="welcome__section">
+    <section id="features" :ref="registerSection" class="welcome__section welcome__animate">
       <div class="fr-container">
         <h2 class="welcome__section-title">Ce que dig-dig-doc vous apporte</h2>
         <p class="welcome__section-subtitle">
@@ -133,7 +201,7 @@ const steps = [
     </section>
 
     <!-- Étapes -->
-    <section class="welcome__section welcome__section--alt">
+    <section :ref="registerSection" class="welcome__section welcome__section--alt welcome__animate">
       <div class="fr-container">
         <h2 class="welcome__section-title">Comment ça marche ?</h2>
         <p class="welcome__section-subtitle">
@@ -156,8 +224,32 @@ const steps = [
       </div>
     </section>
 
+    <!-- Cas d'usage -->
+    <section :ref="registerSection" class="welcome__section welcome__animate">
+      <div class="fr-container">
+        <h2 class="welcome__section-title">Cas d'usage</h2>
+        <p class="welcome__section-subtitle">
+          dig-dig-doc s'adapte à tout flux d'instruction documentaire nécessitant
+          fiabilité et traçabilité.
+        </p>
+        <div class="welcome__usecase-grid">
+          <div
+            v-for="useCase in useCases"
+            :key="useCase.title"
+            class="welcome__usecase-card"
+          >
+            <span class="welcome__usecase-icon-wrapper">
+              <VIcon :name="useCase.icon" class="welcome__usecase-icon" />
+            </span>
+            <h3 class="welcome__usecase-title">{{ useCase.title }}</h3>
+            <p class="welcome__usecase-desc">{{ useCase.description }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- CTA -->
-    <section class="welcome__cta">
+    <section :ref="registerSection" class="welcome__cta welcome__animate">
       <div class="fr-container welcome__cta-inner">
         <h2 class="welcome__cta-title">Prêt à commencer ?</h2>
         <p class="welcome__cta-text">
@@ -186,7 +278,15 @@ const steps = [
 
     <footer class="welcome__footer">
       <div class="fr-container welcome__footer-inner">
-        <p>dig-dig-doc — Instruction assistée des dossiers usagers</p>
+        <div class="welcome__footer-brand">
+          <span class="welcome__footer-marianne" v-html="MARIANNE_SVG" />
+          <span>dig-dig-doc</span>
+        </div>
+        <nav class="welcome__footer-links">
+          <a href="/cgu.md" target="_blank" class="fr-link">Conditions d'utilisation</a>
+          <a href="https://github.com/IA-Generative/dig-dig-doc" target="_blank" rel="noopener" class="fr-link">Code source</a>
+        </nav>
+        <p class="welcome__footer-copy">© 2026 dig-dig-doc — Instruction assistée des dossiers usagers</p>
       </div>
     </footer>
   </div>
@@ -408,19 +508,117 @@ const steps = [
 
 /* ── Footer ───────────────────────────────────────────── */
 .welcome__footer {
-  padding: 1.5rem 0;
+  padding: 2rem 0;
   background: var(--background-default-grey);
   border-top: 1px solid var(--border-default-grey);
 }
 
 .welcome__footer-inner {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
 }
 
-.welcome__footer p {
-  font-size: 0.875rem;
+.welcome__footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text-title-grey);
+}
+
+.welcome__footer-marianne {
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.welcome__footer-marianne :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+
+.welcome__footer-links {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.welcome__footer-copy {
+  font-size: 0.8125rem;
   color: var(--text-mention-grey);
   margin: 0;
+}
+
+/* ── Cas d'usage ──────────────────────────────────────── */
+.welcome__usecase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+}
+
+.welcome__usecase-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1.75rem;
+  background: var(--background-alt-blue-france);
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-action-high-blue-france);
+}
+
+.welcome__usecase-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.5rem;
+  background: var(--background-action-high-blue-france);
+  margin-bottom: 1rem;
+}
+
+.welcome__usecase-icon {
+  font-size: 1.375rem;
+  color: var(--text-inverted-blue-france);
+}
+
+.welcome__usecase-title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text-title-grey);
+  margin: 0 0 0.5rem;
+}
+
+.welcome__usecase-desc {
+  font-size: 0.9375rem;
+  color: var(--text-default-grey);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Animations au scroll ─────────────────────────────── */
+.welcome__animate {
+  opacity: 0;
+  transform: translateY(1.5rem);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+
+.welcome__animate.welcome--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome__animate {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 
 /* ── Responsive ───────────────────────────────────────── */
