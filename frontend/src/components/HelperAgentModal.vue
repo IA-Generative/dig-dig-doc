@@ -17,6 +17,7 @@ import ChatWindow, { type ChatWindowMessage, type ChatWindowSource } from "@/com
 import InfoModal from "@/components/InfoModal.vue";
 import { useAgentConversations } from "@/composables/useAgentConversations";
 import type { AgentChatEvent } from "@/types/agentConversation";
+import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -60,6 +61,37 @@ const messages = computed<ChatWindowMessage[]>(() => {
 
 onMounted(() => {
   if (props.open) fetchList();
+});
+
+/**
+ * Dossiers dont le pipeline a été lancé par l'agent pendant l'exécution
+ * courante. Détecté en scannant les tool_call events du flux SSE à la
+ * recherche de "run_dossier" — l'agent appelle cet outil pour démarrer
+ * le pipeline (classification, extraction, agents) sur un dossier.
+ */
+const launchedDossiers = computed(() => {
+  const result: { dossierId: string; name: string | null; status: DossierStatus | null }[] = [];
+  for (const event of chatEvents.value) {
+    if (event.kind === "tool_call" && event.data.tool_name === "run_dossier") {
+      const args = event.data.arguments as Record<string, unknown> | undefined;
+      const dossierId = args?.dossier_id as string | undefined;
+      if (dossierId) {
+        result.push({ dossierId, name: null, status: null });
+      }
+    }
+    if (event.kind === "tool_result" && event.data.tool_name === "run_dossier") {
+      const preview = event.data.preview as string | undefined;
+      if (preview && result.length > 0) {
+        // Le preview contient « Pipeline lancé sur « <name> » (statut : <status>). »
+        const nameMatch = preview.match(/« (.+?) »/);
+        const statusMatch = preview.match(/statut : (\w+)/);
+        const last = result[result.length - 1];
+        if (nameMatch) last.name = nameMatch[1];
+        if (statusMatch) last.status = statusMatch[1] as DossierStatus;
+      }
+    }
+  }
+  return result;
 });
 
 watch(
@@ -192,6 +224,30 @@ function formatRelativeTime(iso: string): string {
 
       <!-- Zone de chat -->
       <div class="helper-agent__chat">
+        <!-- Indicateur "pipeline en cours" : visible quand l'agent a lancé
+             un dossier via run_dossier pendant l'exécution courante. -->
+        <div
+          v-for="dossier in launchedDossiers"
+          :key="dossier.dossierId"
+          class="helper-agent__pipeline-indicator"
+        >
+          <VIcon name="ri-loader-4-line" class="spin" />
+          <span class="helper-agent__pipeline-text">
+            Pipeline en cours sur « {{ dossier.name ?? dossier.dossierId }} »
+            <span v-if="dossier.status" class="helper-agent__pipeline-status">
+              ({{ DOSSIER_STATUS_LABELS[dossier.status] }})
+            </span>
+          </span>
+          <button
+            type="button"
+            class="helper-agent__pipeline-link"
+            @click="goToDossier(dossier.dossierId)"
+          >
+            <VIcon name="ri-external-link-line" />
+            <span>Voir le dossier</span>
+          </button>
+        </div>
+
         <div v-if="isLoading" class="helper-agent__loading">
           <VIcon name="ri-loader-4-line" class="spin" />
           <span>Chargement…</span>
@@ -393,6 +449,52 @@ function formatRelativeTime(iso: string): string {
 }
 
 .helper-agent__source-link:hover {
+  text-decoration: underline;
+}
+
+/* Indicateur "pipeline en cours" pendant que l'agent a lancé un dossier */
+.helper-agent__pipeline-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--background-alt-blue-france);
+  border: 1px solid var(--border-action-high-blue-france);
+  border-radius: 0.375rem;
+  font-size: 0.8rem;
+  color: var(--text-action-high-blue-france);
+  margin-bottom: 0.5rem;
+}
+
+.helper-agent__pipeline-indicator .spin {
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+.helper-agent__pipeline-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.helper-agent__pipeline-status {
+  color: var(--text-mention-grey);
+  font-weight: 400;
+}
+
+.helper-agent__pipeline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-action-high-blue-france);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.helper-agent__pipeline-link:hover {
   text-decoration: underline;
 }
 </style>
