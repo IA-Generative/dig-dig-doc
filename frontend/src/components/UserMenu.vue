@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
+import HelperAgentModal from "@/components/HelperAgentModal.vue";
 import InfoModal from "@/components/InfoModal.vue";
 import ReportFormModal from "@/components/ReportFormModal.vue";
 import { useAuth } from "@/composables/useAuth";
@@ -20,6 +21,7 @@ const userWrapper = ref<HTMLElement>();
 const showChangelog = ref(false);
 const showCgu = ref(false);
 const showReport = ref(false);
+const showHelperAgent = ref(false);
 
 const changelogHtml = ref("");
 const cguHtml = ref("");
@@ -90,6 +92,11 @@ function openReport() {
   showReport.value = true;
 }
 
+function openHelperAgent() {
+  closeMenu();
+  showHelperAgent.value = true;
+}
+
 function handleOutsideClick(event: MouseEvent) {
   if (showUserMenu.value && !userWrapper.value?.contains(event.target as Node)) {
     showUserMenu.value = false;
@@ -126,6 +133,11 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
       <button v-if="isAdmin" type="button" class="user-menu__item" role="menuitem" @click="goAdmin">
         <VIcon name="ri-shield-user-line" />
         <span>Administration</span>
+      </button>
+
+      <button type="button" class="user-menu__item" role="menuitem" @click="openHelperAgent">
+        <VIcon name="ri-robot-2-line" />
+        <span>Assistant</span>
       </button>
 
       <div class="user-menu__separator" />
@@ -195,6 +207,8 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
   </InfoModal>
 
   <ReportFormModal :open="showReport" @close="showReport = false" />
+
+  <HelperAgentModal :open="showHelperAgent" @close="showHelperAgent = false" />
 </template>
 
 <style scoped>
