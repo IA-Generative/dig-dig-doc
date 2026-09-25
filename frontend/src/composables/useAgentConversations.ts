@@ -130,12 +130,14 @@ export function useAgentConversations() {
     }
   }
 
-  async function sendMessage(content: string): Promise<void> {
+  async function sendMessage(content: string, model: string | null = null): Promise<void> {
     const current = activeConversation.value;
     if (!current) return;
+    const body: Record<string, unknown> = { content };
+    if (model) body.model = model;
     const data = await apiFetch<any>(`/api/agent-conversations/${current.id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify(body),
     });
     activeConversation.value = mapConversation(data);
     // Met à jour l'aperçu dans la liste.

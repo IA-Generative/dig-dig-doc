@@ -28,7 +28,7 @@ def _resources_to_api(resources: list[ConsultedResource]) -> list[dict]:
 
 
 @celery_app.task(name="app.tasks.run_helper_chat", bind=True)
-def run_helper_chat(self, conversation_id: str) -> None:
+def run_helper_chat(self, conversation_id: str, model: str | None = None) -> None:
     with api_client.get_client() as client:
         try:
             # 1. Charge la conversation (historique user/assistant).
@@ -47,7 +47,9 @@ def run_helper_chat(self, conversation_id: str) -> None:
             logger.info("Starting helper chat for conversation %s (%d messages)", conversation_id, len(history))
 
             # 2. Exécute le graphe de l'agent helper.
-            answer, resources = run_helper_chat_graph(conversation_history=history, tools=tools, on_event=on_event)
+            answer, resources = run_helper_chat_graph(
+                conversation_history=history, tools=tools, on_event=on_event, model=model
+            )
 
             # 3. Dépose le message assistant final (avec les dossiers/analyses consultés/créés).
             api_client.deposit_agent_assistant_message(

@@ -59,3 +59,97 @@ def test_list_models_returns_503_when_llm_hub_is_not_configured(client, monkeypa
     response = client.get("/api/models")
 
     assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# POST /api/models/refresh
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_models_reprobes_and_updates_cache(client, monkeypatch):
+    fake_client = _fake_openai_client(
+        all_ids=["gpt-4o", "mistral-small", "text-embedding-3"],
+        chat_capable_ids={"gpt-4o", "mistral-small"},
+    )
+    monkeypatch.setattr(models_router, "_openai_client", fake_client)
+
+    with patch("app.routers.models.redis_connector") as mock_redis:
+        mock_redis.client.get.return_value = json.dumps(["stale-model"])
+
+        response = client.post("/api/models/refresh")
+
+    assert response.status_code == 200
+    model_ids = [m["id"] for m in response.json()["models"]]
+    assert model_ids == ["gpt-4o", "mistral-small"]
+
+    # Le cache doit avoir été réécrit avec la fraîche liste, même s'il
+    # existait déjà (refresh ignore le cache contrairement à GET).
+    cached_key, cached_value = mock_redis.client.set.call_args[0]
+    assert cached_key == models_router._CHAT_MODELS_CACHE_KEY
+    assert json.loads(cached_value) == ["gpt-4o", "mistral-small"]
+
+
+def test_refresh_models_ignores_existing_cache(client, monkeypatch):
+    """Contrairement à GET /models, POST /refresh doit *toujours* re-prober
+    le hub même si le cache existe."""
+    fake_client = _fake_openai_client(
+        all_ids=["gpt-4o"],
+        chat_capable_ids={"gpt-4o"},
+    )
+    monkeypatch.setattr(models_router, "_openai_client", fake_client)
+
+    with patch("app.routers.models.redis_connector") as mock_redis:
+        mock_redis.client.get.return_value = json.dumps(["stale-model"])
+
+        response = client.post("/api/models/refresh")
+
+    assert response.status_code == 200
+    # Le hub a bien été interrogé malgré le cache présent.
+    fake_client.models.list.assert_called_once()
+
+
+def test_refresh_models_returns_503_when_llm_hub_is_not_configured(client, monkeypatch):
+    monkeypatch.setattr(models_router, "_openai_client", None)
+
+    response = client.post("/api/models/refresh")
+
+    assert response.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/models/cache
+# ---------------------------------------------------------------------------
+
+
+def test_clear_cache_deletes_redis_key(client, monkeypatch):
+    with patch("app.routers.models.redis_connector") as mock_redis:
+        response = client.delete("/api/models/cache")
+
+    assert response.status_code == 200
+    assert response.json() == {"cleared": True}
+    mock_redis.client.delete.assert_called_once_with(models_router._CHAT_MODELS_CACHE_KEY)
+
+
+def test_clear_cache_then_list_reprobes(client, monkeypatch):
+    """Après un DELETE /cache, le GET /models suivant doit re-prober le hub
+    car le cache a été invalidé."""
+    fake_client = _fake_openai_client(
+        all_ids=["gpt-4o"],
+        chat_capable_ids={"gpt-4o"},
+    )
+    monkeypatch.setattr(models_router, "_openai_client", fake_client)
+
+    with patch("app.routers.models.redis_connector") as mock_redis:
+        # Premier GET : cache vide, remplit le cache.
+        mock_redis.client.get.return_value = None
+        client.get("/api/models")
+        fake_client.models.list.reset_mock()
+
+        # On vide le cache.
+        client.delete("/api/models/cache")
+
+        # Second GET : doit re-prober (cache toujours manquant).
+        response = client.get("/api/models")
+
+    assert response.status_code == 200
+    fake_client.models.list.assert_called_once()

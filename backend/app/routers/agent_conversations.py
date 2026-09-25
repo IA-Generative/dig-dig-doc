@@ -115,7 +115,7 @@ async def add_agent_conversation_message(
     # /internal/agent-conversations/{id}, exécute le graphe LangGraph de
     # l'agent helper, dépose les événements intermédiaires (agent_chat_events)
     # et le message assistant final (avec sources) via l'API interne.
-    dispatch_helper_chat_response(str(conversation_id))
+    dispatch_helper_chat_response(str(conversation_id), model=body.model)
     return conversation
 
 
