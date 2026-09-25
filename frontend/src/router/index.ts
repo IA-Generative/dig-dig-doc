@@ -10,6 +10,7 @@ import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
 import DossierDetailPage from "@/pages/DossierDetailPage.vue";
 import DossiersPage from "@/pages/DossiersPage.vue";
+import ProfilePage from "@/pages/ProfilePage.vue";
 import WelcomePage from "@/pages/WelcomePage.vue";
 
 export const router = createRouter({
@@ -43,6 +44,7 @@ export const router = createRouter({
     },
     { path: "/dossiers", name: "dossiers", component: DossiersPage },
     { path: "/dossiers/:id", name: "dossier-detail", component: DossierDetailPage },
+    { path: "/profile", name: "profile", component: ProfilePage },
     {
       path: "/administration",
       name: "administration",

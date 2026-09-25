@@ -25,6 +25,7 @@ from app.routers.internal import router as internal_router
 from app.routers.internal_agent import agent_conversations_router as internal_agent_conversations_router
 from app.routers.internal_agent import router as internal_agent_router
 from app.routers.models import router as models_router
+from app.routers.profile import router as profile_router
 from app.routers.reports import router as reports_router
 
 _keycloak_settings = KeycloakSettings()
@@ -83,6 +84,7 @@ app = FastAPI(
         {"name": "App tokens", "description": "Jetons permettant à une application externe d'appeler l'API."},
         {"name": "Reports", "description": "Signalements libres (bug/idée/question) envoyés par les utilisateurs."},
         {"name": "CGU", "description": "Conditions générales d'utilisation versionnées."},
+        {"name": "Profile", "description": "Préférences et statistiques de l'utilisateur courant."},
         {"name": "Admin", "description": "Vues et actions réservées aux administrateurs."},
         {
             "name": "Ephemeral",
@@ -124,6 +126,7 @@ app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
 app.include_router(cgu_public_router, prefix="/api")
 app.include_router(cgu_admin_router, prefix="/api")
+app.include_router(profile_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
 # préfixe dans l'ordre d'enregistrement, et "/mcp/helper/..." commence
