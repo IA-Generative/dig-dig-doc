@@ -50,10 +50,20 @@ class AnalyseRepository:
         result = await self.db.execute(self._base_query().order_by(Analyse.created_at.desc()))
         return result.scalars().all()
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[Analyse], int]:
-        total = await self.db.scalar(select(func.count()).select_from(Analyse))
+    async def list_paginated(
+        self, *, page: int, page_size: int, q: str | None = None
+    ) -> tuple[Sequence[Analyse], int]:
+        # Recherche par nom, insensible à la casse - utilisée par le tool
+        # search_analyses de l'agent helper (issue #50) en plus de la liste
+        # simple côté UI.
+        filters = [Analyse.name.ilike(f"%{q}%")] if q else []
+        total = await self.db.scalar(select(func.count()).select_from(Analyse).where(*filters))
         result = await self.db.execute(
-            self._base_query().order_by(Analyse.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
+            self._base_query()
+            .where(*filters)
+            .order_by(Analyse.created_at.desc())
+            .limit(page_size)
+            .offset((page - 1) * page_size)
         )
         return result.scalars().all(), total or 0
 

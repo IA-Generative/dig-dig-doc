@@ -62,9 +62,10 @@ async def list_analyses(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    q: Annotated[str | None, Query(description="Recherche par nom (insensible à la casse)")] = None,
 ) -> Page[AnalyseListItem]:
     repository = AnalyseRepository(db)
-    analyses, total = await repository.list_paginated(page=page, page_size=page_size)
+    analyses, total = await repository.list_paginated(page=page, page_size=page_size, q=q)
     items = [
         AnalyseListItem(
             id=a.id,
