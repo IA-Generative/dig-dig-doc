@@ -3837,26 +3837,3 @@ redis:
     limits:
       cpu: 250m
       memory: 256Mi
-
-## -- PostgreSQL subchart (cloudpirates/postgres).
-## Provides the primary database for the backend. The service is reachable
-## at `digdigdoc-postgres:5432` inside the cluster. The migration job and
-## the backend both connect to this service.
-postgres:
-  enabled: true
-  fullnameOverride: digdigdoc-postgres
-  auth:
-    username: digdigdoc
-    password: digdigdoc
-    database: digdigdoc
-  primary:
-    persistence:
-      enabled: true
-      size: 5Gi
-  resources:
-    requests:
-      cpu: 250m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi

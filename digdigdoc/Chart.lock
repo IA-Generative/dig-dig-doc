@@ -2,8 +2,8 @@ dependencies:
 - name: redis
   repository: oci://registry-1.docker.io/cloudpirates
   version: 0.27.9
-- name: postgres
-  repository: oci://registry-1.docker.io/cloudpirates
-  version: 0.19.6
-digest: sha256:7c71e14fd6dd8071075a90eea30a5f77f939089778a7031bc7ca7e79c031325e
-generated: "2026-09-23T21:04:19.244821592+02:00"
+- name: cluster
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.8.1
+digest: sha256:fa890ff2d403605340221e97974fb4aef2988aef400231d69bc8298e35174646
+generated: "2026-09-25T22:46:24.357371322+02:00"

@@ -38,7 +38,7 @@ backend:
     # once all dependencies are healthy, and the pod is restarted if it becomes unhealthy.
     readinessProbe:
       httpGet:
-        path: "/api/health"
+        path: "/api/health/ready"
         port: 8000
       initialDelaySeconds: 10
       successThreshold: 2
@@ -224,6 +224,10 @@ redis:
     tag: "7.4.0-v6"
   architecture: standalone
   auth:
+    # The parent chart's values.yaml defaults auth.enabled to false. Must be set explicitly
+    # to true here, otherwise Redis starts without requirepass and rejects non-loopback
+    # connections (protected mode).
+    enabled: true
     existingSecret: "digdigdoc-redis"
     existingSecretPasswordKey: "REDIS_PASSWORD"
   # The chart's generated redis.conf has no `dir` directive, so redis defaults to CWD (/).
@@ -454,9 +458,6 @@ extraObjects:
           listLength: "5"
         authenticationRef:
           name: digdigdoc-keda-triggerauth
-
-postgres:
-  enabled: false
 
 # A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
 # no need to self-host object storage.
