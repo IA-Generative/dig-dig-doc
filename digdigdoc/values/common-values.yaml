@@ -70,8 +70,6 @@ backend:
       name: "digdigdoc-worker"
   - secretRef:
       name: "digdigdoc-redis"
-  - secretRef:
-      name: "digdigdoc-meilisearch"
   # Listed last: envFrom's later-source-wins rule guarantees this computed DATABASE_URL is what
   # actually lands in the container even if another secret above ever grows a stray field of the
   # same name.
@@ -120,7 +118,7 @@ worker_document:
       name: "digdigdoc-redis"
   env:
     CELERY_QUEUE_NAME: "document_processing"
-    BACKEND_API_URL: "http://digdigdoc-backend:8000"
+    BACKEND_INTERNAL_URL: "http://digdigdoc-backend:8000"
     AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
     OCR_LANGUAGE: "fra"
 
@@ -150,7 +148,7 @@ worker_agent:
       name: "digdigdoc-redis"
   env:
     CELERY_QUEUE_NAME: "agent_execution"
-    BACKEND_API_URL: "http://digdigdoc-backend:8000"
+    BACKEND_INTERNAL_URL: "http://digdigdoc-backend:8000"
     AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
     # Internal ClusterIP service (sub-chart `searxng`). Web search is opt-in per run (off by
     # default - see worker/agent_execution/app/config.py SEARXNG_URL).
@@ -438,10 +436,10 @@ extraObjects:
     apiVersion: keda.sh/v1alpha1
     kind: ScaledObject
     metadata:
-      name: digdigdoc-worker-execution
+      name: digdigdoc-worker-agent
     spec:
       scaleTargetRef:
-        name: digdigdoc-worker-execution
+        name: digdigdoc-worker-agent
         kind: Deployment
         apiVersion: apps/v1
       minReplicaCount: 2
