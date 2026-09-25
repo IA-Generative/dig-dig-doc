@@ -6,6 +6,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from app.config import KeycloakSettings
 from app.mcp.auth import BearerTokenAuthMiddleware
+from app.mcp.helper_server import mcp_server as helper_mcp_server
 from app.mcp.server import mcp_server
 from app.routers.admin_reports import router as admin_reports_router
 from app.routers.agent_conversations import router as agent_conversations_router
@@ -46,11 +47,19 @@ mcp_app = mcp_server.streamable_http_app(
     streamable_http_path="/",
     transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
 )
+# Serveur MCP helper (issue #50, docs/mcp-helper-agent-plan.md) : mêmes
+# raisons de config que mcp_app ci-dessus, monté séparément sous /mcp/helper
+# - deux cycles de vie différents (one-shot éphémère vs persistant/
+# interactif), voir le plan pour le détail.
+helper_mcp_app = helper_mcp_server.streamable_http_app(
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with mcp_app.router.lifespan_context(mcp_app):
+    async with mcp_app.router.lifespan_context(mcp_app), helper_mcp_app.router.lifespan_context(helper_mcp_app):
         yield
 
 
@@ -111,4 +120,8 @@ app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
+# /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
+# préfixe dans l'ordre d'enregistrement, et "/mcp/helper/..." commence
+# aussi par "/mcp" - sans cet ordre, tout irait au mauvais sous-app.
+app.mount("/mcp/helper", BearerTokenAuthMiddleware(helper_mcp_app))
 app.mount("/mcp", BearerTokenAuthMiddleware(mcp_app))
