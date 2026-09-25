@@ -1,3 +1,5 @@
+from .agent_chat_event import AgentChatEvent, AgentChatEventKind
+from .agent_conversation import AgentConversation, AgentMessage, AgentMessageRole, AgentMessageSource
 from .analyse import (
     Agent,
     AgentTool,
@@ -38,6 +40,12 @@ from .report import Report, ReportStatus, ReportType
 
 __all__ = [
     "Agent",
+    "AgentChatEvent",
+    "AgentChatEventKind",
+    "AgentConversation",
+    "AgentMessage",
+    "AgentMessageRole",
+    "AgentMessageSource",
     "AgentTool",
     "Analyse",
     "AnalyseEphemere",
