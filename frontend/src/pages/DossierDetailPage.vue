@@ -17,7 +17,7 @@ import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
-const { list: dossiers, addDocuments, fetchDossier, streamDossier } = useDossiers();
+const { list: dossiers, addDocuments, fetchDossier, streamDossier, regenerateDocumentSummary, regenerateDossierSummary } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const {
   conversation,
@@ -230,9 +230,13 @@ async function onDeleteConversation() {
       </div>
     </div>
 
-    <DossierDocuments :documents="dossier.documents" />
+    <DossierDocuments
+      :documents="dossier.documents"
+      show-summary-actions
+      @regenerate-summary="regenerateDocumentSummary(dossierId, $event)"
+    />
 
-    <DossierResults :dossier="dossier" :analyse="analyse" />
+    <DossierResults :dossier="dossier" :analyse="analyse" @regenerate-summary="regenerateDossierSummary(dossierId)" />
 
     <ChatWindow
       :messages="messages"

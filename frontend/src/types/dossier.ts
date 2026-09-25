@@ -42,6 +42,23 @@ export const TEXT_EXTRACTION_STATUS_LABELS: Record<TextExtractionStatus, string>
   échec: "Échec de l'extraction",
 };
 
+export type SummaryStatus = "en_attente" | "en_cours" | "terminé" | "échec";
+
+export const SUMMARY_STATUS_LABELS: Record<SummaryStatus, string> = {
+  en_attente: "Résumé en attente",
+  en_cours: "Résumé en cours",
+  terminé: "Résumé généré",
+  échec: "Échec du résumé",
+};
+
+/** Résumé d'un document ou d'un dossier (version append-only, la plus récente gagne). */
+export interface Summary {
+  id: string;
+  content: string;
+  model?: string;
+  createdAt: string;
+}
+
 export interface DossierDocument {
   id: string;
   name: string;
@@ -53,6 +70,13 @@ export interface DossierDocument {
   /** Suivi du run du worker document_process (extract_document_text). */
   textExtractionStatus: TextExtractionStatus;
   textExtractionError?: string;
+  /** Hash SHA-256 du fichier (calculé par le worker document_process). */
+  fileHash?: string;
+  /** Suivi de la génération du résumé (issue #52). */
+  summaryStatus: SummaryStatus;
+  summaryError?: string;
+  /** Dernier résumé généré avec succès, ou undefined si aucun. */
+  summary?: Summary;
 }
 
 export interface Dossier {
@@ -68,4 +92,9 @@ export interface Dossier {
   endedAt?: string;
   executionSteps: ExecutionStep[];
   documents: DossierDocument[];
+  /** Suivi de la génération du résumé global du dossier (issue #52). */
+  summaryStatus: SummaryStatus;
+  summaryError?: string;
+  /** Dernier résumé global généré avec succès, ou undefined si aucun. */
+  summary?: Summary;
 }

@@ -3,9 +3,13 @@ import { computed, ref } from "vue";
 
 import MarkdownText from "@/components/MarkdownText.vue";
 import type { Analyse } from "@/types/analyse";
-import type { Dossier } from "@/types/dossier";
+import { SUMMARY_STATUS_LABELS, type Dossier } from "@/types/dossier";
 
 const props = defineProps<{ dossier: Dossier; analyse?: Analyse }>();
+
+const emit = defineEmits<{
+  regenerateSummary: [];
+}>();
 
 const classificationStep = computed(() => props.dossier.executionSteps.find((s) => s.kind === "classification"));
 const extractionStep = computed(() => props.dossier.executionSteps.find((s) => s.kind === "extraction"));
@@ -28,7 +32,7 @@ const extractionResult = computed(() => {
   });
 });
 
-type ResultCardKind = "classification" | "extraction" | "agent";
+type ResultCardKind = "classification" | "extraction" | "agent" | "summary";
 
 interface ResultCard {
   id: string;
@@ -81,6 +85,22 @@ const cards = computed<ResultCard[]>(() => {
       preview: step.output ?? "",
     });
   });
+  // Carte résumé du dossier (issue #52) : affichée dès que le résumé
+  // existe ou est en cours de génération.
+  const summary = props.dossier.summary;
+  const summaryStatus = props.dossier.summaryStatus;
+  if (summaryStatus !== "en_attente" || summary) {
+    items.push({
+      id: "dossier-summary",
+      kind: "summary",
+      icon: "ri-file-text-line",
+      title: "Résumé du dossier",
+      pending: !summary,
+      preview: summaryStatus === "en_cours"
+        ? SUMMARY_STATUS_LABELS[summaryStatus]
+        : summary?.content ?? "",
+    });
+  }
   return items;
 });
 
@@ -165,10 +185,31 @@ function scrollCarousel(direction: 1 | -1) {
         </div>
       </dl>
 
-      <MarkdownText v-else :content="selectedCard.preview" class="dossier-results__agent-output" />
+      <MarkdownText v-else-if="selectedCard.kind === 'agent'" :content="selectedCard.preview" class="dossier-results__agent-output" />
+
+      <div v-else-if="selectedCard.kind === 'summary'">
+        <div v-if="dossier.summaryStatus === 'en_cours'" class="dossier-results__summary-loading">
+          <VIcon name="ri-loader-4-line" class="dossier-results__spinner" />
+          <span class="fr-text--sm">Génération du résumé en cours…</span>
+        </div>
+        <div v-else-if="dossier.summaryStatus === 'échec'" class="dossier-results__summary-error">
+          <VIcon name="ri-error-warning-line" />
+          <span class="fr-text--sm">{{ dossier.summaryError ?? "Erreur lors de la génération du résumé" }}</span>
+        </div>
+        <MarkdownText v-else-if="dossier.summary" :content="dossier.summary.content" />
+        <button
+          v-if="dossier.summaryStatus !== 'en_cours'"
+          type="button"
+          class="fr-link fr-text--sm dossier-results__regenerate"
+          @click="emit('regenerateSummary')"
+        >
+          <VIcon name="ri-refresh-line" />
+          Régénérer le résumé
+        </button>
+      </div>
 
       <RouterLink
-        v-if="selectedCard.kind !== 'agent'"
+        v-if="selectedCard.kind !== 'agent' && selectedCard.kind !== 'summary'"
         :to="`/analyses/${dossier.analyseId}`"
         class="fr-link fr-text--sm dossier-results__config-link"
       >
@@ -340,6 +381,35 @@ function scrollCarousel(direction: 1 | -1) {
 .dossier-results__agent-output {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.dossier-results__summary-loading,
+.dossier-results__summary-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-mention-grey);
+}
+
+.dossier-results__spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dossier-results__regenerate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .dossier-results__config-link {

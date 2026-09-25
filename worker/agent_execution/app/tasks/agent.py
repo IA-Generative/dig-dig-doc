@@ -125,6 +125,14 @@ def run_agents(self, dossier_id: str) -> None:
         except Exception:
             logger.exception("Agent execution failed for dossier %s", dossier_id)
             raise
+        else:
+            # Déclenche la génération du résumé global du dossier (issue #52) :
+            # tous les agents ont terminé, les synthèses sont disponibles.
+            celery_app.send_task(
+                "app.tasks.run_dossier_summary",
+                args=[dossier_id],
+                queue="agent_execution",
+            )
 
 
 def _find_step_by_label(dossier: dict, label: str) -> str | None:

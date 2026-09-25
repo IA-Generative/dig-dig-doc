@@ -21,6 +21,8 @@ from app.celery_client import (
     dispatch_agent_execution,
     dispatch_chat_response,
     dispatch_classification,
+    dispatch_document_summary,
+    dispatch_dossier_summary,
     dispatch_entity_extraction,
     dispatch_text_extraction,
 )
@@ -179,6 +181,37 @@ async def stop_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depend
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id)
     await repository.stop(dossier)
+    return dossier
+
+
+@router.post("/{dossier_id}/documents/{document_id}/summary", response_model=DossierDocumentOut)
+async def regenerate_document_summary(
+    dossier_id: uuid.UUID,
+    document_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Déclenche la (re)génération du résumé d'un document via le worker
+    agent_execution. Le worker concatène le contenu des pages, appelle le
+    LLM, et dépose le résumé via l'API interne."""
+    repository = DossierRepository(db)
+    document = await repository.get_document(dossier_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    dispatch_document_summary(str(dossier_id), str(document_id))
+    return document
+
+
+@router.post("/{dossier_id}/summary", response_model=DossierOut)
+async def regenerate_dossier_summary(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Déclenche la (re)génération du résumé global du dossier via le worker
+    agent_execution. Le worker récupère les résumés individuels des documents
+    + les synthèses des agents, et produit une vue d'ensemble."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    dispatch_dossier_summary(str(dossier_id))
     return dossier
 
 
