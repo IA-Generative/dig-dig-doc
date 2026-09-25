@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.0-rc...v0.5.0-rc.1) (2026-09-25)
+
+
+### Features
+
+* « Dossier à ranger » — suggestion automatique d'analyse via les résumés ([#54](https://github.com/IA-Generative/dig-dig-doc/issues/54)) ([487ec75](https://github.com/IA-Generative/dig-dig-doc/commit/487ec7541e0e0cfe536c5583532321a75700c4a6))
+* **frontend:** add Marianne logo, DDD tab title, and hover tooltip ([e37776a](https://github.com/IA-Generative/dig-dig-doc/commit/e37776a039f370f32ca75856d8539eaf677d2caf))
+* model selector for helper agent + models cache routes ([c89154b](https://github.com/IA-Generative/dig-dig-doc/commit/c89154bbe99de4fe4443172e293f940d9e0cd753))
+
+
+### Bug Fixes
+
+* assistant response not appearing after 'done' ([bd6102f](https://github.com/IA-Generative/dig-dig-doc/commit/bd6102f698e639c5bddf532ae261822a70fc4286))
+* disable parallel tool calls for Scaleway AI compatibility ([637b87c](https://github.com/IA-Generative/dig-dig-doc/commit/637b87c1ddc78e94246434a433fc6f1980a4418a))
+* helper agent ([8af5359](https://github.com/IA-Generative/dig-dig-doc/commit/8af535903dcd8857c2d25eeea84f9e42d10977b1))
+* use Scaleway-available models instead of gpt-4o default ([085d3d8](https://github.com/IA-Generative/dig-dig-doc/commit/085d3d817436018b1f0b572887fb044230b9f1b0))
+
 ## [0.5.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.1...v0.5.0-rc) (2026-09-25)
 
 
