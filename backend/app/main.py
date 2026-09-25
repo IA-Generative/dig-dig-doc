@@ -18,6 +18,8 @@ from app.routers.dossiers import router as dossiers_router
 from app.routers.ephemeral import router as ephemeral_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
+from app.routers.internal_agent import agent_conversations_router as internal_agent_conversations_router
+from app.routers.internal_agent import router as internal_agent_router
 from app.routers.models import router as models_router
 from app.routers.reports import router as reports_router
 
@@ -96,6 +98,8 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(assist_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
+app.include_router(internal_agent_router, prefix="/api")
+app.include_router(internal_agent_conversations_router, prefix="/api")
 app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
