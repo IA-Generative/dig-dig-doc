@@ -254,7 +254,7 @@ extraObjects:
       name: digdigdoc-s3
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-s3
@@ -266,7 +266,7 @@ extraObjects:
       name: digdigdoc-openai
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-openai
@@ -278,7 +278,7 @@ extraObjects:
       name: digdigdoc-keycloak
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-keycloak
@@ -290,7 +290,7 @@ extraObjects:
       name: digdigdoc-worker
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-worker
@@ -302,7 +302,7 @@ extraObjects:
       name: digdigdoc-redis
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-redis
@@ -321,7 +321,7 @@ extraObjects:
       name: digdigdoc-db-superuser
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-db-superuser
@@ -337,7 +337,7 @@ extraObjects:
       name: digdigdoc-db-appuser
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-db-appuser
@@ -353,7 +353,7 @@ extraObjects:
       name: digdigdoc-db-infos
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-db-infos
@@ -375,7 +375,7 @@ extraObjects:
       name: digdigdoc-db-backups
     spec:
       vaultAuthRef: vault-auth
-      mount: mirai
+      mount: exploration
       type: kv-v2
       destination:
         name: digdigdoc-db-backups
