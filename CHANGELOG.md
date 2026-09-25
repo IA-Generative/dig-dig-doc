@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.1...v0.5.0-rc) (2026-09-25)
+
+
+### Features
+
+* **backend:** add agent_conversations data model (Phase 1, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([d8d16a6](https://github.com/IA-Generative/dig-dig-doc/commit/d8d16a6f8529804f362f213a326d9f98f1c2059a))
+* **backend:** add AgentConversationRepository (Phase 2, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([270fa96](https://github.com/IA-Generative/dig-dig-doc/commit/270fa96a971726a8f60aa8c67824c92549011c38))
+* **backend:** add internal API for agent helper tools (Phase 3, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([214c058](https://github.com/IA-Generative/dig-dig-doc/commit/214c058e2ee38f51895a24157413bd0b1ee5e1aa))
+* **backend:** add MCP helper server (Phase 6, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([8d617e6](https://github.com/IA-Generative/dig-dig-doc/commit/8d617e636487784bf6b6312943524016f918b32a))
+* **backend:** add product REST API for agent conversations (Phase 5, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([5a56138](https://github.com/IA-Generative/dig-dig-doc/commit/5a56138d8e21660c04a44a0bb77acecb5f7cd8e9))
+* **frontend:** indicateur pipeline en cours dans la modal helper ([#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([1d269a1](https://github.com/IA-Generative/dig-dig-doc/commit/1d269a108e21f2740ae0aea3c917d7da7fe94682))
+* **frontend:** phase 8 — UI de l'agent helper ([#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([966c92c](https://github.com/IA-Generative/dig-dig-doc/commit/966c92cd465990b443ca896fb062384aebc7238e))
+* résumés automatiques (document + dossier) avec versioning et hash de fichier ([#52](https://github.com/IA-Generative/dig-dig-doc/issues/52)) ([39aac64](https://github.com/IA-Generative/dig-dig-doc/commit/39aac645e2d071aecdd6c7abce75cedca13b7119))
+* **worker:** add helper agent LangGraph task (Phase 7, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([1625ffa](https://github.com/IA-Generative/dig-dig-doc/commit/1625ffa3cc0a5dbdefffac532d3984af0692f6ea))
+
+
+### Bug Fixes
+
+* duplicate summary property and document_process test mock ([85542ad](https://github.com/IA-Generative/dig-dig-doc/commit/85542ad3d3b6ddf2ba574b7fbe6aa92510562373))
+
 ## [0.4.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.0...v0.4.1) (2026-09-25)
 
 
