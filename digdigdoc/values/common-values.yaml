@@ -414,10 +414,10 @@ extraObjects:
     apiVersion: keda.sh/v1alpha1
     kind: ScaledObject
     metadata:
-      name: digdigdoc-document-process
+      name: digdigdoc-worker-document
     spec:
       scaleTargetRef:
-        name: digdigdoc-document-process
+        name: digdigdoc-worker-document
         kind: Deployment
         apiVersion: apps/v1
       minReplicaCount: 2
@@ -438,10 +438,10 @@ extraObjects:
     apiVersion: keda.sh/v1alpha1
     kind: ScaledObject
     metadata:
-      name: digdigdoc-agent-execution
+      name: digdigdoc-worker-execution
     spec:
       scaleTargetRef:
-        name: digdigdoc-agent-execution
+        name: digdigdoc-worker-execution
         kind: Deployment
         apiVersion: apps/v1
       minReplicaCount: 2
