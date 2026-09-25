@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.1...v0.5.2) (2026-09-25)
+
+
+### Bug Fixes
+
+* service name ([b5dd75a](https://github.com/IA-Generative/dig-dig-doc/commit/b5dd75a8b38d46ac6e0b050a24ad85ef66e0b2a0))
+
 ## [0.5.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.0...v0.5.1) (2026-09-25)
 
 
