@@ -24,10 +24,7 @@ def _build_conversation_history(conversation: dict) -> list[dict]:
 
 
 def _resources_to_api(resources: list[ConsultedResource]) -> list[dict]:
-    return [
-        {"dossier_id": r.dossier_id, "analyse_id": r.analyse_id, "excerpt": r.excerpt}
-        for r in resources
-    ]
+    return [{"dossier_id": r.dossier_id, "analyse_id": r.analyse_id, "excerpt": r.excerpt} for r in resources]
 
 
 @celery_app.task(name="app.tasks.run_helper_chat", bind=True)

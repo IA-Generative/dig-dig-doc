@@ -45,9 +45,7 @@ def _truncate_title(content: str) -> str:
     return content[: _TITLE_MAX_LENGTH - 1].rstrip() + "…"
 
 
-async def _get_owned_or_404(
-    repository: AgentConversationRepository, conversation_id: uuid.UUID, user_id: str
-):
+async def _get_owned_or_404(repository: AgentConversationRepository, conversation_id: uuid.UUID, user_id: str):
     conversation = await repository.get(conversation_id)
     if conversation is None or conversation.created_by != user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
