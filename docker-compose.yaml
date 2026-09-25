@@ -110,6 +110,10 @@ services:
       # et l'extraction d'entités (LLM en structured output).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-}
+      # Modèles servis par le hub configuré (Scaleway AI par défaut).
+      # Surchargeables via .env / .env.local sans toucher au code.
+      LLM_MODEL: ${LLM_MODEL:-llama-3.3-70b-instruct}
+      VLM_MODEL: ${VLM_MODEL:-pixtral-12b-2409}
     depends_on:
       redis:
         condition: service_healthy
