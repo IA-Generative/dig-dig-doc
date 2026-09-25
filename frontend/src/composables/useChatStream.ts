@@ -64,10 +64,16 @@ export function useChatStream(options: UseChatStreamOptions) {
       onDone();
     });
     eventSource.addEventListener("error", () => {
-      eventSource?.close();
-      eventSource = undefined;
-      isRunning.value = false;
-      onError?.();
+      // La fermeture de la connexion par le serveur déclenche aussi
+      // 'error' : si on n'a pas encore reçu 'done', on appelle onDone
+      // pour ne pas laisser le UI bloqué (isChatRunning = true).
+      if (eventSource) {
+        eventSource.close();
+        eventSource = undefined;
+        isRunning.value = false;
+        onDone();
+        onError?.();
+      }
     });
 
     return stop;

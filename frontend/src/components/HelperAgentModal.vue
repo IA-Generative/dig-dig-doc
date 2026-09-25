@@ -123,7 +123,7 @@ function stopStream() {
 
 async function onNewConversation() {
   stopStream();
-  await createConversation();
+  activeConversation.value = await createConversation();
 }
 
 async function onSelectConversation(conversationId: string) {
@@ -142,10 +142,10 @@ async function onChatSubmit(content: string) {
 
   // Crée une conversation si aucune n'est active.
   if (!activeConversation.value) {
-    await createConversation();
+    activeConversation.value = await createConversation();
   }
 
-  const conversationId = activeConversation.value!.id;
+  const conversationId = activeConversation.value.id;
 
   // Démarre le streaming AVANT d'envoyer le message pour ne pas manquer
   // les premiers événements (le worker peut être très rapide).
