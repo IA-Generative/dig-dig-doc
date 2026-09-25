@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 
 from app.config import KeycloakSettings
-from app.core.security.claims import extract_identity
+from app.core.security.claims import decode_access_token, extract_identity
 from app.core.security.factory import RequestContext, get_current_user
 from app.core.security.keycloak_client import keycloak_openid, session_store
 from app.core.security.session import PendingAuth
@@ -99,6 +99,10 @@ async def callback(code: str, state: str) -> RedirectResponse:
             code_verifier=pending.code_verifier,
         )
         claims = _keycloak_openid.userinfo(token_response["access_token"])
+        # userinfo does not include resource_access (client roles), so we
+        # decode the JWT payload to enrich the claims with role information.
+        jwt_claims = decode_access_token(token_response["access_token"])
+        claims = {**claims, "resource_access": jwt_claims.get("resource_access", {})}
     except Exception as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Login failed") from error
 

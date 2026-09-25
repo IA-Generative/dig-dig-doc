@@ -33,7 +33,17 @@ export function useAuth() {
   const fetchProfile = async () => {
     loading.value = true;
     try {
-      profile.value = await apiFetch<UserProfile>("/api/auth/me");
+      const raw = await apiFetch<Record<string, unknown>>("/api/auth/me");
+      // L'API retourne du snake_case (user_id, is_admin, …) mais le frontend
+      // utilise du camelCase : on mappe manuellement les clés.
+      profile.value = {
+        userId: raw.user_id as string,
+        email: raw.email as string,
+        firstName: raw.first_name as string,
+        lastName: raw.last_name as string,
+        roles: raw.roles as string[],
+        isAdmin: raw.is_admin as boolean,
+      };
     } catch {
       profile.value = null;
     } finally {
