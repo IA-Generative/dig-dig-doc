@@ -14,6 +14,7 @@ from app.models.dossier import (
 )
 from app.models.execution_log import ExecutionLogLevel
 from app.models.feedback import FeedbackReasonCode, FeedbackValue
+from app.models.summary import SummaryStatus
 
 
 class BoundingBoxIn(BaseModel):
@@ -152,10 +153,58 @@ class DossierDocumentIn(BaseModel):
     mimetype: str
 
 
+class DocumentSummaryOut(BaseModel):
+    """Résumé d'un document (version individuelle). Append-only : chaque
+    régénération crée une nouvelle ligne, la dernière fait foi."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    content: str
+    model: str | None
+    created_at: datetime
+
+
+class DossierSummaryOut(BaseModel):
+    """Résumé global d'un dossier. Append-only : chaque régénération crée
+    une nouvelle ligne, la dernière fait foi."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    content: str
+    model: str | None
+    created_at: datetime
+
+
+class SummaryDepositIn(BaseModel):
+    """Payload pour déposer un résumé (worker → backend). Le `model`
+    optionnel permet de tracer quel LLM a produit le résumé."""
+
+    content: str
+    model: str | None = None
+
+
+class SummaryStatusIn(BaseModel):
+    """Payload pour mettre à jour le statut de génération d'un résumé
+    (worker → backend)."""
+
+    status: SummaryStatus
+    error: str | None = None
+
+
+class FileHashIn(BaseModel):
+    """Payload pour déposer le hash SHA-256 d'un document (worker
+    document_process → backend)."""
+
+    file_hash: str
+
+
 class DossierDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    dossier_id: uuid.UUID
     name: str
     size: int
     s3_key: str
@@ -163,6 +212,12 @@ class DossierDocumentOut(BaseModel):
     label: str | None
     text_extraction_status: TextExtractionStatus
     text_extraction_error: str | None
+    file_hash: str | None
+    summary_status: SummaryStatus
+    summary_error: str | None
+    # Dernier résumé généré (le plus récent par created_at), ou None si
+    # aucun résumé n'a encore été produit avec succès.
+    summary: "DocumentSummaryOut | None" = None
     pages: list[DocumentPageOut]
 
 
@@ -340,6 +395,9 @@ class InternalDossierDocumentOut(BaseModel):
     s3_key: str
     mimetype: str
     text_extraction_status: TextExtractionStatus
+    file_hash: str | None = None
+    summary_status: SummaryStatus = SummaryStatus.EN_ATTENTE
+    summary: DocumentSummaryOut | None = None
     pages: list[InternalDocumentPageOut]
 
 
@@ -392,6 +450,8 @@ class InternalDossierOut(BaseModel):
     id: uuid.UUID
     analyse_id: uuid.UUID
     status: DossierStatus
+    summary_status: SummaryStatus = SummaryStatus.EN_ATTENTE
+    summary: DossierSummaryOut | None = None
     execution_steps: list[InternalExecutionStepOut]
     documents: list[InternalDossierDocumentOut]
 
@@ -461,5 +521,9 @@ class DossierOut(BaseModel):
     status: DossierStatus
     started_at: datetime | None
     ended_at: datetime | None
+    summary_status: SummaryStatus
+    summary_error: str | None
+    # Dernier résumé global du dossier (le plus récent), ou None.
+    summary: "DossierSummaryOut | None" = None
     execution_steps: list[ExecutionStepOut]
     documents: list[DossierDocumentOut]

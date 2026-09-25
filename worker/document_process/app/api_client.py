@@ -31,6 +31,14 @@ def set_extraction_status(client: httpx.Client, document_id: str, *, status: str
     return response.json()
 
 
+def set_file_hash(client: httpx.Client, document_id: str, *, file_hash: str) -> dict:
+    """Dépose le hash SHA-256 d'un document, calculé par le worker au moment
+    de l'extraction (les bytes sont déjà en mémoire)."""
+    response = client.put(f"/documents/{document_id}/file-hash", json={"file_hash": file_hash})
+    response.raise_for_status()
+    return response.json()
+
+
 def add_page(
     client: httpx.Client, document_id: str, *, page_number: int, content: str, screenshot_key: str | None = None
 ) -> dict:

@@ -8,11 +8,13 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.summary import SummaryStatus
 
 if TYPE_CHECKING:
     from app.models.conversation import Conversation
     from app.models.document_page import DocumentPage
     from app.models.execution_log import ExecutionLog
+    from app.models.summary import DocumentSummary, DossierSummary
 
 
 class DossierStatus(enum.StrEnum):
@@ -64,6 +66,13 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # État de génération du résumé global du dossier (issue #52).
+    summary_status: Mapped[SummaryStatus] = mapped_column(
+        Enum(SummaryStatus, name="summary_status"),
+        nullable=False,
+        default=SummaryStatus.EN_ATTENTE,
+    )
+    summary_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     execution_steps: Mapped[list["ExecutionStep"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="ExecutionStep.started_at"
@@ -74,6 +83,19 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     conversations: Mapped[list["Conversation"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="Conversation.created_at"
     )
+    summaries: Mapped[list["DossierSummary"]] = relationship(
+        back_populates="dossier", cascade="all, delete-orphan", order_by="DossierSummary.created_at.desc()"
+    )
+
+    @property
+    def summary(self) -> "DossierSummary | None":
+        """Dernier résumé généré (le plus récent par created_at), ou None."""
+        return self.summaries[0] if self.summaries else None
+
+    @property
+    def summary(self) -> "DossierSummary | None":
+        """Dernier résumé généré (le plus récent par created_at), ou None."""
+        return self.summaries[0] if self.summaries else None
 
 
 class ExecutionStep(UUIDMixin, Base):
@@ -121,8 +143,33 @@ class DossierDocument(UUIDMixin, TimestampMixin, Base):
         default=TextExtractionStatus.EN_ATTENTE,
     )
     text_extraction_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Empreinte SHA-256 du contenu du fichier, calculée par le worker
+    # document_process au moment de l'extraction (les bytes sont déjà en
+    # mémoire). Permet de détecter les doublons et les fichiers identiques
+    # re-uploadés.
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # État de génération du résumé du document (issue #52).
+    summary_status: Mapped[SummaryStatus] = mapped_column(
+        Enum(SummaryStatus, name="summary_status"),
+        nullable=False,
+        default=SummaryStatus.EN_ATTENTE,
+    )
+    summary_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     dossier: Mapped["Dossier"] = relationship(back_populates="documents")
     pages: Mapped[list["DocumentPage"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentPage.page_number"
     )
+    summaries: Mapped[list["DocumentSummary"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="DocumentSummary.created_at.desc()"
+    )
+
+    @property
+    def summary(self) -> "DocumentSummary | None":
+        """Dernier résumé généré (le plus récent par created_at), ou None."""
+        return self.summaries[0] if self.summaries else None
+
+    @property
+    def summary(self) -> "DocumentSummary | None":
+        """Dernier résumé généré (le plus récent par created_at), ou None."""
+        return self.summaries[0] if self.summaries else None

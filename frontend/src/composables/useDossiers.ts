@@ -1,7 +1,17 @@
 import { computed, reactive, ref } from "vue";
 
 import { API_BASE_URL, apiFetch } from "@/utils/api";
-import type { Dossier, DossierDocument, ExecutionStep } from "@/types/dossier";
+import type { Dossier, DossierDocument, ExecutionStep, Summary } from "@/types/dossier";
+
+function mapSummary(api: any): Summary | undefined {
+  if (!api) return undefined;
+  return {
+    id: api.id,
+    content: api.content,
+    model: api.model ?? undefined,
+    createdAt: api.created_at,
+  };
+}
 
 function mapDocument(api: any): DossierDocument {
   return {
@@ -13,6 +23,10 @@ function mapDocument(api: any): DossierDocument {
     label: api.label ?? undefined,
     textExtractionStatus: api.text_extraction_status,
     textExtractionError: api.text_extraction_error ?? undefined,
+    fileHash: api.file_hash ?? undefined,
+    summaryStatus: api.summary_status,
+    summaryError: api.summary_error ?? undefined,
+    summary: mapSummary(api.summary),
   };
 }
 
@@ -40,6 +54,9 @@ function mapDossier(api: any): Dossier {
     endedAt: api.ended_at ?? undefined,
     executionSteps: api.execution_steps.map(mapStep),
     documents: api.documents.map(mapDocument),
+    summaryStatus: api.summary_status,
+    summaryError: api.summary_error ?? undefined,
+    summary: mapSummary(api.summary),
   };
 }
 
@@ -117,6 +134,21 @@ export function useDossiers() {
     upsert(mapDossier(data));
   };
 
+  // Régénère le résumé d'un document (issue #52) : le backend dispatche
+  // une tâche Celery sur la file agent_execution.
+  const regenerateDocumentSummary = async (dossierId: string, documentId: string) => {
+    await apiFetch<any>(`/api/dossiers/${dossierId}/documents/${documentId}/summary`, { method: "POST" });
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}`);
+    upsert(mapDossier(data));
+  };
+
+  // Régénère le résumé global du dossier (issue #52).
+  const regenerateDossierSummary = async (dossierId: string) => {
+    await apiFetch<any>(`/api/dossiers/${dossierId}/summary`, { method: "POST" });
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}`);
+    upsert(mapDossier(data));
+  };
+
   const stop = async (dossierId: string) => {
     const data = await apiFetch<any>(`/api/dossiers/${dossierId}/stop`, { method: "POST" });
     upsert(mapDossier(data));
@@ -163,6 +195,8 @@ export function useDossiers() {
     setDocumentLabel,
     launch,
     stop,
+    regenerateDocumentSummary,
+    regenerateDossierSummary,
     streamDossier,
   };
 }

@@ -184,3 +184,34 @@ def extract_entities_batch(
         temperature=0.1,
     )
     return response.choices[0].message.parsed
+
+
+# ---------------------------------------------------------------------------
+# LLM : résumé de texte (issue #52)
+# ---------------------------------------------------------------------------
+
+_SUMMARY_SYSTEM_PROMPT = (
+    "Tu es un assistant de synthèse documentaire. "
+    "Résume le texte fourni en français, de manière concise et factuelle. "
+    "Identifie les informations clés : type de document, parties prenantes, "
+    "dates importantes, montants, et tout élément pertinent. "
+    "Le résumé doit faire 3 à 5 phrases maximum, sans introduction ni conclusion superflue."
+)
+
+
+def summarize_text(content: str, *, max_tokens: int = 500) -> str:
+    """Génère un résumé concis du texte fourni via le LLM. Utilisé pour les
+    résumés de documents (concaténation des pages) et les résumés de dossier
+    (concaténation des résumés individuels + synthèses d'agents)."""
+    if not content or not content.strip():
+        return ""
+    response = _client().chat.completions.create(
+        model=settings.LLM_MODEL,
+        messages=[
+            {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": content},
+        ],
+        max_tokens=max_tokens,
+        temperature=0.1,
+    )
+    return response.choices[0].message.content or ""

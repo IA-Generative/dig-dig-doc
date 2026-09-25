@@ -211,3 +211,50 @@ def launch_agent_dossier(client: httpx.Client, dossier_id: str) -> dict:
     response = client.post(f"/agent/dossiers/{dossier_id}/launch")
     response.raise_for_status()
     return response.json()
+
+
+# --- Summaries (issue #52) ---
+
+
+def set_document_summary_status(
+    client: httpx.Client, document_id: str, *, status: str, error: str | None = None
+) -> dict:
+    response = client.put(
+        f"/documents/{document_id}/summary-status",
+        json={"status": status, "error": error},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def deposit_document_summary(
+    client: httpx.Client, document_id: str, *, content: str, model: str | None = None
+) -> dict:
+    response = client.post(
+        f"/documents/{document_id}/summaries",
+        json={"content": content, "model": model},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def set_dossier_summary_status(
+    client: httpx.Client, dossier_id: str, *, status: str, error: str | None = None
+) -> dict:
+    response = client.put(
+        f"/dossiers/{dossier_id}/summary-status",
+        json={"status": status, "error": error},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def deposit_dossier_summary(
+    client: httpx.Client, dossier_id: str, *, content: str, model: str | None = None
+) -> dict:
+    response = client.post(
+        f"/dossiers/{dossier_id}/summaries",
+        json={"content": content, "model": model},
+    )
+    response.raise_for_status()
+    return response.json()
