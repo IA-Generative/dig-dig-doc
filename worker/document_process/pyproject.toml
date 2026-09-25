@@ -1,6 +1,6 @@
 [project]
 name = "dig-dig-doc-worker-document-process"
-version = "0.5.0-rc.1"
+version = "0.5.0-rc.2"
 description = "Worker Celery : extraction de texte PDF, NER et relations"
 requires-python = ">=3.12"
 dependencies = [

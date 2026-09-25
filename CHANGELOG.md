@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.0-rc.2](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.0-rc.1...v0.5.0-rc.2) (2026-09-25)
+
+
+### Features
+
+* **admin:** statistiques plateforme et introspection tâches Celery ([#60](https://github.com/IA-Generative/dig-dig-doc/issues/60)) ([21560bd](https://github.com/IA-Generative/dig-dig-doc/commit/21560bd579d2619d838edbaedfe51106eec5c970))
+* bouton d'accès aux tâches en cours ([#62](https://github.com/IA-Generative/dig-dig-doc/issues/62)) ([16bb3e9](https://github.com/IA-Generative/dig-dig-doc/commit/16bb3e9d5b55a7a49988bc788542b972585788f6))
+* **cgu:** CGU versionnées + blocage si non acceptées ([#58](https://github.com/IA-Generative/dig-dig-doc/issues/58)) ([e257653](https://github.com/IA-Generative/dig-dig-doc/commit/e257653f91d79844592ff9c64df08de37ce40652))
+* **landing:** modernise la landing page — cas d'usage, footer enrichi, animations ([8fe444d](https://github.com/IA-Generative/dig-dig-doc/commit/8fe444dd611aa0f5696305a3120b92eefd48d48e)), closes [#59](https://github.com/IA-Generative/dig-dig-doc/issues/59)
+* **profile:** page profil avec thème DSFR et statistiques ([#61](https://github.com/IA-Generative/dig-dig-doc/issues/61)) ([eb4a3b8](https://github.com/IA-Generative/dig-dig-doc/commit/eb4a3b82bcf7db66ced4b984d593e282c1d3fa32))
+* **tutorials:** bouton d'accès aux tutoriels avec progression ([0ad52d3](https://github.com/IA-Generative/dig-dig-doc/commit/0ad52d34c4f017952d01549871937d9e67ff90b7)), closes [#63](https://github.com/IA-Generative/dig-dig-doc/issues/63)
+
+
+### Bug Fixes
+
+* **auth:** extraction des rôles Keycloak et mapping snake_case du profil ([fd4138d](https://github.com/IA-Generative/dig-dig-doc/commit/fd4138df3a97366fce5d44b7d6a8fbc02bae8ed0))
+
+
+### Code Refactoring
+
+* **admin:** séparation en composants par onglet ([fa8155a](https://github.com/IA-Generative/dig-dig-doc/commit/fa8155a1dc3871ad06b0ceb8744c7c7f346e3eec))
+* déplace le bouton Tâches dans le menu utilisateur ([#62](https://github.com/IA-Generative/dig-dig-doc/issues/62)) ([a15bc41](https://github.com/IA-Generative/dig-dig-doc/commit/a15bc4129d46c0ed1eda5d08b371805a71beba69))
+* **frontend:** utiliser le logo Marianne officiel DSFR (DsfrLogo) ([b2bb232](https://github.com/IA-Generative/dig-dig-doc/commit/b2bb2320b0ca9d9f28ec328fc566157f42465cd2))
+
 ## [0.5.0-rc.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.0-rc...v0.5.0-rc.1) (2026-09-25)
 
 
