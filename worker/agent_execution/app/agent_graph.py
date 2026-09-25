@@ -56,6 +56,7 @@ def _agent_node(state: AgentState) -> AgentState:
         messages=messages,
         tools=tools.tool_definitions(),
         tool_choice="auto",
+        parallel_tool_calls=False,
         temperature=0.2,
         max_tokens=2000,
     )
