@@ -5,9 +5,11 @@ import { useRouter } from "vue-router";
 import HelperAgentModal from "@/components/HelperAgentModal.vue";
 import InfoModal from "@/components/InfoModal.vue";
 import ReportFormModal from "@/components/ReportFormModal.vue";
+import TaskDrawer from "@/components/TaskDrawer.vue";
 import TutorialModal from "@/components/TutorialModal.vue";
 import { useAuth } from "@/composables/useAuth";
 import { useCgu } from "@/composables/useCgu";
+import { useUserTasks } from "@/composables/useUserTasks";
 import { renderMarkdown } from "@/utils/markdown";
 
 // Version lue à la compilation depuis package.json (injectée par Vite via define).
@@ -26,6 +28,10 @@ const showCgu = ref(false);
 const showReport = ref(false);
 const showHelperAgent = ref(false);
 const showTutorials = ref(false);
+const showTaskDrawer = ref(false);
+
+// Tâches utilisateur (issue #62)
+const { hasActiveTasks, activeCount } = useUserTasks();
 
 const changelogHtml = ref("");
 const cguHtml = ref("");
@@ -109,6 +115,11 @@ function openTutorials() {
   showTutorials.value = true;
 }
 
+function openTaskDrawer() {
+  closeMenu();
+  showTaskDrawer.value = true;
+}
+
 function handleOutsideClick(event: MouseEvent) {
   if (showUserMenu.value && !userWrapper.value?.contains(event.target as Node)) {
     showUserMenu.value = false;
@@ -163,6 +174,12 @@ onBeforeUnmount(() => {
       <button v-if="isAdmin" type="button" class="user-menu__item" role="menuitem" @click="goAdmin">
         <VIcon name="ri-shield-user-line" />
         <span>Administration</span>
+      </button>
+
+      <button type="button" class="user-menu__item" role="menuitem" @click="openTaskDrawer">
+        <VIcon name="ri-task-line" />
+        <span>Tâches</span>
+        <span v-if="hasActiveTasks" class="user-menu__badge">{{ activeCount }}</span>
       </button>
 
       <button type="button" class="user-menu__item" role="menuitem" @click="openHelperAgent">
@@ -247,6 +264,8 @@ onBeforeUnmount(() => {
   <HelperAgentModal :open="showHelperAgent" @close="showHelperAgent = false" />
 
   <TutorialModal :open="showTutorials" @close="showTutorials = false" />
+
+  <TaskDrawer :open="showTaskDrawer" @close="showTaskDrawer = false" />
 </template>
 
 <style scoped>
@@ -466,5 +485,20 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-default-grey);
   border-radius: 0.25rem;
   line-height: 1.4;
+}
+
+.user-menu__badge {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: 0.625rem;
+  background: var(--background-action-high-red-marianne);
+  color: var(--text-inverted-red-marianne);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 </style>

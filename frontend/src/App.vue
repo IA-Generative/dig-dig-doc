@@ -4,18 +4,12 @@ import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import UserMenu from "@/components/UserMenu.vue";
 import CguGate from "@/components/CguGate.vue";
-import TaskDrawer from "@/components/TaskDrawer.vue";
 import { useAuth } from "@/composables/useAuth";
 import { useMyConversations } from "@/composables/useMyConversations";
-import { useUserTasks } from "@/composables/useUserTasks";
 
 const route = useRoute();
 const { fetchProfile } = useAuth();
 const { list: conversations, fetchList: fetchConversations, deleteConversation } = useMyConversations();
-const { hasActiveTasks, activeCount } = useUserTasks();
-
-// Drawer des tâches (issue #62)
-const showTaskDrawer = ref(false);
 
 async function onDeleteConversation(dossierId: string, conversationId: string) {
   if (!confirm("Supprimer cette conversation ? Le dossier et ses documents ne seront pas affectés.")) return;
@@ -160,23 +154,6 @@ const navItems = [
     <main class="app-shell__content">
       <RouterView />
     </main>
-
-    <!-- Bouton flottant d'accès aux tâches (issue #62) -->
-    <button
-      v-if="showShell"
-      type="button"
-      class="app-shell__task-button"
-      :class="{ 'app-shell__task-button--active': hasActiveTasks }"
-      :aria-label="hasActiveTasks ? `${activeCount} tâche(s) en cours` : 'Tâches'"
-      title="Tâches en cours"
-      @click="showTaskDrawer = true"
-    >
-      <VIcon name="ri-task-line" />
-      <span v-if="hasActiveTasks" class="app-shell__task-badge">{{ activeCount }}</span>
-    </button>
-
-    <!-- Drawer des tâches -->
-    <TaskDrawer :open="showTaskDrawer" @close="showTaskDrawer = false" />
   </div>
 </template>
 
@@ -406,58 +383,5 @@ const navItems = [
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
-}
-
-/* Bouton flottant d'accès aux tâches (issue #62) */
-.app-shell__task-button {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 3rem;
-  height: 3rem;
-  border: none;
-  border-radius: 50%;
-  background: var(--background-action-high-blue-france);
-  color: var(--text-inverted-blue-france);
-  font-size: 1.25rem;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  z-index: 900;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.app-shell__task-button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
-}
-
-.app-shell__task-button--active {
-  animation: task-button-pulse 2s ease-in-out infinite;
-}
-
-@keyframes task-button-pulse {
-  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
-  50% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 0 0 6px rgba(0, 0, 145, 0.15); }
-}
-
-.app-shell__task-badge {
-  position: absolute;
-  top: -0.25rem;
-  right: -0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.375rem;
-  border-radius: 0.625rem;
-  background: var(--background-action-high-red-marianne);
-  color: var(--text-inverted-red-marianne);
-  font-size: 0.75rem;
-  font-weight: 700;
-  border: 2px solid var(--background-default-grey);
 }
 </style>
