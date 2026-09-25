@@ -141,9 +141,11 @@ defineExpose({ resizeTextarea });
         >
           <div class="chat-message__bubble">
             <MarkdownText :content="message.content" class="chat-message__text" />
-            <!-- Sources citées par l'assistant -->
-            <div v-if="message.sources && message.sources.length > 0" class="chat-message__sources">
-              <p class="chat-message__sources-title">Sources :</p>
+            <!-- Sources citées par l'assistant (repliées par défaut) -->
+            <details v-if="message.sources && message.sources.length > 0" class="chat-message__sources">
+              <summary class="chat-message__sources-title">
+                Sources ({{ message.sources.length }})
+              </summary>
               <ul>
                 <li v-for="source in message.sources" :key="source.id" class="chat-message__source">
                   <slot name="source" :source="source">
@@ -154,7 +156,7 @@ defineExpose({ resizeTextarea });
                   </slot>
                 </li>
               </ul>
-            </div>
+            </details>
           </div>
           <div v-if="message.role === 'assistant'" class="chat-message__feedback">
             <slot name="message-actions" :message="message" />
@@ -345,7 +347,7 @@ defineExpose({ resizeTextarea });
   border-top-left-radius: 0.25rem;
 }
 
-/* Sources citées par l'assistant */
+/* Sources citées par l'assistant (bloc repliable) */
 .chat-message__sources {
   margin-top: 0.5rem;
   padding-top: 0.5rem;
@@ -353,14 +355,34 @@ defineExpose({ resizeTextarea });
 }
 
 .chat-message__sources-title {
-  margin: 0 0 0.25rem;
+  margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-mention-grey);
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  user-select: none;
+}
+
+.chat-message__sources-title::-webkit-details-marker {
+  display: none;
+}
+
+.chat-message__sources-title::before {
+  content: "▸";
+  font-size: 0.6rem;
+  transition: transform 0.15s ease;
+}
+
+.chat-message__sources[open] .chat-message__sources-title::before {
+  transform: rotate(90deg);
 }
 
 .chat-message__sources ul {
-  margin: 0;
+  margin: 0.5rem 0 0;
   padding: 0;
   list-style: none;
 }
