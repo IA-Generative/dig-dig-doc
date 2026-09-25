@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.5.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.1...v0.5.0) (2026-09-25)
+
+
+### Features
+
+* « Dossier à ranger » — suggestion automatique d'analyse via les résumés ([#54](https://github.com/IA-Generative/dig-dig-doc/issues/54)) ([388e891](https://github.com/IA-Generative/dig-dig-doc/commit/388e891d32855055f832b71902eab9b5378b12ee))
+* **admin:** statistiques plateforme et introspection tâches Celery ([#60](https://github.com/IA-Generative/dig-dig-doc/issues/60)) ([209820f](https://github.com/IA-Generative/dig-dig-doc/commit/209820f68760a3b8a820e9cca593f84406e155fb))
+* **backend:** add agent_conversations data model (Phase 1, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([f8d029f](https://github.com/IA-Generative/dig-dig-doc/commit/f8d029fa04bdadea767bb12da8d99526a23117e2))
+* **backend:** add AgentConversationRepository (Phase 2, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([3b1a505](https://github.com/IA-Generative/dig-dig-doc/commit/3b1a50537deab45958050b949d52f2eafef63622))
+* **backend:** add internal API for agent helper tools (Phase 3, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([b79fdf6](https://github.com/IA-Generative/dig-dig-doc/commit/b79fdf603144e7065c4e0ec5e4b297e8022dc06d))
+* **backend:** add MCP helper server (Phase 6, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([6e1068b](https://github.com/IA-Generative/dig-dig-doc/commit/6e1068b1c83287dd551dd64739fb74b7ce4349f7))
+* **backend:** add product REST API for agent conversations (Phase 5, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([c1ab561](https://github.com/IA-Generative/dig-dig-doc/commit/c1ab56131403f8393bc208b944e1ae3869c09985))
+* bouton d'accès aux tâches en cours ([#62](https://github.com/IA-Generative/dig-dig-doc/issues/62)) ([1783433](https://github.com/IA-Generative/dig-dig-doc/commit/1783433886fa758bc9117ea6db88951f3d54ea45))
+* **cgu:** cgu versionnées + blocage si non acceptées ([#58](https://github.com/IA-Generative/dig-dig-doc/issues/58)) ([729cad9](https://github.com/IA-Generative/dig-dig-doc/commit/729cad973a6a7a4389f4c9c00eedd072cd60ef87))
+* **frontend:** add Marianne logo, DDD tab title, and hover tooltip ([a67181d](https://github.com/IA-Generative/dig-dig-doc/commit/a67181d1a5df85bd6f91fd62d3ec66cefafe892d))
+* **frontend:** indicateur pipeline en cours dans la modal helper ([#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([80b8388](https://github.com/IA-Generative/dig-dig-doc/commit/80b8388620fbbcd701282d7ddebee65f022a6811))
+* **frontend:** phase 8 — UI de l'agent helper ([#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([f90055f](https://github.com/IA-Generative/dig-dig-doc/commit/f90055f14ae30aa875b0155d94910c99def7d6fc))
+* **landing:** modernise la landing page — cas d'usage, footer enrichi, animations ([1677f8b](https://github.com/IA-Generative/dig-dig-doc/commit/1677f8b4e45e10972ef64672fc53843b526fd878)), closes [#59](https://github.com/IA-Generative/dig-dig-doc/issues/59)
+* model selector for helper agent + models cache routes ([260c2cc](https://github.com/IA-Generative/dig-dig-doc/commit/260c2cc7985d3583a65245480ea7f4e06fbe5cd5))
+* **profile:** page profil avec thème DSFR et statistiques ([#61](https://github.com/IA-Generative/dig-dig-doc/issues/61)) ([337e4c3](https://github.com/IA-Generative/dig-dig-doc/commit/337e4c30718d5f3735d9ebdd05addd33a79fe440))
+* résumés automatiques (document + dossier) avec versioning et hash de fichier ([#52](https://github.com/IA-Generative/dig-dig-doc/issues/52)) ([226e54d](https://github.com/IA-Generative/dig-dig-doc/commit/226e54dc3f097f4eaf83a270ae6e405e42445777))
+* **tutorials:** bouton d'accès aux tutoriels avec progression ([5ce338e](https://github.com/IA-Generative/dig-dig-doc/commit/5ce338e1b356773f60282414507accf1b4fef011)), closes [#63](https://github.com/IA-Generative/dig-dig-doc/issues/63)
+* **worker:** add helper agent LangGraph task (Phase 7, issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50)) ([c6d14d4](https://github.com/IA-Generative/dig-dig-doc/commit/c6d14d4a65c083d06709f05ee8836c3f8839ba00))
+
+
+### Bug Fixes
+
+* assistant response not appearing after 'done' ([a4147aa](https://github.com/IA-Generative/dig-dig-doc/commit/a4147aaf4152fe5d1ea2a6851fa28d11adfa7270))
+* **auth:** extraction des rôles Keycloak et mapping snake_case du profil ([76c7689](https://github.com/IA-Generative/dig-dig-doc/commit/76c768938301389f858357d749c9f5b4bdd85808))
+* disable parallel tool calls for Scaleway AI compatibility ([9e3afdb](https://github.com/IA-Generative/dig-dig-doc/commit/9e3afdb38a2b7f282e6192f3d729c53d48d32b2b))
+* duplicate summary property and document_process test mock ([d0debf0](https://github.com/IA-Generative/dig-dig-doc/commit/d0debf0ee50b151f7110647cc455976d39bf59a5))
+* helper agent ([fe9c6bb](https://github.com/IA-Generative/dig-dig-doc/commit/fe9c6bb10775ccd72ba12fdb0f0dd6fd87139d01))
+* **lint:** corrige les erreurs ruff backend et worker agent ([81b86a1](https://github.com/IA-Generative/dig-dig-doc/commit/81b86a1d7b4bf512f16ca1557cac6b9a022a260e))
+* use Scaleway-available models instead of gpt-4o default ([deb2b26](https://github.com/IA-Generative/dig-dig-doc/commit/deb2b263fe8ffaf8543b94abf11b913dcdb8c986))
+
+
+### Code Refactoring
+
+* **admin:** séparation en composants par onglet ([97ef239](https://github.com/IA-Generative/dig-dig-doc/commit/97ef2399f3a6858cc93474fee9dc389e8d194e10))
+* déplace le bouton Tâches dans le menu utilisateur ([#62](https://github.com/IA-Generative/dig-dig-doc/issues/62)) ([d9ec319](https://github.com/IA-Generative/dig-dig-doc/commit/d9ec319402a2d838a6ac25ff90fe83d973fbf8b8))
+* **frontend:** utiliser le logo Marianne officiel DSFR (DsfrLogo) ([f4fec37](https://github.com/IA-Generative/dig-dig-doc/commit/f4fec37c8f559192100415a74a2759c7bbd160ab))
+
 ## [0.5.0-rc.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.0-rc.2...v0.5.0-rc.3) (2026-09-25)
 
 
