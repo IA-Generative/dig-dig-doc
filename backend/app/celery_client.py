@@ -50,3 +50,17 @@ def dispatch_chat_response(conversation_id: str, dossier_id: str) -> None:
         args=[conversation_id, dossier_id],
         queue="agent_execution",
     )
+
+
+def dispatch_helper_chat_response(conversation_id: str) -> None:
+    """Dépose la tâche de réponse de l'agent helper sur la file
+    agent_execution (issue #50). Contrairement à dispatch_chat_response, pas
+    de dossier_id : la conversation n'est rattachée à aucun dossier unique,
+    le worker charge son historique via /internal/agent-conversations/{id}
+    et construit son propre graphe (outils de recherche/création
+    d'analyses et de dossiers, lancement du pipeline)."""
+    celery_client.send_task(
+        "app.tasks.run_helper_chat",
+        args=[conversation_id],
+        queue="agent_execution",
+    )
