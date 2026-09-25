@@ -95,38 +95,45 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
   encore branché à un router, donc pas de nouveaux tests d'intégration à ce stade - viendront en
   Phase 5 avec `agent_conversations` router).
 
-## Phase 3 — API interne pour le worker (`/api/internal/agent/*`)
+## Phase 3 — API interne pour le worker (`/api/internal/agent/*`) ✅ fait le 2026-09-25
 
-Nouveau fichier `backend/app/routers/internal_agent.py`, monté dans `internal_router` ou en
-sous-router séparé inclus dans `app/main.py` (à trancher selon la taille — probablement un
-sous-router séparé `internal_agent_router` inclus juste après `internal_router`, pour ne pas
-alourdir `internal.py`).
+- [x] Ajouté le support `?q=` sur `GET /analyses` : `AnalyseRepository.list_paginated(..., q=None)`
+  filtre par `Analyse.name.ilike(f"%{q}%")` (`app/repositories/analyse_repository.py`), branché
+  sur le paramètre de requête du router existant (`app/routers/analyses.py::list_analyses`).
+- [x] `backend/app/schemas/agent_conversation.py` créé en avance de la Phase 4 (nécessaire pour
+  typer ces routes) : schémas produit (`AgentConversationOut`, `AgentMessageOut`, ...) et schémas
+  internes (`InternalAgentConversationOut`, `InternalAgentMessageIn`, ...) dans le même fichier.
+- [x] `backend/app/routers/internal_agent.py` : **deux** routers séparés (pas un seul avec des
+  chemins concaténés, plus lisible) :
+  - `agent_conversations_router` (préfixe `/internal/agent-conversations`) : `GET /{id}` (ne
+    renvoie que les messages `user`/`assistant`, filtrés en Python - les `tool_call`/`tool_result`
+    déjà journalisés ne sont pas utiles au graphe pour reconstruire son contexte),
+    `POST /{id}/chat-events`, `POST /{id}/messages` (dépose la réponse assistant + sources).
+  - `router` (préfixe `/internal/agent`) : `list_agent_analyses`/`get_agent_analyse`/
+    `create_agent_analyse` et `list_agent_dossiers`/`get_agent_dossier`/`create_agent_dossier`/
+    `launch_agent_dossier` sont des **wrappers d'une ligne** qui appellent directement les
+    fonctions de `app/routers/analyses.py`/`app/routers/dossiers.py` (confirmé : pas d'identité
+    requise, donc pas de `RequestContext` à construire) - même stratégie que `app/mcp/server.py`
+    pour l'éphémère. `add_agent_dossier_files` est la seule route réécrite (pas un simple wrapper)
+    car l'endpoint classique attend des `UploadFile` (multipart) ; elle décode du base64 et
+    réutilise `DossierRepository.add_documents` directement, sur le modèle de
+    `app/routers/ephemeral.py::_create_run`.
+  - Les deux routers sont protégés par `Depends(verify_app_token)` (même mécanisme que
+    `/api/internal/*`), montés dans `app/main.py` juste après `internal_router`.
+- [x] Validé avec un script jetable (httpx.AsyncClient + ASGITransport, un seul event loop pour
+  éviter le piège documenté dans `tests/conftest.py::client`) : tout le cycle
+  conversation (get 404 → seed via repository → get → chat-event → message assistant → get) puis
+  tools (create/search/get analyse → create/list/get dossier → upload de fichier en base64 →
+  launch) répond `200`/`201` comme attendu, et un appel sans `X-App-Token` répond `401`/`422`.
+- [x] `uv run pytest` (backend) toujours à 97 passed.
 
-Endpoints (tous protégés par le même mécanisme que `/api/internal/*` existant — vérifier
-`app/core/security/internal.py`) :
+## Phase 4 — Schémas Pydantic ✅ fait en Phase 3 (2026-09-25)
 
-- [ ] `GET /internal/agent-conversations/{id}` — conversation + historique (pour construire le
-  prompt du graphe).
-- [ ] `POST /internal/agent-conversations/{id}/chat-events` — dépose un `agent_chat_event`
-  (mirror de `POST /internal/conversations/{id}/chat-events` existant).
-- [ ] `POST /internal/agent-conversations/{id}/messages` — dépose le message assistant final +
-  sources (mirror de `POST /internal/conversations/{id}/messages`).
-- [ ] `GET /internal/agent/analyses` (`?q=`), `GET /internal/agent/analyses/{id}`,
-  `POST /internal/agent/analyses` — appellent directement `list_analyses`/`get_analyse`/
-  `create_analyse` de `app/routers/analyses.py` avec juste `db` (pas d'identité requise, cf.
-  découverte ci-dessus).
-- [ ] `GET /internal/agent/dossiers`, `GET /internal/agent/dossiers/{id}`,
-  `POST /internal/agent/dossiers`, `POST /internal/agent/dossiers/{id}/documents`,
-  `POST /internal/agent/dossiers/{id}/launch` — idem, appellent directement les fonctions de
-  `app/routers/dossiers.py`.
-- [ ] Vérifier/ajouter le support `?q=` sur `GET /analyses` (`list_analyses` + repository) si
-  absent — nécessaire pour `search_analyses`.
-
-## Phase 4 — Schémas Pydantic
-
-- [ ] `backend/app/schemas/agent_conversation.py` : `AgentConversationOut`, `AgentConversationSummaryOut`
-  (pour la liste sidebar), `AgentMessageOut`, `AgentMessageSourceOut`, `AgentChatEventOut`,
-  `AgentMessageIn` (body de `POST .../messages` côté REST produit).
+- [x] `backend/app/schemas/agent_conversation.py` créé pendant la Phase 3 (nécessaire pour typer
+  les routes internes) : `AgentConversationOut`, `AgentConversationSummaryOut` (avec
+  `from_conversation()`, pour la liste sidebar), `AgentMessageOut`, `AgentMessageSourceOut`,
+  `AgentChatEventOut`/`AgentChatEventIn`, `AgentMessageIn` (body de `POST .../messages` côté REST
+  produit, restent à consommer en Phase 5) + les schémas internes utilisés en Phase 3.
 
 ## Phase 5 — API REST produit (`backend/app/routers/agent_conversations.py`, auth Keycloak)
 
