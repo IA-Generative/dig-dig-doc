@@ -71,6 +71,10 @@ class AgentMessageIn(BaseModel):
     """Message envoyé par l'utilisateur depuis la modal produit."""
 
     content: str
+    # Modèle LLM optionnel pour cette exécution (défaut: settings.LLM_MODEL
+    # côté worker). Permet à l'utilisateur de choisir le modèle depuis la
+    # modal de l'agent helper.
+    model: str | None = None
 
 
 class AgentChatEventOut(BaseModel):

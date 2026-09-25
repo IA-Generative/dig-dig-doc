@@ -51,6 +51,7 @@ class HelperState(TypedDict, total=False):
     iteration: int
     final_answer: str
     on_event: EventCallback | None
+    model: str | None
 
 
 def _agent_node(state: HelperState) -> HelperState:
@@ -61,7 +62,7 @@ def _agent_node(state: HelperState) -> HelperState:
     messages.extend(state["messages"])
 
     response = client.chat.completions.create(
-        model=settings.LLM_MODEL,
+        model=state.get("model") or settings.LLM_MODEL,
         messages=messages,
         tools=tools.tool_definitions(),
         tool_choice="auto",
@@ -140,15 +141,17 @@ def run_helper_chat(
     conversation_history: list[dict[str, Any]],
     tools: HelperTools,
     on_event: EventCallback | None = None,
+    model: str | None = None,
 ) -> tuple[str, list[ConsultedResource]]:
     """Exécute le graphe de l'agent helper avec l'historique de conversation. Renvoie (réponse,
-    ressources consultées/créées)."""
+    ressources consultées/créées). Si ``model`` est fourni, il surcharge le modèle par défaut."""
     graph = build_helper_graph()
     initial_state: HelperState = {
         "messages": conversation_history,
         "tools": tools,
         "iteration": 0,
         "on_event": on_event,
+        "model": model,
     }
     final_state = graph.invoke(initial_state)
     answer = final_state.get("final_answer", "")
