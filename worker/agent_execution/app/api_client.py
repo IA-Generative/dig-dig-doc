@@ -135,3 +135,81 @@ def deposit_assistant_message(
     )
     response.raise_for_status()
     return response.json()
+
+
+# --- Agent helper : conversation + chat events (issue #50) ---
+
+
+def get_agent_conversation(client: httpx.Client, conversation_id: str) -> dict:
+    """Historique user/assistant d'une conversation avec l'agent helper (pas de dossier associé -
+    voir docs/mcp-helper-agent-plan.md)."""
+    response = client.get(f"/agent-conversations/{conversation_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def add_agent_chat_event(client: httpx.Client, conversation_id: str, *, kind: str, data: dict) -> dict:
+    response = client.post(f"/agent-conversations/{conversation_id}/chat-events", json={"kind": kind, "data": data})
+    response.raise_for_status()
+    return response.json()
+
+
+def deposit_agent_assistant_message(
+    client: httpx.Client, conversation_id: str, *, content: str, sources: list[dict] | None = None
+) -> dict:
+    response = client.post(
+        f"/agent-conversations/{conversation_id}/messages",
+        json={"content": content, "sources": sources or []},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+# --- Agent helper : tools (analyses, dossiers) ---
+
+
+def list_agent_analyses(
+    client: httpx.Client, *, page: int = 1, page_size: int = 20, q: str | None = None
+) -> dict:
+    params: dict[str, str | int] = {"page": page, "page_size": page_size}
+    if q:
+        params["q"] = q
+    response = client.get("/agent/analyses", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+def get_agent_analysis(client: httpx.Client, analyse_id: str) -> dict:
+    response = client.get(f"/agent/analyses/{analyse_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def create_agent_analysis(client: httpx.Client, *, name: str, description: str) -> dict:
+    response = client.post("/agent/analyses", json={"name": name, "description": description})
+    response.raise_for_status()
+    return response.json()
+
+
+def list_agent_dossiers(client: httpx.Client, *, page: int = 1, page_size: int = 20) -> dict:
+    response = client.get("/agent/dossiers", params={"page": page, "page_size": page_size})
+    response.raise_for_status()
+    return response.json()
+
+
+def get_agent_dossier(client: httpx.Client, dossier_id: str) -> dict:
+    response = client.get(f"/agent/dossiers/{dossier_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def create_agent_dossier(client: httpx.Client, *, name: str, analyse_id: str) -> dict:
+    response = client.post("/agent/dossiers", json={"name": name, "analyse_id": analyse_id})
+    response.raise_for_status()
+    return response.json()
+
+
+def launch_agent_dossier(client: httpx.Client, dossier_id: str) -> dict:
+    response = client.post(f"/agent/dossiers/{dossier_id}/launch")
+    response.raise_for_status()
+    return response.json()

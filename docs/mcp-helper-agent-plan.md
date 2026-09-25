@@ -222,27 +222,52 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
   du document.
 - [x] `uv run pytest` (backend) à 100 passed (97 + 3 nouveaux tests MCP helper).
 
-## Phase 7 — Worker (`worker/agent_execution`)
+## Phase 7 — Worker (`worker/agent_execution`) ✅ fait le 2026-09-25
 
-- [ ] `app/helper_tools.py` : classe `HelperTools` (sur le modèle de `app/tools.py`), méthodes
-  qui appellent `api_client` vers `/internal/agent/*` : `search_analyses`, `get_analysis`,
-  `create_analysis`, `create_dossier`, `add_dossier_files`, `list_dossiers`, `get_dossier`,
-  `launch_dossier`. Chaque tool qui produit un dossier/analyse enregistre une
-  `ConsultedSource`-like (`dossier_id`/`analyse_id`) pour peupler `agent_message_sources`.
-- [ ] `app/api_client.py` : ajouter les fonctions HTTP correspondantes
-  (`get_agent_conversation`, `add_agent_chat_event`, `deposit_agent_assistant_message`,
-  `list_analyses`, `search_analyses`, `get_analysis`, `create_analysis`, `create_dossier`,
-  `add_dossier_files`, `list_dossiers`, `get_dossier`, `launch_dossier`).
-- [ ] `app/helper_graph.py` : graphe LangGraph ReAct, sur le modèle de `app/chat_graph.py`
-  (`EventCallback`, boucle agent→tools→agent, prompt système décrivant les capacités de l'agent
-  helper).
-- [ ] `app/tasks/helper_chat.py` : tâche Celery `app.tasks.run_helper_chat(conversation_id)`, sur
-  le modèle exact de `app/tasks/chat.py::run_chat` (charge historique, exécute le graphe avec
-  streaming, dépose la réponse + sources, émet `done`/`error`).
-- [ ] Enregistrer la tâche (import dans le point d'entrée Celery du worker, cf. comment
-  `app.tasks.run_chat` est déclaré/découvert).
-- [ ] Tests worker (si un dossier de tests existe déjà pour `chat.py`/`chat_graph.py`, suivre le
-  même emplacement).
+- [x] **Bug préexistant découvert et corrigé** (hors scope initial de l'issue, mais bloquant pour
+  que `run_helper_chat` fonctionne pour de vrai) : `app/celery_app.py` ne définissait ni
+  `include=[...]` ni `autodiscover_tasks()`, et rien d'autre n'importait les modules `app/tasks/*`
+  - `celery -A app.celery_app worker` démarrait donc avec un registre de tâches **vide**
+  (`[tasks]` vide dans les logs), et tout message reçu (y compris `app.tasks.run_chat` déjà en
+  prod) était rejeté en `Received unregistered task`. Invisible côté tests car
+  `tests/test_tasks.py`/`test_agent_task.py` appellent les fonctions de tâche directement en
+  Python, jamais via le registre Celery. Confirmé empiriquement en lançant le worker réel en
+  local (`uv run celery -A app.celery_app worker --loglevel=info`) avant et après le fix.
+  Corrigé en ajoutant `include=["app.tasks.chat", "app.tasks.classification",
+  "app.tasks.extraction", "app.tasks.agent", "app.tasks.helper_chat"]` à la construction de
+  `Celery(...)` - validé à nouveau en relançant le worker réel, les 5 tâches apparaissent dans
+  `[tasks]`.
+- [x] `app/helper_tools.py` : classe `HelperTools` (sur le modèle de `app/tools.py`), méthodes qui
+  appellent `api_client` vers `/internal/agent/*` : `list_analyses`, `search_analyses`,
+  `get_analysis`, `create_analysis`, `list_dossiers`, `get_dossier`, `create_dossier`,
+  `run_dossier`, `get_dossier_results`. Chaque tool qui produit/consulte un dossier ou une analyse
+  enregistre une `ConsultedResource` (`dossier_id`/`analyse_id` + extrait) pour peupler
+  `agent_message_sources`.
+  - **Écart assumé par rapport au plan initial** : pas de tool `add_dossier_files` côté graphe
+    interne (contrairement au serveur MCP helper qui l'expose). Un LLM conversationnel ne peut pas
+    produire le contenu binaire d'un vrai document depuis un message texte - l'ajout de fichiers
+    dans la modal (Phase 8) passera par une action d'upload dédiée dans l'UI, pas par un tool du
+    graphe de chat. Documenté dans le docstring de `helper_tools.py` et dans le prompt système du
+    graphe (l'agent explique cette limite à l'utilisateur s'il est sollicité pour le faire).
+- [x] `app/api_client.py` : fonctions HTTP ajoutées (`get_agent_conversation`,
+  `add_agent_chat_event`, `deposit_agent_assistant_message`, `list_agent_analyses`,
+  `get_agent_analysis`, `create_agent_analysis`, `list_agent_dossiers`, `get_agent_dossier`,
+  `create_agent_dossier`, `launch_agent_dossier`).
+- [x] `app/helper_graph.py` : graphe LangGraph ReAct, sur le modèle de `app/chat_graph.py`
+  (`EventCallback`, boucle agent→tools→agent, prompt système décrivant les capacités - et la
+  limite d'upload - de l'agent helper).
+- [x] `app/tasks/helper_chat.py` : tâche Celery `app.tasks.run_helper_chat(conversation_id)`, sur
+  le modèle exact de `app/tasks/chat.py::run_chat` (charge l'historique, exécute le graphe avec
+  streaming, dépose la réponse + ressources consultées, émet `done`/`error`).
+- [x] Tests : `tests/test_helper_tools.py` (5 tests, `httpx.MockTransport`, formatage + suivi des
+  ressources consultées + erreur 404) et `tests/test_helper_chat_task.py` (2 tests, sur le modèle
+  de `test_agent_task.py` : mock `api_client.get_client` + monkeypatch du graphe pour éviter un
+  vrai appel LLM, vérifie le dépôt du message avec sources et le chemin d'erreur). **Pas de test
+  de bout en bout via un vrai LLM** : le `.env` du repo contient une vraie clé Scaleway
+  (`OPENAI_API_KEY`) - appeler le hub réel pour un smoke test aurait un coût et une dépendance
+  réseau externe non nécessaires, écarté sans demander (mêmes conventions de mock que le reste du
+  worker, aucun test existant dans ce repo n'appelle le LLM réel non plus).
+- [x] `uv run pytest` (worker) à 38 passed (31 + 7 nouveaux). `uv run ruff check app/` propre.
 
 ## Phase 8 — Frontend
 
