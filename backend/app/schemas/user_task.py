@@ -3,6 +3,7 @@
 Un ``UserTask`` représente une tâche asynchrone (Celery) lancée par un
 utilisateur, persistée pour permettre le suivi de progression côté UI.
 """
+
 from datetime import datetime
 from uuid import UUID
 
@@ -21,7 +22,10 @@ class UserTaskOut(BaseModel):
     status: UserTaskStatus = Field(description="Statut: pending, running, success ou failure")
     label: str = Field(description="Libellé humain affiché dans l'UI")
     celery_task_id: str | None = Field(default=None, description="Identifiant Celery (si applicable)")
-    target_id: UUID | None = Field(default=None, description="ID de l'élément cible (dossier, document, conversation…)")
+    target_id: UUID | None = Field(
+        default=None,
+        description="ID de l'élément cible (dossier, document, conversation…)",
+    )
     target_type: str | None = Field(default=None, description="Type de la cible (dossier, document, conversation…)")
     error: str | None = Field(default=None, description="Message d'erreur en cas d'échec")
     started_at: datetime | None = Field(default=None, description="Passage en RUNNING")

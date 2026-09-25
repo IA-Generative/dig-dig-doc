@@ -20,9 +20,7 @@ class CguRepository:
         self.db = db
 
     async def get_active(self) -> Cgu | None:
-        result = await self.db.execute(
-            select(Cgu).where(Cgu.is_active.is_(True))
-        )
+        result = await self.db.execute(select(Cgu).where(Cgu.is_active.is_(True)))
         return result.scalar_one_or_none()
 
     async def get(self, cgu_id: uuid.UUID) -> Cgu | None:
@@ -30,9 +28,7 @@ class CguRepository:
         return result.scalar_one_or_none()
 
     async def list_all(self) -> Sequence[Cgu]:
-        result = await self.db.execute(
-            select(Cgu).order_by(Cgu.version.desc())
-        )
+        result = await self.db.execute(select(Cgu).order_by(Cgu.version.desc()))
         return result.scalars().all()
 
     async def _next_version(self) -> int:
@@ -57,9 +53,7 @@ class CguRepository:
     async def activate(self, cgu: Cgu) -> Cgu:
         """Active une version et désactive toutes les autres."""
         # Désactive toutes les versions existantes en une seule requête.
-        await self.db.execute(
-            update(Cgu).values(is_active=False, published_at=None)
-        )
+        await self.db.execute(update(Cgu).values(is_active=False, published_at=None))
         # Active la version demandée.
         cgu.is_active = True
         cgu.published_at = datetime.now(timezone.utc)
