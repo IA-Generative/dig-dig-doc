@@ -483,8 +483,11 @@ async def _chat_events(
             payload = ChatEventOut.model_validate(event).model_dump(mode="json")
             data = json.dumps(payload)
             yield f"event: chat-event\ndata: {data}\n\n"
-            # L'événement `done` ou `error` marque la fin du flux.
+            # L'événement `done` ou `error` marque la fin du flux : on
+            # émet un événement SSE `done` explicite pour que le frontend
+            # (addEventListener('done', ...)) le capte avant la fermeture.
             if event.kind in ("done", "error"):
+                yield "event: done\ndata: {}\n\n"
                 return
         await asyncio.sleep(0.5)
 
