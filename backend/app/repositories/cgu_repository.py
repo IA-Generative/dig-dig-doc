@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, update
 
@@ -56,7 +56,7 @@ class CguRepository:
         await self.db.execute(update(Cgu).values(is_active=False, published_at=None))
         # Active la version demandée.
         cgu.is_active = True
-        cgu.published_at = datetime.now(timezone.utc)
+        cgu.published_at = datetime.now(UTC)
         await self.db.commit()
         await self.db.refresh(cgu)
         return cgu
