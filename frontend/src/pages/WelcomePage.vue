@@ -129,13 +129,6 @@ const useCases = [
       "Analyse de dossiers de remboursement : lecture de ordonnances, factures et courriers médicaux avec extraction structurée.",
   },
 ];
-
-// Logo Marianne (profil officiel français) — identique à celui de App.vue.
-const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Marianne">
-  <rect width="100" height="100" rx="6" fill="#000091"/>
-  <path d="M50 20 C39 20 31 29 31 41 C31 49 34 55 39 59 C35 63 33 69 33 77 L33 100 L67 100 L67 77 C67 69 65 63 61 59 C66 55 69 49 69 41 C69 29 61 20 50 20 Z" fill="#fff"/>
-  <path d="M31 41 C29 33 33 23 42 20 C38 27 36 34 38 41 L31 41 Z M69 41 C71 33 67 23 58 20 C62 27 64 34 62 41 L69 41 Z" fill="#e1000f"/>
-</svg>`;
 </script>
 
 <template>
@@ -279,8 +272,7 @@ const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/s
     <footer class="welcome__footer">
       <div class="fr-container welcome__footer-inner">
         <div class="welcome__footer-brand">
-          <span class="welcome__footer-marianne" v-html="MARIANNE_SVG" />
-          <span>dig-dig-doc</span>
+          <DsfrLogo small logo-text="dig-dig-doc" />
         </div>
         <nav class="welcome__footer-links">
           <a href="/cgu.md" target="_blank" class="fr-link">Conditions d'utilisation</a>
@@ -527,17 +519,6 @@ const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/s
   gap: 0.5rem;
   font-weight: 600;
   color: var(--text-title-grey);
-}
-
-.welcome__footer-marianne {
-  display: inline-flex;
-  width: 1.5rem;
-  height: 1.5rem;
-}
-
-.welcome__footer-marianne :deep(svg) {
-  width: 100%;
-  height: 100%;
 }
 
 .welcome__footer-links {
