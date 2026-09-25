@@ -1,6 +1,6 @@
 # digdigdoc
 
-![Version: 0.3.3](https://img.shields.io/badge/Version-0.3.3-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.4](https://img.shields.io/badge/AppVersion-0.5.4-informational?style=flat-square)
+![Version: 0.3.4](https://img.shields.io/badge/Version-0.3.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.5.5](https://img.shields.io/badge/AppVersion-0.5.5-informational?style=flat-square)
 
 A Helm chart to deploy digdigdoc.
 
@@ -10,7 +10,7 @@ Kubernetes: `>=1.25.0-0`
 
 | Repository | Name | Version |
 |------------|------|---------|
-| oci://registry-1.docker.io/cloudpirates | postgres(postgres) | 0.19.6 |
+| https://cloudnative-pg.github.io/charts | cnpg(cluster) | 0.8.1 |
 | oci://registry-1.docker.io/cloudpirates | redis(redis) | 0.27.9 |
 
 ## Values
@@ -515,39 +515,6 @@ Kubernetes: `>=1.25.0-0`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | jobs.migration.hook | object | `{"deletePolicy":"before-hook-creation,hook-succeeded","enabled":true,"types":["pre-install","pre-upgrade"],"weight":0}` | Run as a Helm hook so migrations execute before the new version serves traffic (pre-install + pre-upgrade). |
-
-### Postgres
-
-#### General
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| postgres.enabled | bool | `true` |  |
-| postgres.fullnameOverride | string | `"digdigdoc-postgres"` |  |
-
-#### Auth
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| postgres.auth.database | string | `"digdigdoc"` |  |
-| postgres.auth.password | string | `"digdigdoc"` |  |
-| postgres.auth.username | string | `"digdigdoc"` |  |
-
-#### Primary
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| postgres.primary.persistence.enabled | bool | `true` |  |
-| postgres.primary.persistence.size | string | `"5Gi"` |  |
-
-#### Resources
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| postgres.resources.limits.cpu | string | `"500m"` |  |
-| postgres.resources.limits.memory | string | `"512Mi"` |  |
-| postgres.resources.requests.cpu | string | `"250m"` |  |
-| postgres.resources.requests.memory | string | `"256Mi"` |  |
 
 ### Redis
 
