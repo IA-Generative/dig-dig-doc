@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.5](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.4...v0.5.5) (2026-09-25)
+
+
+### Bug Fixes
+
+* cluster cnpg ([d8ac367](https://github.com/IA-Generative/dig-dig-doc/commit/d8ac3677041685ca10dfe69247efa7a01a78f82b))
+
 ## [0.5.4](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.3...v0.5.4) (2026-09-25)
 
 
