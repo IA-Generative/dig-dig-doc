@@ -271,21 +271,21 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
 
 ## Phase 8 — Frontend
 
-- [ ] Extraire l'UI de chat de `frontend/src/pages/DossierDetailPage.vue` (section
+- [x] Extraire l'UI de chat de `frontend/src/pages/DossierDetailPage.vue` (section
   `chat-window`, ~L271-360, + logique `chatEvents`/`messages`/`isChatRunning`/scroll) en composant
   réutilisable `frontend/src/components/ChatWindow.vue` (props : liste de messages génériques,
   slot pour les actions spécifiques dossier comme le feedback thumbs up/down) + composable
   `frontend/src/composables/useChatStream.ts` (SSE générique, actuellement inline dans la page).
   Rebrancher `DossierDetailPage.vue` dessus sans changement de comportement.
-- [ ] `frontend/src/types/agentConversation.ts` : types `AgentConversation`,
+- [x] `frontend/src/types/agentConversation.ts` : types `AgentConversation`,
   `AgentConversationSummary`, `AgentMessage`, `AgentMessageSource`.
-- [ ] `frontend/src/composables/useAgentConversations.ts` (liste/CRUD, sur le modèle de
+- [x] `frontend/src/composables/useAgentConversations.ts` (liste/CRUD, sur le modèle de
   `useConversations.ts`/`useMyConversations.ts`).
-- [ ] `frontend/src/components/HelperAgentModal.vue` : mini-sidebar (liste des
+- [x] `frontend/src/components/HelperAgentModal.vue` : mini-sidebar (liste des
   `agent_conversations` via `useAgentConversations`) + `ChatWindow.vue` branché sur
   `/api/agent-conversations/*`. Une source `dossier_id` dans un message → lien cliquable
   `router.push({ path: '/dossiers/' + dossierId })`.
-- [ ] Bouton d'ouverture dans `frontend/src/components/UserMenu.vue` (à côté des entrées
+- [x] Bouton d'ouverture dans `frontend/src/components/UserMenu.vue` (à côté des entrées
   existantes `goProfile`/`openChangelog`, même pattern `showX = ref(false)` + `<HelperAgentModal
   v-if="showHelperAgent" />`).
 - [ ] Indicateur "pipeline en cours" pendant qu'un `launch_dossier` tourne côté agent (réutiliser

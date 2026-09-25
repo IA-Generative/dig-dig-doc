@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import ChatWindow from "@/components/ChatWindow.vue";
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
-import MarkdownText from "@/components/MarkdownText.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
+import { useChatStream } from "@/composables/useChatStream";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
-import type { ChatEvent, FeedbackReasonCode } from "@/types/conversation";
+import type { FeedbackReasonCode } from "@/types/conversation";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const route = useRoute();
@@ -22,7 +23,6 @@ const {
   conversation,
   ensureConversation,
   sendMessage,
-  streamConversation,
   refreshConversation,
   deleteConversation,
   setModel,
@@ -40,9 +40,26 @@ const pendingDownMessageId = ref<string | null>(null);
 // Streaming du chat : événements reçus pendant l'exécution du graphe
 // LangGraph (tool_call, tool_result, done, error). Affichés en temps réel
 // sous la forme d'une "pensée" de l'assistant.
-const chatEvents = ref<ChatEvent[]>([]);
-const isChatRunning = ref(false);
-let closeChatStream: (() => void) | undefined;
+const chatEvents = ref<{ kind: string; data: Record<string, unknown> }[]>([]);
+const { isRunning: isChatRunning, start: startChatStream, stop: stopChatStream } = useChatStream({
+  onEvent: (event) => chatEvents.value.push(event),
+  onDone: async () => {
+    // done : recharge la conversation pour récupérer le message assistant
+    // final avec ses sources, puis ferme le streaming.
+    await refreshConversation();
+    await refreshSidebarConversations();
+    chatEvents.value = [];
+  },
+});
+
+// Fichiers en attente d'envoi (attachés au message).
+const pendingFiles = ref<File[]>([]);
+const isDetailsModalOpened = ref(false);
+
+function formatDateTime(iso?: string) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}
 
 function thumbUp(messageId: string) {
   const current = messages.value.find((m) => m.id === messageId)?.feedback;
@@ -101,7 +118,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   closeStream?.();
-  closeChatStream?.();
+  stopChatStream();
 });
 watch(
   () => dossier.value?.analyseId,
@@ -123,50 +140,16 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
 // rester visibles sans avoir à remonter la conversation.
 const messages = computed(() => conversation.value?.messages ?? []);
 
-const messagesEndRef = ref<HTMLElement | null>(null);
-watch(messages, () => {
-  nextTick(() => messagesEndRef.value?.scrollIntoView({ behavior: "smooth" }));
-});
-watch(chatEvents, () => {
-  nextTick(() => messagesEndRef.value?.scrollIntoView({ behavior: "smooth" }));
-});
-
-const draft = ref("");
-const pendingFiles = ref<File[]>([]);
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
-const fileInputRef = ref<HTMLInputElement | null>(null);
-const isDetailsModalOpened = ref(false);
-
-function formatDateTime(iso?: string) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
-}
-
-function resizeTextarea() {
-  const el = textareaRef.value;
-  if (!el) return;
-  el.style.height = "auto";
-  el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-}
-
-function openFilePicker() {
-  fileInputRef.value?.click();
-}
-
-function onFilesSelected(event: Event) {
-  const target = event.target as HTMLInputElement;
-  if (target.files) pendingFiles.value.push(...Array.from(target.files));
-  target.value = "";
+function onAttachFiles(files: File[]) {
+  pendingFiles.value.push(...files);
 }
 
 function removePendingFile(index: number) {
   pendingFiles.value.splice(index, 1);
 }
 
-async function submit() {
+async function onChatSubmit(content: string) {
   if (!dossier.value) return;
-  const content = draft.value.trim();
-  if (!content && pendingFiles.value.length === 0) return;
   if (isChatRunning.value) return;
 
   if (pendingFiles.value.length > 0) {
@@ -180,30 +163,13 @@ async function submit() {
     ...(content ? [content] : []),
   ];
 
-  draft.value = "";
   pendingFiles.value = [];
-  nextTick(resizeTextarea);
 
   const current = await ensureConversation();
   // Démarre le streaming AVANT d'envoyer le message pour ne pas manquer
   // les premiers événements (le worker peut être très rapide).
-  isChatRunning.value = true;
   chatEvents.value = [];
-  closeChatStream = streamConversation(
-    current.id,
-    (event) => {
-      chatEvents.value.push(event);
-    },
-    async () => {
-      // done : recharge la conversation pour récupérer le message assistant
-      // final avec ses sources, puis ferme le streaming.
-      await refreshConversation();
-      await refreshSidebarConversations();
-      isChatRunning.value = false;
-      chatEvents.value = [];
-      closeChatStream = undefined;
-    },
-  );
+  startChatStream(`/api/dossiers/${dossierId}/conversations/${current.id}/stream`);
   await sendMessage(parts.join("\n"));
 }
 
@@ -268,143 +234,52 @@ async function onDeleteConversation() {
 
     <DossierResults :dossier="dossier" :analyse="analyse" />
 
-    <section class="chat-window">
-      <div v-if="messages.length === 0" class="chat-window__intro">
-        <h2>Alimenter l'analyse</h2>
-        <p class="fr-text--sm">
-          Ajoutez un document, une image ou une note pour compléter ce dossier. Les résultats de l'analyse
-          s'affichent ci-dessus.
-        </p>
-      </div>
+    <ChatWindow
+      :messages="messages"
+      :stream-events="chatEvents"
+      :is-running="isChatRunning"
+      intro-title="Alimenter l'analyse"
+      intro-text="Ajoutez un document, une image ou une note pour compléter ce dossier. Les résultats de l'analyse s'affichent ci-dessus."
+      placeholder="Alimentez l'analyse avec un message ou un document..."
+      show-file-attach
+      @submit="onChatSubmit"
+      @attach-files="onAttachFiles"
+    >
+      <template #message-actions="{ message }">
+        <button
+          type="button"
+          class="chat-message__feedback-button"
+          :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'up' }"
+          aria-label="Bonne réponse"
+          title="Bonne réponse"
+          @click="thumbUp(message.id)"
+        >
+          <VIcon name="ri-thumb-up-line" />
+        </button>
+        <button
+          type="button"
+          class="chat-message__feedback-button"
+          :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'down' }"
+          aria-label="Mauvaise réponse"
+          title="Mauvaise réponse"
+          @click="thumbDown(message.id)"
+        >
+          <VIcon name="ri-thumb-down-line" />
+        </button>
+      </template>
 
-      <div v-else class="chat-window__messages">
-        <div class="chat-window__inner">
-          <div
-            v-for="message in messages"
-            :key="message.id"
-            class="chat-message"
-            :class="{ 'chat-message--assistant': message.role === 'assistant' }"
-          >
-            <div class="chat-message__bubble">
-              <MarkdownText :content="message.content" class="chat-message__text" />
-              <!-- Sources citées par l'assistant -->
-              <div v-if="message.sources.length > 0" class="chat-message__sources">
-                <p class="chat-message__sources-title">Sources :</p>
-                <ul>
-                  <li v-for="source in message.sources" :key="source.id" class="chat-message__source">
-                    <span class="chat-message__source-pages">
-                      {{ source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") }}
-                    </span>
-                    <span v-if="source.excerpt" class="chat-message__source-excerpt">« {{ source.excerpt }} »</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            <div v-if="message.role === 'assistant'" class="chat-message__feedback">
-              <button
-                type="button"
-                class="chat-message__feedback-button"
-                :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'up' }"
-                aria-label="Bonne réponse"
-                title="Bonne réponse"
-                @click="thumbUp(message.id)"
-              >
-                <VIcon name="ri-thumb-up-line" />
-              </button>
-              <button
-                type="button"
-                class="chat-message__feedback-button"
-                :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'down' }"
-                aria-label="Mauvaise réponse"
-                title="Mauvaise réponse"
-                @click="thumbDown(message.id)"
-              >
-                <VIcon name="ri-thumb-down-line" />
-              </button>
-            </div>
-          </div>
-
-          <!-- Streaming en cours : événements du graphe LangGraph -->
-          <div v-if="isChatRunning" class="chat-message chat-message--assistant chat-message--streaming">
-            <div class="chat-message__bubble">
-              <div v-for="event in chatEvents" :key="event.id" class="chat-message__event">
-                <VIcon
-                  :name="
-                    event.kind === 'tool_call'
-                      ? 'ri-tools-line'
-                      : event.kind === 'tool_result'
-                        ? 'ri-check-line'
-                        : event.kind === 'error'
-                          ? 'ri-error-warning-line'
-                          : 'ri-loader-4-line'
-                  "
-                />
-                <span>{{ event.data?.label || event.data?.tool || event.kind }}</span>
-              </div>
-              <div v-if="chatEvents.length === 0" class="chat-message__event chat-message__event--pending">
-                <VIcon name="ri-loader-4-line" class="spin" />
-                <span>Réflexion en cours…</span>
-              </div>
-            </div>
-          </div>
-
-          <div ref="messagesEndRef" />
-        </div>
-      </div>
-
-      <form class="chat-window__form" @submit.prevent="submit">
-        <div class="chat-window__inner">
-          <ul v-if="pendingFiles.length > 0" class="chat-window__chips">
-            <li v-for="(file, index) in pendingFiles" :key="`${file.name}-${index}`" class="chat-window__chip">
-              <VIcon name="ri-file-line" />
-              <span>{{ file.name }}</span>
-              <button type="button" aria-label="Retirer ce fichier" @click="removePendingFile(index)">
-                <VIcon name="ri-close-line" />
-              </button>
-            </li>
-          </ul>
-
-          <div class="chat-window__composer">
-            <input
-              ref="fileInputRef"
-              type="file"
-              multiple
-              accept=".pdf,image/*"
-              class="chat-window__file-input"
-              aria-label="Choisir des documents à ajouter à l'analyse"
-              @change="onFilesSelected"
-            />
-            <button
-              type="button"
-              class="chat-window__attach"
-              aria-label="Joindre un document"
-              title="Joindre un document"
-              @click="openFilePicker"
-            >
-              <VIcon name="ri-attachment-2" />
+      <template #composer-extra>
+        <ul v-if="pendingFiles.length > 0" class="chat-window__chips">
+          <li v-for="(file, index) in pendingFiles" :key="`${file.name}-${index}`" class="chat-window__chip">
+            <VIcon name="ri-file-line" />
+            <span>{{ file.name }}</span>
+            <button type="button" aria-label="Retirer ce fichier" @click="removePendingFile(index)">
+              <VIcon name="ri-close-line" />
             </button>
-            <textarea
-              ref="textareaRef"
-              v-model="draft"
-              class="chat-window__textarea"
-              placeholder="Alimentez l'analyse avec un message ou un document..."
-              rows="1"
-              :disabled="isChatRunning"
-              @input="resizeTextarea"
-              @keydown.enter.exact.prevent="submit"
-            />
-            <button
-              type="submit"
-              class="chat-window__send"
-              :disabled="isChatRunning || (!draft.trim() && pendingFiles.length === 0)"
-              aria-label="Envoyer"
-            >
-              <VIcon name="ri-arrow-up-line" />
-            </button>
-          </div>
-        </div>
-      </form>
-    </section>
+          </li>
+        </ul>
+      </template>
+    </ChatWindow>
 
     <DsfrModal
       :opened="isDetailsModalOpened"
@@ -526,183 +401,8 @@ async function onDeleteConversation() {
   background: var(--background-alt-grey-hover);
 }
 
-/* Style repris de Muffin (frontend/src/components/ChatWindow.vue et
-   ChatMessage.vue) : colonne centrée, bulle grise arrondie à droite,
-   composer en pilule arrondie avec textarea auto-agrandissante. */
-.chat-window {
-  flex: 1;
-  min-height: 16rem;
-  display: flex;
-  flex-direction: column;
-}
-
-.chat-window__inner {
-  max-width: 48rem;
-  margin: 0 auto;
-  padding: 0 0.5rem;
-  width: 100%;
-}
-
-.chat-window__intro {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 0.5rem;
-  padding: 0 1.5rem;
-  color: var(--text-mention-grey);
-}
-
-.chat-window__intro h2 {
-  margin: 0;
-  color: var(--text-default-grey);
-}
-
-.chat-window__intro p {
-  max-width: 28rem;
-}
-
-.chat-window__messages {
-  flex: 1;
-  overflow-y: auto;
-  padding-top: 1rem;
-}
-
-.chat-message {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding: 0.5rem 0;
-}
-
-.chat-message__bubble {
-  max-width: 75%;
-  padding: 0.75rem 1.125rem;
-  border-radius: 1.25rem;
-  background: var(--background-alt-grey);
-}
-
-.chat-message__feedback {
-  display: flex;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
-}
-
-.chat-message__feedback-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-mention-grey);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.chat-message__feedback-button:hover {
-  background: var(--background-alt-grey-hover);
-  color: var(--text-default-grey);
-}
-
-.chat-message__feedback-button--active {
-  color: var(--text-active-blue-france);
-  background: var(--background-action-low-blue-france);
-}
-
-.chat-message__text {
-  margin: 0;
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
-
-/* Messages assistant : alignés à gauche, bulle neutre */
-.chat-message--assistant {
-  align-items: flex-start;
-}
-
-.chat-message--assistant .chat-message__bubble {
-  background: var(--background-contrast-grey);
-  border-top-left-radius: 0.25rem;
-}
-
-/* Sources citées par l'assistant */
-.chat-message__sources {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border-default-grey);
-}
-
-.chat-message__sources-title {
-  margin: 0 0 0.25rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-mention-grey);
-}
-
-.chat-message__sources ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chat-message__source {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  padding: 0.25rem 0;
-  font-size: 0.8rem;
-  color: var(--text-mention-grey);
-}
-
-.chat-message__source-pages {
-  font-weight: 500;
-  color: var(--text-default-grey);
-}
-
-.chat-message__source-excerpt {
-  font-style: italic;
-  color: var(--text-mention-grey);
-}
-
-/* Streaming en cours */
-.chat-message--streaming .chat-message__bubble {
-  opacity: 0.85;
-}
-
-.chat-message__event {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0;
-  font-size: 0.8rem;
-  color: var(--text-mention-grey);
-}
-
-.chat-message__event--pending {
-  font-style: italic;
-}
-
-.chat-message__event .spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.chat-window__form {
-  padding: 0.5rem 0 0;
-  flex-shrink: 0;
-}
-
+/* Chips de fichiers en attente (rendues dans le slot composer-extra de
+   ChatWindow — les autres styles chat-* sont dans ChatWindow.vue). */
 .chat-window__chips {
   display: flex;
   flex-wrap: wrap;
@@ -732,71 +432,6 @@ async function onDeleteConversation() {
   color: inherit;
   cursor: pointer;
   padding: 0;
-}
-
-.chat-window__composer {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  padding: 0.625rem 0.625rem 0.625rem 1.125rem;
-  border-radius: 1.5rem;
-  border: 1px solid var(--border-default-grey);
-  background: var(--background-default-grey);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-}
-
-.chat-window__textarea {
-  flex: 1;
-  resize: none;
-  border: none;
-  background: transparent;
-  color: var(--text-default-grey);
-  font: inherit;
-  line-height: 1.5;
-  max-height: 200px;
-  padding: 0.375rem 0;
-}
-
-.chat-window__textarea:focus {
-  outline: none;
-}
-
-.chat-window__file-input {
-  display: none;
-}
-
-.chat-window__attach,
-.chat-window__send {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.chat-window__attach {
-  background: transparent;
-  color: var(--text-mention-grey);
-}
-
-.chat-window__attach:hover {
-  background: var(--background-alt-grey-hover);
-  color: var(--text-default-grey);
-}
-
-.chat-window__send {
-  background: var(--background-action-high-blue-france);
-  color: var(--text-inverted-blue-france);
-}
-
-.chat-window__send:disabled {
-  background: var(--background-disabled-grey);
-  color: var(--text-disabled-grey);
-  cursor: not-allowed;
 }
 
 .dossier-details-modal__info {
