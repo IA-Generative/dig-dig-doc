@@ -288,14 +288,18 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
 - [x] Bouton d'ouverture dans `frontend/src/components/UserMenu.vue` (à côté des entrées
   existantes `goProfile`/`openChangelog`, même pattern `showX = ref(false)` + `<HelperAgentModal
   v-if="showHelperAgent" />`).
-- [ ] Indicateur "pipeline en cours" pendant qu'un `launch_dossier` tourne côté agent (réutiliser
-  le statut `DossierStatus` déjà affiché sur `DossierDetailPage.vue`).
+- [x] Indicateur "pipeline en cours" pendant qu'un `run_dossier` tourne côté agent (réutiliser
+  le statut `DossierStatus` déjà affiché sur `DossierDetailPage.vue`). Implémenté dans
+  `HelperAgentModal.vue` via la computed `launchedDossiers` qui scanne les `chatEvents` pour les
+  `tool_call`/`tool_result` de `run_dossier`, extrait le nom et le statut du preview, et affiche
+  un bandeau avec spinner + lien "Voir le dossier".
 
 ## Phase 9 — Documentation
 
-- [ ] `backend/app/mcp/README.md` : nouvelle section "Serveur MCP helper" (config client, tools,
-  scénario complet), sur le modèle de la section éphémère existante.
-- [ ] Mettre à jour les critères d'acceptation cochés sur l'issue #50 au fur et à mesure.
+- [x] `backend/app/mcp/README.md` : nouvelle section "Serveur MCP helper" (config client, tools,
+  scénario complet), sur le modèle de la section éphémère existante. ✅ Ajouté en Phase 6.
+- [x] Mettre à jour les critères d'acceptation cochés sur l'issue #50 au fur et à mesure. ✅ Fait
+  (tous les critères cochés, issue fermée).
 
 ## Points laissés ouverts (à trancher en cours de route, non bloquants)
 
