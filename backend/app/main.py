@@ -15,6 +15,8 @@ from app.routers.analyses import router as analyses_router
 from app.routers.app_tokens import router as app_tokens_router
 from app.routers.assist import router as assist_router
 from app.routers.auth import router as auth_router
+from app.routers.cgu import admin_router as cgu_admin_router
+from app.routers.cgu import public_router as cgu_public_router
 from app.routers.conversations import router as conversations_router
 from app.routers.dossiers import router as dossiers_router
 from app.routers.ephemeral import router as ephemeral_router
@@ -80,6 +82,7 @@ app = FastAPI(
         {"name": "Internal", "description": "Callbacks des workers Celery (jeton partagé, pas d'auth Keycloak)."},
         {"name": "App tokens", "description": "Jetons permettant à une application externe d'appeler l'API."},
         {"name": "Reports", "description": "Signalements libres (bug/idée/question) envoyés par les utilisateurs."},
+        {"name": "CGU", "description": "Conditions générales d'utilisation versionnées."},
         {"name": "Admin", "description": "Vues et actions réservées aux administrateurs."},
         {
             "name": "Ephemeral",
@@ -119,6 +122,8 @@ app.include_router(internal_agent_conversations_router, prefix="/api")
 app.include_router(app_tokens_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(admin_reports_router, prefix="/api")
+app.include_router(cgu_public_router, prefix="/api")
+app.include_router(cgu_admin_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
 # préfixe dans l'ordre d'enregistrement, et "/mcp/helper/..." commence

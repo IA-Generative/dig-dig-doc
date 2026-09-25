@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import UserMenu from "@/components/UserMenu.vue";
+import CguGate from "@/components/CguGate.vue";
 import { useAuth } from "@/composables/useAuth";
 import { useMyConversations } from "@/composables/useMyConversations";
 
@@ -76,6 +77,9 @@ const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/s
 </script>
 
 <template>
+  <!-- Portail CGU : bloque l'app tant que l'utilisateur n'a pas accepté les CGU -->
+  <CguGate />
+
   <!-- Page d'accueil : plein écran, sans sidebar -->
   <RouterView v-if="!showShell" />
 

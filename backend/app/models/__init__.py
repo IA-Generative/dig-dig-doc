@@ -14,6 +14,8 @@ from .analyse_ephemere import AnalyseEphemere
 from .analyse_share import AnalyseShare, AnalyseShareKind
 from .app_token import AppToken
 from .base import Base
+from .cgu import Cgu
+from .cgu_acceptance import CguAcceptance
 from .chat_event import ChatEvent, ChatEventKind
 from .conversation import Conversation, Message, MessageRole, MessageSource
 from .document_page import (
@@ -55,6 +57,8 @@ __all__ = [
     "AppToken",
     "Base",
     "BoundingBox",
+    "Cgu",
+    "CguAcceptance",
     "ChatEvent",
     "ChatEventKind",
     "Conversation",
