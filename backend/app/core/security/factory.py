@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import KeycloakSettings
-from app.core.security.claims import extract_identity
+from app.core.security.claims import decode_access_token, extract_identity
 from app.core.security.keycloak_client import keycloak_openid, session_store
 
 
@@ -42,6 +42,10 @@ class KeycloakToken:
             # userinfo, not introspect: introspection requires the caller to be
             # in the token's own audience, which a resource server usually isn't.
             claims = keycloak_openid.userinfo(token)
+            # userinfo does not include resource_access (client roles), so we
+            # decode the JWT payload to enrich the claims with role information.
+            jwt_claims = decode_access_token(token)
+            claims = {**claims, "resource_access": jwt_claims.get("resource_access", {})}
         except Exception:
             return None
         return extract_identity(claims, self._keycloak_settings.KEYCLOAK_CLIENT_ID)
