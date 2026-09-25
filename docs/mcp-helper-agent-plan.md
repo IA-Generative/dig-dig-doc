@@ -135,21 +135,43 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
   `AgentChatEventOut`/`AgentChatEventIn`, `AgentMessageIn` (body de `POST .../messages` côté REST
   produit, restent à consommer en Phase 5) + les schémas internes utilisés en Phase 3.
 
-## Phase 5 — API REST produit (`backend/app/routers/agent_conversations.py`, auth Keycloak)
+## Phase 5 — API REST produit (`backend/app/routers/agent_conversations.py`, auth Keycloak) ✅ fait le 2026-09-25
 
-Sur le modèle de `app/routers/conversations.py` + section conversations de
-`app/routers/dossiers.py` :
-
-- [ ] `GET /api/agent-conversations` — liste paginée de l'utilisateur courant (`user.user_id`).
-- [ ] `POST /api/agent-conversations` — crée une conversation.
-- [ ] `DELETE /api/agent-conversations/{id}` — vérifie `created_by == user.user_id`.
-- [ ] `POST /api/agent-conversations/{id}/messages` — dépose le message `user`, dispatch
-  `dispatch_helper_chat_response(str(conversation_id))` (nouvelle fonction dans
-  `app/celery_client.py`, sur le modèle de `dispatch_chat_response`, queue `agent_execution`).
-- [ ] `GET /api/agent-conversations/{id}/stream` — SSE des `agent_chat_events`, mirror de
-  `GET /dossiers/{id}/conversations/{cid}/stream`.
-- [ ] Monter le router dans `app/main.py` (`app.include_router(agent_conversations_router,
-  prefix="/api")`).
+- [x] `dispatch_helper_chat_response(conversation_id)` ajouté à `app/celery_client.py`, sur le
+  modèle de `dispatch_chat_response` mais sans `dossier_id` (queue `agent_execution`, tâche
+  `app.tasks.run_helper_chat` - à créer en Phase 7).
+- [x] `GET /api/agent-conversations` — liste paginée de l'utilisateur courant (`user.user_id`),
+  vue `AgentConversationSummaryOut` (titre, dernier message, `created_at`).
+- [x] `POST /api/agent-conversations` — crée une conversation vide (`title=None`).
+- [x] `GET /api/agent-conversations/{id}` — 404 si la conversation n'existe pas ou n'appartient
+  pas à l'utilisateur courant (`_get_owned_or_404`, vérifie `created_by == user.user_id`).
+- [x] `DELETE /api/agent-conversations/{id}` — 204, même contrôle de propriété.
+- [x] `POST /api/agent-conversations/{id}/messages` — dépose le message `user`, **génère le titre
+  au premier message** si absent (troncage à 60 caractères, `_truncate_title` - décision "points
+  ouverts" tranchée : troncage simple pour la V1, pas d'appel LLM dédié), nettoie les
+  `agent_chat_events` de l'exécution précédente, puis dispatch
+  `dispatch_helper_chat_response`.
+- [x] `GET /api/agent-conversations/{id}/stream` — SSE des `agent_chat_events`, copie quasi
+  conforme de `dossiers.py::stream_chat_events`/`_chat_events` (polling 500ms, s'arrête sur
+  `done`/`error`, revérifie la propriété à chaque poll).
+- [x] Router monté dans `app/main.py` (tag `"Agent"` ajouté aux `openapi_tags`).
+- [x] Validé avec un script jetable en async pur (httpx.AsyncClient + ASGITransport, un seul event
+  loop - **piège rencontré** : mélanger `TestClient` (sync, son propre event loop via portail
+  anyio) avec un `asyncio.run()` séparé pour seeder la DB casse le pool de connexions asyncpg
+  partagé, `RuntimeError: ... attached to a different loop` ; la solution qui marche à tous les
+  coups est de rester dans un seul `asyncio.run()` du début à la fin, y compris pour le seeding
+  direct via le repository) : cycle complet liste/création/get/post-message (titre auto-généré,
+  dispatch appelé) → générateur SSE testé directement (seed d'un event `done`, vérifie qu'il
+  termine au lieu de boucler indéfiniment - le tester via une vraie requête HTTP streamée bloque
+  le script, cf. incident ci-dessous) → isolation entre utilisateurs (404 + liste vide pour un
+  autre `user_id`) → delete → 404 après.
+- ⚠️ Incident mineur (sans conséquence, corrigé dans le script de validation lui-même, pas dans le
+  code) : un premier essai de tester le flux SSE via une vraie requête HTTP streamée
+  (`client.stream(...)`) a fait tourner le script indéfiniment (timeout 120s, tué manuellement) -
+  attendu, le générateur ne se termine que sur un événement `done`/`error` qu'aucun worker ne
+  dépose dans ce smoke test. Remplacé par un appel direct au générateur `_agent_chat_events` avec
+  un événement `done` seedé à la main.
+- [x] `uv run pytest` (backend) toujours à 97 passed.
 
 ## Phase 6 — Serveur MCP helper (`backend/app/mcp/helper_server.py`)
 
@@ -221,7 +243,7 @@ Sur le modèle de `app/routers/conversations.py` + section conversations de
 
 ## Points laissés ouverts (à trancher en cours de route, non bloquants)
 
-- Génération du `title` de conversation (premier message tronqué vs appel LLM dédié) — commencer
-  par le troncage, simple et suffisant pour la V1.
+- ~~Génération du `title` de conversation~~ tranché en Phase 5 : troncage du premier message à 60
+  caractères (`agent_conversations.py::_truncate_title`), pas d'appel LLM dédié pour la V1.
 - Une seule conversation active à la fois dans la modal, ou plusieurs onglets — commencer par une
   seule (comme la modal `InfoModal`), itérer si besoin.
