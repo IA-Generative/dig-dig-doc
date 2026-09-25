@@ -15,13 +15,17 @@ _INTERNAL_HEADERS = {"X-App-Token": "dev-only-worker-token-not-for-prod"}
 
 
 def _create_analyse(client: TestClient, name: str = "Analyse résumés") -> str:
-    return client.post("/api/analyses", json={"name": name, "description": "Test"}).json()["id"]
+    return client.post(
+        "/api/analyses", json={"name": name, "description": "Test"}
+    ).json()["id"]
 
 
 def _create_dossier_with_document(client: TestClient) -> tuple[str, str]:
     """Crée un dossier avec un document et retourne (dossier_id, document_id)."""
     analyse_id = _create_analyse(client)
-    dossier = client.post("/api/dossiers", json={"name": "Dossier résumé", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        "/api/dossiers", json={"name": "Dossier résumé", "analyse_id": analyse_id}
+    ).json()
     dossier = client.post(
         f"/api/dossiers/{dossier['id']}/documents",
         files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
@@ -37,7 +41,9 @@ def _create_dossier_with_document(client: TestClient) -> tuple[str, str]:
 def test_dossier_document_has_summary_fields(client: TestClient) -> None:
     _, document_id = _create_dossier_with_document(client)
 
-    response = client.get(f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS)
+    response = client.get(
+        f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["summary_status"] == "en_attente"
@@ -49,7 +55,8 @@ def test_dossier_document_has_summary_fields(client: TestClient) -> None:
 def test_dossier_has_summary_fields(client: TestClient) -> None:
     analyse_id = _create_analyse(client)
     dossier = client.post(
-        "/api/dossiers", json={"name": "Dossier champs résumé", "analyse_id": analyse_id}
+        "/api/dossiers",
+        json={"name": "Dossier champs résumé", "analyse_id": analyse_id},
     ).json()
 
     response = client.get(f"/api/dossiers/{dossier['id']}")
@@ -78,7 +85,9 @@ def test_internal_set_file_hash(client: TestClient) -> None:
     assert body["file_hash"] == "abc123def456"
 
     # Vérifie la persistance via GET
-    doc = client.get(f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS).json()
+    doc = client.get(
+        f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS
+    ).json()
     assert doc["file_hash"] == "abc123def456"
 
 
@@ -121,7 +130,8 @@ def test_internal_set_document_summary_status(client: TestClient) -> None:
 def test_internal_set_dossier_summary_status(client: TestClient) -> None:
     analyse_id = _create_analyse(client)
     dossier = client.post(
-        "/api/dossiers", json={"name": "Dossier statut résumé", "analyse_id": analyse_id}
+        "/api/dossiers",
+        json={"name": "Dossier statut résumé", "analyse_id": analyse_id},
     ).json()
 
     response = client.put(
@@ -168,7 +178,9 @@ def test_internal_deposit_document_summary(client: TestClient) -> None:
 
     # Vérifie que le document parent a bien summary_status=terminé et que
     # le dernier résumé est le bon (via GET /internal/documents/{id}).
-    doc = client.get(f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS).json()
+    doc = client.get(
+        f"/api/internal/documents/{document_id}", headers=_INTERNAL_HEADERS
+    ).json()
     assert doc["summary_status"] == "terminé"
     assert doc["summary"]["content"] == "Second résumé, plus récent."
 
@@ -209,25 +221,37 @@ def test_internal_deposit_summary_404(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_regenerate_document_summary_dispatches_task(client: TestClient, monkeypatch) -> None:
+def test_regenerate_document_summary_dispatches_task(
+    client: TestClient, monkeypatch
+) -> None:
     dossier_id, document_id = _create_dossier_with_document(client)
 
     dispatched: list[tuple] = []
-    monkeypatch.setattr("app.routers.dossiers.dispatch_document_summary", lambda d, doc: dispatched.append((d, doc)))
+    monkeypatch.setattr(
+        "app.routers.dossiers.dispatch_document_summary",
+        lambda d, doc: dispatched.append((d, doc)),
+    )
 
-    response = client.post(f"/api/dossiers/{dossier_id}/documents/{document_id}/summary")
+    response = client.post(
+        f"/api/dossiers/{dossier_id}/documents/{document_id}/summary"
+    )
     assert response.status_code == 200
     assert dispatched == [(dossier_id, document_id)]
 
 
-def test_regenerate_dossier_summary_dispatches_task(client: TestClient, monkeypatch) -> None:
+def test_regenerate_dossier_summary_dispatches_task(
+    client: TestClient, monkeypatch
+) -> None:
     analyse_id = _create_analyse(client)
     dossier = client.post(
-        "/api/dossiers", json={"name": "Dossier régénère résumé", "analyse_id": analyse_id}
+        "/api/dossiers",
+        json={"name": "Dossier régénère résumé", "analyse_id": analyse_id},
     ).json()
 
     dispatched: list[str] = []
-    monkeypatch.setattr("app.routers.dossiers.dispatch_dossier_summary", lambda d: dispatched.append(d))
+    monkeypatch.setattr(
+        "app.routers.dossiers.dispatch_dossier_summary", lambda d: dispatched.append(d)
+    )
 
     response = client.post(f"/api/dossiers/{dossier['id']}/summary")
     assert response.status_code == 200
@@ -240,5 +264,7 @@ def test_regenerate_document_summary_404(client: TestClient) -> None:
         "/api/dossiers", json={"name": "Dossier 404 résumé", "analyse_id": analyse_id}
     ).json()
 
-    response = client.post(f"/api/dossiers/{dossier['id']}/documents/{uuid.uuid4()}/summary")
+    response = client.post(
+        f"/api/dossiers/{dossier['id']}/documents/{uuid.uuid4()}/summary"
+    )
     assert response.status_code == 404
