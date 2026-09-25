@@ -9,6 +9,7 @@ Deux points d'entrée :
 - ``update_task`` : appelée par le router interne (callback worker) pour
   faire évoluer le statut (PENDING → RUNNING → SUCCESS/FAILURE).
 """
+
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -79,7 +80,12 @@ async def update_task(
     if payload.ended_at is not None:
         values["ended_at"] = payload.ended_at
 
-    stmt = update(UserTask).where(UserTask.id == task_id).values(**values).returning(UserTask)
+    stmt = (
+        update(UserTask)
+        .where(UserTask.id == task_id)
+        .values(**values)
+        .returning(UserTask)
+    )
     result = await db.execute(stmt)
     row = result.scalar_one_or_none()
     await db.commit()

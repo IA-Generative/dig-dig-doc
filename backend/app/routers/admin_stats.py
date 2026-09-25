@@ -14,12 +14,17 @@ from app.models.dossier import Dossier
 from app.models.report import Report
 from app.models.user_preference import UserPreference
 
-router = APIRouter(prefix="/admin/stats", tags=["Admin"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/admin/stats", tags=["Admin"], dependencies=[Depends(get_current_user)]
+)
 
 
 def _require_admin(user: RequestContext) -> None:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
 
 
 @router.get("")
@@ -33,33 +38,43 @@ async def get_platform_stats(
     # Compteurs simples
     analyses_count = await db.scalar(select(func.count()).select_from(Analyse))
     dossiers_count = await db.scalar(select(func.count()).select_from(Dossier))
-    conversations_count = await db.scalar(select(func.count()).select_from(Conversation))
+    conversations_count = await db.scalar(
+        select(func.count()).select_from(Conversation)
+    )
     messages_count = await db.scalar(select(func.count()).select_from(Message))
-    agent_conversations_count = await db.scalar(select(func.count()).select_from(AgentConversation))
-    agent_messages_count = await db.scalar(select(func.count()).select_from(AgentMessage))
+    agent_conversations_count = await db.scalar(
+        select(func.count()).select_from(AgentConversation)
+    )
+    agent_messages_count = await db.scalar(
+        select(func.count()).select_from(AgentMessage)
+    )
     reports_count = await db.scalar(select(func.count()).select_from(Report))
     users_count = await db.scalar(select(func.count()).select_from(UserPreference))
 
     # Dossiers par statut
     status_rows = (
-        await db.execute(
-            select(Dossier.status, func.count()).group_by(Dossier.status)
-        )
+        await db.execute(select(Dossier.status, func.count()).group_by(Dossier.status))
     ).all()
-    dossiers_by_status = {row[0].value if hasattr(row[0], "value") else str(row[0]): row[1] for row in status_rows}
+    dossiers_by_status = {
+        row[0].value if hasattr(row[0], "value") else str(row[0]): row[1]
+        for row in status_rows
+    }
 
     # Créations par jour (7 derniers jours)
     seven_days_ago = datetime.now(UTC) - timedelta(days=7)
     daily_dossiers = (
         await db.execute(
-            select(func.date_trunc("day", Dossier.created_at).label("day"), func.count())
+            select(
+                func.date_trunc("day", Dossier.created_at).label("day"), func.count()
+            )
             .where(Dossier.created_at >= seven_days_ago)
             .group_by("day")
             .order_by("day")
         )
     ).all()
     daily_creations = [
-        {"date": row[0].isoformat() if row[0] else None, "count": row[1]} for row in daily_dossiers
+        {"date": row[0].isoformat() if row[0] else None, "count": row[1]}
+        for row in daily_dossiers
     ]
 
     # Top modèles LLM utilisés (dans les conversations de dossier)

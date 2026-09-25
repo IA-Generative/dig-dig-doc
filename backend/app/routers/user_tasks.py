@@ -5,6 +5,7 @@ asynchrones (Celery) en cours et terminées. Les tâches sont créées au
 moment du dispatch (côté routers backend) et mises à jour par les workers
 via le router interne.
 """
+
 from typing import Annotated
 from uuid import UUID
 
@@ -17,7 +18,9 @@ from app.models.user_task import UserTaskStatus
 from app.schemas.user_task import UserTaskOut
 from app.services.user_task_service import get_task, get_user_tasks
 
-router = APIRouter(prefix="/me/tasks", tags=["User Tasks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/me/tasks", tags=["User Tasks"], dependencies=[Depends(get_current_user)]
+)
 
 
 @router.get("", response_model=list[UserTaskOut])
@@ -43,5 +46,7 @@ async def get_my_task(
     n'appartient pas à l'utilisateur."""
     task = await get_task(db, task_id, user.user_id)
     if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tâche introuvable")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Tâche introuvable"
+        )
     return UserTaskOut.model_validate(task)

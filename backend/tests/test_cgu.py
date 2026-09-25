@@ -4,6 +4,7 @@ Les tests ne peuvent pas assumer un état vide de la DB (les versions
 créées par les tests précédents persistent). Chaque test crée donc ses
 propres versions et vérifie les comportements relatifs.
 """
+
 from fastapi.testclient import TestClient
 
 
@@ -74,7 +75,9 @@ def test_list_versions(client: TestClient) -> None:
 def test_update_non_active_version(client: TestClient) -> None:
     version = _create_version(client, "# Original")
 
-    updated = client.patch(f"/api/admin/cgu/{version['id']}", json={"content": "# Modifié"})
+    updated = client.patch(
+        f"/api/admin/cgu/{version['id']}", json={"content": "# Modifié"}
+    )
     assert updated.status_code == 200
     assert updated.json()["content"] == "# Modifié"
 
@@ -83,7 +86,9 @@ def test_update_active_version_returns_400(client: TestClient) -> None:
     version = _create_version(client, "# Active")
     _activate(client, version["id"])
 
-    response = client.patch(f"/api/admin/cgu/{version['id']}", json={"content": "# Tentative"})
+    response = client.patch(
+        f"/api/admin/cgu/{version['id']}", json={"content": "# Tentative"}
+    )
     assert response.status_code == 400
 
 
@@ -115,7 +120,9 @@ def test_acceptance_routes_require_auth(client: TestClient, monkeypatch) -> None
 
     class NoAuth:
         def __call__(self, request):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+            )
 
     monkeypatch.setattr("app.core.security.factory.TokenVerifier", NoAuth())
 

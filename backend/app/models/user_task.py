@@ -58,7 +58,9 @@ class UserTask(UUIDMixin, TimestampMixin, Base):
     )
     # Identifiant de la tâche Celery (retourné par send_task), pour faire le
     # lien avec le broker si besoin. Peut être null si le dispatch échoue.
-    celery_task_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    celery_task_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, index=True
+    )
 
     # Libellé lisible affiché dans l'UI (ex: « Classification du dossier
     # « Impôts 2024 » »). Construit par le router au moment du dispatch.

@@ -110,15 +110,21 @@ def suggest_dossier_analyse(self, dossier_id: str) -> None:
 
             if not content:
                 logger.warning("No content for suggestion on dossier %s", dossier_id)
-                api_client.deposit_suggested_analyses(client, dossier_id, suggestions=[])
+                api_client.deposit_suggested_analyses(
+                    client, dossier_id, suggestions=[]
+                )
                 return
 
             # Lister les analyses disponibles via l'API agent
             analyses_response = api_client.list_agent_analyses(client, page_size=100)
             analyses = analyses_response.get("items", [])
             if not analyses:
-                logger.warning("No analyses available for suggestion on dossier %s", dossier_id)
-                api_client.deposit_suggested_analyses(client, dossier_id, suggestions=[])
+                logger.warning(
+                    "No analyses available for suggestion on dossier %s", dossier_id
+                )
+                api_client.deposit_suggested_analyses(
+                    client, dossier_id, suggestions=[]
+                )
                 return
 
             logger.info(
@@ -132,11 +138,15 @@ def suggest_dossier_analyse(self, dossier_id: str) -> None:
             analyses_by_id = {a["id"]: a for a in analyses}
             suggestions_out = _enrich_suggestions(result.suggestions, analyses_by_id)
 
-            api_client.deposit_suggested_analyses(client, dossier_id, suggestions=suggestions_out)
+            api_client.deposit_suggested_analyses(
+                client, dossier_id, suggestions=suggestions_out
+            )
             logger.info(
                 "Suggested %d analyses for dossier %s", len(suggestions_out), dossier_id
             )
         except Exception as error:
             logger.exception("Analyse suggestion failed for %s", dossier_id)
-            api_client.set_suggestion_status(client, dossier_id, status="échec", error=str(error))
+            api_client.set_suggestion_status(
+                client, dossier_id, status="échec", error=str(error)
+            )
             raise

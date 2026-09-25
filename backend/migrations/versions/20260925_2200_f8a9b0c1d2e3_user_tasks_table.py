@@ -5,6 +5,7 @@ Revises: e7f8a9b0c1d2
 Create Date: 2026-09-25 22:00:00.000000
 
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -40,13 +41,20 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            sa.Enum("PENDING", "RUNNING", "SUCCESS", "FAILURE", name="user_task_status"),
+            sa.Enum(
+                "PENDING", "RUNNING", "SUCCESS", "FAILURE", name="user_task_status"
+            ),
             nullable=False,
             server_default="PENDING",
         ),
         sa.Column("celery_task_id", sa.String(), nullable=True, index=True),
         sa.Column("label", sa.String(), nullable=False),
-        sa.Column("target_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=True, index=True),
+        sa.Column(
+            "target_id",
+            sa.dialects.postgresql.UUID(as_uuid=True),
+            nullable=True,
+            index=True,
+        ),
         sa.Column("target_type", sa.String(), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),

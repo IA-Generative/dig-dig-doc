@@ -10,7 +10,9 @@ from app.tasks import suggestion as suggestion_mod
 from app.tasks.suggestion import suggest_dossier_analyse
 
 
-def _make_dossier_response(*, with_summary: bool = True, with_documents: bool = True) -> dict:
+def _make_dossier_response(
+    *, with_summary: bool = True, with_documents: bool = True
+) -> dict:
     dossier = {
         "id": "dossier-1",
         "analyse_id": None,
@@ -21,7 +23,9 @@ def _make_dossier_response(*, with_summary: bool = True, with_documents: bool = 
         "summary": None,
     }
     if with_summary:
-        dossier["summary"] = {"content": "Dossier contenant une CNI et un justificatif de domicile."}
+        dossier["summary"] = {
+            "content": "Dossier contenant une CNI et un justificatif de domicile."
+        }
     if with_documents:
         dossier["documents"] = [
             {
@@ -77,14 +81,22 @@ def test_suggest_dossier_analyse_deposits_suggestions(monkeypatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if request.method == "PUT" and path.endswith("/suggestion-status"):
-            return httpx.Response(200, json={"suggestion_status": json.loads(request.content)["status"]})
+            return httpx.Response(
+                200, json={"suggestion_status": json.loads(request.content)["status"]}
+            )
         if path.endswith("/dossiers/dossier-1"):
             return httpx.Response(200, json=_make_dossier_response())
         if path.endswith("/analyses"):
             return httpx.Response(200, json=_make_analyses_response())
         if request.method == "POST" and path.endswith("/suggestions"):
             deposited.append(json.loads(request.content))
-            return httpx.Response(200, json={"suggestion_status": "terminé", "suggested_analyses": deposited[-1]["suggestions"]})
+            return httpx.Response(
+                200,
+                json={
+                    "suggestion_status": "terminé",
+                    "suggested_analyses": deposited[-1]["suggestions"],
+                },
+            )
         return httpx.Response(404)
 
     monkeypatch.setattr(
@@ -98,11 +110,19 @@ def test_suggest_dossier_analyse_deposits_suggestions(monkeypatch) -> None:
 
     fake_result = SuggestionResult(
         suggestions=[
-            AnalyseSuggestion(analyse_id="analyse-cni", score=0.95, rationale="CNI présente"),
-            AnalyseSuggestion(analyse_id="analyse-domicile", score=0.80, rationale="Justificatif de domicile"),
+            AnalyseSuggestion(
+                analyse_id="analyse-cni", score=0.95, rationale="CNI présente"
+            ),
+            AnalyseSuggestion(
+                analyse_id="analyse-domicile",
+                score=0.80,
+                rationale="Justificatif de domicile",
+            ),
         ]
     )
-    monkeypatch.setattr(suggestion_mod, "suggest_analyses", lambda **kwargs: fake_result)
+    monkeypatch.setattr(
+        suggestion_mod, "suggest_analyses", lambda **kwargs: fake_result
+    )
 
     suggest_dossier_analyse.run("dossier-1")
 
@@ -124,7 +144,9 @@ def test_suggest_dossier_analyse_filters_unknown_analyses(monkeypatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if request.method == "PUT" and path.endswith("/suggestion-status"):
-            return httpx.Response(200, json={"suggestion_status": json.loads(request.content)["status"]})
+            return httpx.Response(
+                200, json={"suggestion_status": json.loads(request.content)["status"]}
+            )
         if path.endswith("/dossiers/dossier-1"):
             return httpx.Response(200, json=_make_dossier_response())
         if path.endswith("/analyses"):
@@ -149,7 +171,9 @@ def test_suggest_dossier_analyse_filters_unknown_analyses(monkeypatch) -> None:
             AnalyseSuggestion(analyse_id="unknown-id", score=0.50, rationale="Inconnu"),
         ]
     )
-    monkeypatch.setattr(suggestion_mod, "suggest_analyses", lambda **kwargs: fake_result)
+    monkeypatch.setattr(
+        suggestion_mod, "suggest_analyses", lambda **kwargs: fake_result
+    )
 
     suggest_dossier_analyse.run("dossier-1")
 
@@ -165,9 +189,14 @@ def test_suggest_dossier_analyse_empty_content_deposits_empty(monkeypatch) -> No
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if request.method == "PUT" and path.endswith("/suggestion-status"):
-            return httpx.Response(200, json={"suggestion_status": json.loads(request.content)["status"]})
+            return httpx.Response(
+                200, json={"suggestion_status": json.loads(request.content)["status"]}
+            )
         if path.endswith("/dossiers/dossier-1"):
-            return httpx.Response(200, json=_make_dossier_response(with_summary=False, with_documents=False))
+            return httpx.Response(
+                200,
+                json=_make_dossier_response(with_summary=False, with_documents=False),
+            )
         if request.method == "POST" and path.endswith("/suggestions"):
             deposited.append(json.loads(request.content))
             return httpx.Response(200, json={"suggestion_status": "terminé"})
@@ -183,7 +212,13 @@ def test_suggest_dossier_analyse_empty_content_deposits_empty(monkeypatch) -> No
     )
 
     # Le LLM ne doit pas être appelé si le contenu est vide
-    monkeypatch.setattr(suggestion_mod, "suggest_analyses", lambda **kwargs: (_ for _ in ()).throw(AssertionError("LLM should not be called")))
+    monkeypatch.setattr(
+        suggestion_mod,
+        "suggest_analyses",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("LLM should not be called")
+        ),
+    )
 
     suggest_dossier_analyse.run("dossier-1")
 
@@ -198,11 +233,15 @@ def test_suggest_dossier_analyse_no_analyses_deposits_empty(monkeypatch) -> None
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if request.method == "PUT" and path.endswith("/suggestion-status"):
-            return httpx.Response(200, json={"suggestion_status": json.loads(request.content)["status"]})
+            return httpx.Response(
+                200, json={"suggestion_status": json.loads(request.content)["status"]}
+            )
         if path.endswith("/dossiers/dossier-1"):
             return httpx.Response(200, json=_make_dossier_response())
         if path.endswith("/analyses"):
-            return httpx.Response(200, json={"items": [], "total": 0, "page": 1, "page_size": 100})
+            return httpx.Response(
+                200, json={"items": [], "total": 0, "page": 1, "page_size": 100}
+            )
         if request.method == "POST" and path.endswith("/suggestions"):
             deposited.append(json.loads(request.content))
             return httpx.Response(200, json={"suggestion_status": "terminé"})
@@ -217,7 +256,13 @@ def test_suggest_dossier_analyse_no_analyses_deposits_empty(monkeypatch) -> None
         ),
     )
 
-    monkeypatch.setattr(suggestion_mod, "suggest_analyses", lambda **kwargs: (_ for _ in ()).throw(AssertionError("LLM should not be called")))
+    monkeypatch.setattr(
+        suggestion_mod,
+        "suggest_analyses",
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("LLM should not be called")
+        ),
+    )
 
     suggest_dossier_analyse.run("dossier-1")
 
@@ -250,7 +295,11 @@ def test_suggest_dossier_analyse_sets_echec_on_error(monkeypatch) -> None:
         ),
     )
 
-    monkeypatch.setattr(suggestion_mod, "suggest_analyses", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("LLM API down")))
+    monkeypatch.setattr(
+        suggestion_mod,
+        "suggest_analyses",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("LLM API down")),
+    )
 
     try:
         suggest_dossier_analyse.run("dossier-1")

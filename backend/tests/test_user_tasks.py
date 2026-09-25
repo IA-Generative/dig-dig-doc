@@ -80,7 +80,9 @@ def _mark_running(task_id: uuid.UUID) -> None:
 
     async def _update(session_factory):
         async with session_factory() as db:
-            await update_task(db, task_id, UserTaskUpdateIn(status=UserTaskStatus.RUNNING))
+            await update_task(
+                db, task_id, UserTaskUpdateIn(status=UserTaskStatus.RUNNING)
+            )
 
     _run_async(_update)
 
@@ -180,7 +182,9 @@ def test_list_tasks_filter_by_status(client: TestClient) -> None:
 
 def test_internal_update_task_status(client: TestClient) -> None:
     """Le worker met à jour le statut d'une tâche via l'API interne."""
-    task_id = _seed_task(kind=UserTaskKind.ENTITY_EXTRACTION, celery_task_id="celery-789")
+    task_id = _seed_task(
+        kind=UserTaskKind.ENTITY_EXTRACTION, celery_task_id="celery-789"
+    )
     try:
         # Le worker marque la tâche comme RUNNING
         response = client.put(
@@ -218,4 +222,3 @@ def test_internal_update_task_404(client: TestClient) -> None:
         headers={"X-App-Token": "dev-only-worker-token-not-for-prod"},
     )
     assert response.status_code == 404
-

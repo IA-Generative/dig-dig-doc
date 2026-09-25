@@ -8,7 +8,13 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.repositories.cgu_acceptance_repository import CguAcceptanceRepository
 from app.repositories.cgu_repository import CguRepository
-from app.schemas.cgu import CguAcceptanceStatus, CguAdminOut, CguCreate, CguOut, CguUpdate
+from app.schemas.cgu import (
+    CguAcceptanceStatus,
+    CguAdminOut,
+    CguCreate,
+    CguOut,
+    CguUpdate,
+)
 
 # ── Route publique (pas d'auth) ────────────────────────────────────────
 public_router = APIRouter(prefix="/cgu", tags=["CGU"])
@@ -21,7 +27,9 @@ async def get_active_cgu(
     """Récupère la version active des CGU. Route publique."""
     cgu = await CguRepository(db).get_active()
     if cgu is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune CGU active")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Aucune CGU active"
+        )
     return cgu
 
 
@@ -46,7 +54,9 @@ async def get_acceptance_status(
     return CguAcceptanceStatus(accepted=accepted, cgu=CguOut.model_validate(cgu))
 
 
-@public_router.post("/acceptance", response_model=CguAcceptanceStatus, status_code=status.HTTP_200_OK)
+@public_router.post(
+    "/acceptance", response_model=CguAcceptanceStatus, status_code=status.HTTP_200_OK
+)
 async def accept_cgu(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[RequestContext, Depends(get_current_user)],
@@ -65,12 +75,17 @@ async def accept_cgu(
 
 
 # ── Routes admin (auth + is_admin) ────────────────────────────────────
-admin_router = APIRouter(prefix="/admin/cgu", tags=["Admin"], dependencies=[Depends(get_current_user)])
+admin_router = APIRouter(
+    prefix="/admin/cgu", tags=["Admin"], dependencies=[Depends(get_current_user)]
+)
 
 
 def _require_admin(user: RequestContext) -> None:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
 
 
 @admin_router.get("/versions", response_model=list[CguAdminOut])
@@ -105,7 +120,9 @@ async def update_version(
     repository = CguRepository(db)
     cgu = await repository.get(cgu_id)
     if cgu is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable"
+        )
     if cgu.is_active:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -125,6 +142,8 @@ async def activate_version(
     repository = CguRepository(db)
     cgu = await repository.get(cgu_id)
     if cgu is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable"
+        )
     activated = await repository.activate(cgu)
     return CguAdminOut.model_validate(activated)
