@@ -89,3 +89,16 @@ def dispatch_dossier_summary(dossier_id: str) -> None:
         args=[dossier_id],
         queue="agent_execution",
     )
+
+
+def dispatch_analyse_suggestion(dossier_id: str) -> None:
+    """Dépose la tâche de génération des suggestions d'analyse pour un
+    dossier « à ranger » sur la file agent_execution (issue #54). Le worker
+    récupère les résumés du dossier + la liste des analyses disponibles,
+    appelle le LLM pour classer les analyses par pertinence, et dépose les
+    suggestions via l'API interne."""
+    celery_client.send_task(
+        "app.tasks.suggest_dossier_analyse",
+        args=[dossier_id],
+        queue="agent_execution",
+    )

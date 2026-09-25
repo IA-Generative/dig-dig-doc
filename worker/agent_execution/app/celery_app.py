@@ -18,6 +18,8 @@ celery_app = Celery(
         "app.tasks.extraction",
         "app.tasks.agent",
         "app.tasks.helper_chat",
+        "app.tasks.summary",
+        "app.tasks.suggestion",
     ],
 )
 celery_app.conf.task_default_queue = "agent_execution"

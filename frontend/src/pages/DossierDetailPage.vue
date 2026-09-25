@@ -13,11 +13,25 @@ import { useDossiers } from "@/composables/useDossiers";
 import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
 import type { FeedbackReasonCode } from "@/types/conversation";
-import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
+import {
+  DOSSIER_STATUS_LABELS,
+  SUGGESTION_STATUS_LABELS,
+  type DossierStatus,
+  type SuggestionStatus,
+} from "@/types/dossier";
 
 const route = useRoute();
 const dossierId = String(route.params.id);
-const { list: dossiers, addDocuments, fetchDossier, streamDossier, regenerateDocumentSummary, regenerateDossierSummary } = useDossiers();
+const {
+  list: dossiers,
+  addDocuments,
+  fetchDossier,
+  streamDossier,
+  regenerateDocumentSummary,
+  regenerateDossierSummary,
+  suggestAnalyse,
+  assignAnalyse,
+} = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const {
   conversation,
@@ -95,7 +109,9 @@ function onModelChange(value: string) {
 }
 
 const dossier = computed(() => dossiers.value.find((d) => d.id === dossierId));
-const analyse = computed(() => (dossier.value ? getAnalyseById(dossier.value.analyseId) : undefined));
+const analyse = computed(() =>
+  dossier.value?.analyseId ? getAnalyseById(dossier.value.analyseId) : undefined,
+);
 
 // SSE : on s'abonne au flux du dossier pour suivre en temps réel l'état
 // d'extraction de texte des documents (et plus tard l'exécution). Le serveur
@@ -112,7 +128,7 @@ onMounted(async () => {
   // Le dossier n'est pas forcément dans la page actuellement chargée par
   // DossiersPage (pagination côté serveur) : on le charge directement.
   const loaded = await fetchDossier(dossierId);
-  await fetchAnalyse(loaded.analyseId);
+  if (loaded.analyseId) await fetchAnalyse(loaded.analyseId);
   closeStream = streamDossier(dossierId, () => {});
 });
 
@@ -134,6 +150,15 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
   arrêté: "warning",
   échec: "error",
 };
+
+const suggestionBadgeType: Record<SuggestionStatus, "new" | "info" | "success" | "warning" | "error"> = {
+  en_attente: "new",
+  en_cours: "info",
+  terminé: "success",
+  échec: "error",
+};
+
+const isUnassigned = computed(() => !dossier.value?.analyseId);
 
 // Fil d'échange pour alimenter l'analyse (documents, notes) : les résultats
 // eux-mêmes sont présentés directement dans DossierResults, pas ici, pour
@@ -204,8 +229,18 @@ async function onDeleteConversation() {
           </button>
         </div>
         <p class="fr-text--sm">
-          Analyse : <RouterLink :to="`/analyses/${dossier.analyseId}`">{{ analyse?.name ?? "introuvable" }}</RouterLink>
-          · Version {{ dossier.analyseVersion }}
+          <template v-if="isUnassigned">
+            <DsfrBadge
+              :label="SUGGESTION_STATUS_LABELS[dossier.suggestionStatus]"
+              :type="suggestionBadgeType[dossier.suggestionStatus]"
+              small
+            />
+            <span class="dossier-detail__a-ranger-label">Dossier à ranger — aucune analyse rattachée</span>
+          </template>
+          <template v-else>
+            Analyse : <RouterLink :to="`/analyses/${dossier.analyseId}`">{{ analyse?.name ?? "introuvable" }}</RouterLink>
+            · Version {{ dossier.analyseVersion }}
+          </template>
         </p>
       </div>
       <div class="dossier-detail__header-actions">
@@ -235,6 +270,64 @@ async function onDeleteConversation() {
       show-summary-actions
       @regenerate-summary="regenerateDocumentSummary(dossierId, $event)"
     />
+
+    <!-- Suggestions d'analyse pour les dossiers « à ranger » (issue #54) -->
+    <div v-if="isUnassigned" class="dossier-detail__suggestions">
+      <div class="dossier-detail__suggestions-header">
+        <h2 class="fr-h3">Suggestions d'analyse</h2>
+        <DsfrButton
+          label="Générer les suggestions"
+          icon="ri-lightbulb-flash-line"
+          secondary
+          :disabled="dossier.suggestionStatus === 'en_cours'"
+          @click="suggestAnalyse(dossierId)"
+        />
+      </div>
+
+      <DsfrAlert
+        v-if="dossier.suggestionStatus === 'en_cours'"
+        type="info"
+        title="Génération en cours..."
+        description="Le LLM analyse les résumés des documents pour identifier les analyses les plus pertinentes."
+        small
+      />
+
+      <DsfrAlert
+        v-else-if="dossier.suggestionStatus === 'en_attente'"
+        type="info"
+        title="Aucune suggestion générée"
+        description="Cliquez sur « Générer les suggestions » pour que le LLM propose des analyses pertinentes à partir des résumés des documents."
+        small
+      />
+
+      <DsfrAlert
+        v-else-if="dossier.suggestionStatus === 'échec'"
+        type="error"
+        title="Échec de la génération"
+        description="La génération des suggestions a échoué. Vous pouvez réessayer."
+        small
+      />
+
+      <div v-if="dossier.suggestedAnalyses && dossier.suggestedAnalyses.length > 0" class="dossier-detail__suggestion-list">
+        <div
+          v-for="suggestion in dossier.suggestedAnalyses"
+          :key="suggestion.analyseId"
+          class="dossier-detail__suggestion-card"
+        >
+          <div class="dossier-detail__suggestion-info">
+            <span class="dossier-detail__suggestion-name">{{ suggestion.name }}</span>
+            <span class="dossier-detail__suggestion-score">Score : {{ Math.round(suggestion.score * 100) }}%</span>
+          </div>
+          <p class="fr-text--sm dossier-detail__suggestion-rationale">{{ suggestion.rationale }}</p>
+          <DsfrButton
+            label="Rattacher cette analyse"
+            icon="ri-link"
+            size="sm"
+            @click="assignAnalyse(dossierId, suggestion.analyseId)"
+          />
+        </div>
+      </div>
+    </div>
 
     <DossierResults :dossier="dossier" :analyse="analyse" @regenerate-summary="regenerateDossierSummary(dossierId)" />
 
@@ -317,11 +410,14 @@ async function onDeleteConversation() {
         </div>
         <div class="dossier-details-modal__row">
           <dt class="fr-text--sm">Analyse</dt>
-          <dd>
+          <dd v-if="dossier.analyseId">
             <RouterLink :to="`/analyses/${dossier.analyseId}`" class="fr-link" @click="isDetailsModalOpened = false">
               {{ analyse?.name ?? "introuvable" }}
             </RouterLink>
             · Version {{ dossier.analyseVersion }}
+          </dd>
+          <dd v-else>
+            <em>Dossier à ranger — aucune analyse rattachée</em>
           </dd>
         </div>
       </dl>
@@ -466,5 +562,63 @@ async function onDeleteConversation() {
 
 .dossier-details-modal__no-files {
   color: var(--text-mention-grey);
+}
+
+/* Section suggestions d'analyse (issue #54 : dossier « à ranger ») */
+.dossier-detail__a-ranger-label {
+  margin-left: 0.5rem;
+  color: var(--text-mention-grey);
+}
+
+.dossier-detail__suggestions {
+  margin-bottom: 1.5rem;
+  flex-shrink: 0;
+}
+
+.dossier-detail__suggestions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dossier-detail__suggestion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.dossier-detail__suggestion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border-default-grey);
+  border-radius: 0.375rem;
+  background: var(--background-default-grey);
+}
+
+.dossier-detail__suggestion-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.dossier-detail__suggestion-name {
+  font-weight: 500;
+}
+
+.dossier-detail__suggestion-score {
+  font-size: 0.875rem;
+  color: var(--text-mention-grey);
+  white-space: nowrap;
+}
+
+.dossier-detail__suggestion-rationale {
+  margin: 0;
+  color: var(--text-default-grey);
 }
 </style>

@@ -14,12 +14,14 @@ const analyseOptions = computed(() => analyses.value.map((analyse) => ({ value: 
 
 const name = ref("");
 const analyseId = ref<string | undefined>(undefined);
+const aRanger = ref(false);
 const files = ref<File[]>([]);
 
 watch(opened, async (isOpened) => {
   if (isOpened) {
     name.value = "";
     files.value = [];
+    aRanger.value = false;
     // La liste par défaut (useAnalyses) est paginée pour l'affichage ;
     // ce select doit lister toutes les analyses disponibles, donc on
     // recharge avec la taille de page maximale plutôt que de dépendre de
@@ -42,8 +44,9 @@ function formatSize(bytes: number) {
 }
 
 async function submit() {
-  if (!name.value.trim() || !analyseId.value) return;
-  const dossier = await create(name.value.trim(), analyseId.value);
+  if (!name.value.trim()) return;
+  if (!aRanger.value && !analyseId.value) return;
+  const dossier = await create(name.value.trim(), aRanger.value ? undefined : analyseId.value);
   if (files.value.length > 0) await addDocuments(dossier.id, files.value);
   opened.value = false;
   emit("created");
@@ -58,11 +61,22 @@ async function submit() {
     size="lg"
     :actions="[
       { label: 'Annuler', secondary: true, onClick: () => (opened = false) },
-      { label: 'Créer', onClick: submit, disabled: !analyseId },
+      { label: 'Créer', onClick: submit, disabled: !name.trim() || (!aRanger && !analyseId) },
     ]"
   >
     <DsfrInput v-model="name" label="Nom du dossier" label-visible required />
+
+    <div class="fr-mt-2w">
+      <DsfrToggleSwitch
+        v-model="aRanger"
+        label="Dossier à ranger (sans analyse)"
+        hint="Crée le dossier sans analyse rattachée. Des suggestions d'analyse seront générées automatiquement à partir des résumés des documents."
+        inline
+      />
+    </div>
+
     <DsfrSelect
+      v-if="!aRanger"
       v-model="analyseId"
       label="Analyse"
       hint="Obligatoire : un dossier doit être lié à une analyse."

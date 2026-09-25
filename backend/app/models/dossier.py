@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,13 +51,28 @@ class TextExtractionStatus(enum.StrEnum):
     ECHEC = "échec"
 
 
+class SuggestionStatus(enum.StrEnum):
+    """État de génération des suggestions d'analyse pour un dossier « à
+    ranger » (issue #54). Le worker agent_execution génère les suggestions
+    après les résumés (issue #52) et les dépose via l'API interne."""
+
+    EN_ATTENTE = "en_attente"
+    EN_COURS = "en_cours"
+    TERMINE = "terminé"
+    ECHEC = "échec"
+
+
 class Dossier(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "dossiers"
 
     name: Mapped[str] = mapped_column(String, nullable=False)
-    # Une analyse est obligatoire : un dossier ne peut pas exister sans être lié à une analyse.
-    analyse_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="RESTRICT"), nullable=False, index=True
+    # Un dossier « à ranger » (issue #54) n'a pas d'analyse assignée :
+    # analyse_id est nullable, l'utilisateur choisira (ou validera la
+    # suggestion de l'IA) après upload des documents et génération des
+    # résumés. On garde ondelete="RESTRICT" quand non-NULL : impossible de
+    # supprimer une analyse encore liée à un dossier.
+    analyse_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     # Snapshot au lancement de la version de l'analyse utilisée (voir
     # AnalyseRepository.get_version : dérivée du nombre de FieldVersion).
@@ -73,6 +89,16 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
         default=SummaryStatus.EN_ATTENTE,
     )
     summary_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Suggestions d'analyse pour un dossier « à ranger » (issue #54) :
+    # liste de {analyse_id, name, score, rationale} générée par le LLM à
+    # partir des résumés du dossier et des analyses disponibles. Conservé
+    # même après rattachement (historique).
+    suggested_analyses: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+    suggestion_status: Mapped[SuggestionStatus] = mapped_column(
+        Enum(SuggestionStatus, name="suggestion_status"),
+        nullable=False,
+        default=SuggestionStatus.EN_ATTENTE,
+    )
 
     execution_steps: Mapped[list["ExecutionStep"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="ExecutionStep.started_at"

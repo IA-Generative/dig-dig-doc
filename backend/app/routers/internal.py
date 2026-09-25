@@ -36,6 +36,8 @@ from app.schemas.dossier import (
     InternalExtractionOut,
     InternalLabelDefinitionOut,
     InternalMessageIn,
+    SuggestionDepositIn,
+    SuggestionStatusIn,
     SummaryDepositIn,
     SummaryStatusIn,
     TextExtractionStatusIn,
@@ -186,6 +188,43 @@ async def deposit_dossier_summary(
     if dossier is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
     return await repository.add_dossier_summary(dossier, content=body.content, model=body.model)
+
+
+@router.put("/dossiers/{dossier_id}/suggestion-status", response_model=InternalDossierOut)
+async def set_dossier_suggestion_status(
+    dossier_id: uuid.UUID,
+    body: SuggestionStatusIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Met à jour le statut de génération des suggestions d'analyse d'un
+    dossier « à ranger » (issue #54)."""
+    repository = DossierRepository(db)
+    dossier = await repository.get(dossier_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    await repository.set_suggestion_status(dossier, body.status, body.error)
+    return dossier
+
+
+@router.post(
+    "/dossiers/{dossier_id}/suggestions",
+    response_model=InternalDossierOut,
+    status_code=status.HTTP_200_OK,
+)
+async def deposit_dossier_suggestions(
+    dossier_id: uuid.UUID,
+    body: SuggestionDepositIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose les suggestions d'analyse générées par le LLM pour un dossier
+    « à ranger » (issue #54). Le worker appelle cette route après avoir
+    comparé les résumés du dossier avec les analyses disponibles."""
+    repository = DossierRepository(db)
+    dossier = await repository.get(dossier_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    await repository.set_suggested_analyses(dossier, body.suggestions)
+    return dossier
 
 
 @router.post(

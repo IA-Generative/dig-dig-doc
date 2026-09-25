@@ -10,6 +10,7 @@ from app.models.dossier import (
     DossierStatus,
     ExecutionStepKind,
     ExecutionStepStatus,
+    SuggestionStatus,
     TextExtractionStatus,
 )
 from app.models.execution_log import ExecutionLogLevel
@@ -200,6 +201,28 @@ class FileHashIn(BaseModel):
     file_hash: str
 
 
+class SuggestionDepositIn(BaseModel):
+    """Payload pour déposer les suggestions d'analyse d'un dossier « à
+    ranger » (worker → backend, issue #54)."""
+
+    suggestions: list[dict]
+
+
+class SuggestionStatusIn(BaseModel):
+    """Payload pour mettre à jour le statut de génération des suggestions
+    (worker → backend, issue #54)."""
+
+    status: SuggestionStatus
+    error: str | None = None
+
+
+class DossierAssignIn(BaseModel):
+    """Payload pour valider le rattachement d'un dossier « à ranger » à une
+    analyse (frontend → backend, issue #54)."""
+
+    analyse_id: uuid.UUID
+
+
 class DossierDocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -361,7 +384,10 @@ class ExecutionLogIn(BaseModel):
 
 class DossierCreate(BaseModel):
     name: str
-    analyse_id: uuid.UUID
+    # Optionnel (issue #54) : un dossier « à ranger » n'a pas d'analyse
+    # assignée à la création. Les suggestions d'analyse sont générées après
+    # upload des documents et génération des résumés.
+    analyse_id: uuid.UUID | None = None
 
 
 # --- Schémas internes (worker agent_execution) ---
@@ -448,10 +474,12 @@ class InternalDossierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    analyse_id: uuid.UUID
+    analyse_id: uuid.UUID | None
     status: DossierStatus
     summary_status: SummaryStatus = SummaryStatus.EN_ATTENTE
     summary: DossierSummaryOut | None = None
+    suggested_analyses: list[dict] | None = None
+    suggestion_status: SuggestionStatus = SuggestionStatus.EN_ATTENTE
     execution_steps: list[InternalExecutionStepOut]
     documents: list[InternalDossierDocumentOut]
 
@@ -515,7 +543,7 @@ class DossierOut(BaseModel):
 
     id: uuid.UUID
     name: str
-    analyse_id: uuid.UUID
+    analyse_id: uuid.UUID | None
     analyse_version: str
     created_at: datetime
     status: DossierStatus
@@ -525,5 +553,8 @@ class DossierOut(BaseModel):
     summary_error: str | None
     # Dernier résumé global du dossier (le plus récent), ou None.
     summary: "DossierSummaryOut | None" = None
+    # Suggestions d'analyse pour un dossier « à ranger » (issue #54).
+    suggested_analyses: list[dict] | None = None
+    suggestion_status: SuggestionStatus
     execution_steps: list[ExecutionStepOut]
     documents: list[DossierDocumentOut]

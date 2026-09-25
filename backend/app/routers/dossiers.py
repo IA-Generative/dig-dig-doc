@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_client import (
     dispatch_agent_execution,
+    dispatch_analyse_suggestion,
     dispatch_chat_response,
     dispatch_classification,
     dispatch_document_summary,
@@ -37,6 +38,7 @@ from app.schemas.dossier import (
     ChatEventOut,
     ConversationModelUpdate,
     ConversationOut,
+    DossierAssignIn,
     DossierCreate,
     DossierDocumentLabelIn,
     DossierDocumentOut,
@@ -70,10 +72,11 @@ async def list_dossiers(
 
 @router.post("", response_model=DossierOut, status_code=status.HTTP_201_CREATED)
 async def create_dossier(body: DossierCreate, db: Annotated[AsyncSession, Depends(get_db)]) -> Dossier:
-    analyse_repository = AnalyseRepository(db)
-    analyse = await analyse_repository.get(body.analyse_id)
-    if analyse is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
+    analyse: Analyse | None = None
+    if body.analyse_id is not None:
+        analyse = await AnalyseRepository(db).get(body.analyse_id)
+        if analyse is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
 
     dossier_repository = DossierRepository(db)
     dossier = await dossier_repository.create(name=body.name, analyse=analyse)
@@ -213,6 +216,39 @@ async def regenerate_dossier_summary(
     dossier = await _get_or_404(repository, dossier_id)
     dispatch_dossier_summary(str(dossier_id))
     return dossier
+
+
+@router.post("/{dossier_id}/suggest-analysis", response_model=DossierOut)
+async def suggest_analysis(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Déclenche la (re)génération des suggestions d'analyse pour un dossier
+    « à ranger » (issue #54). Le worker récupère les résumés des documents +
+    la liste des analyses disponibles, appelle le LLM, et dépose les
+    suggestions via l'API interne."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    dispatch_analyse_suggestion(str(dossier.id))
+    return dossier
+
+
+@router.post("/{dossier_id}/assign", response_model=DossierOut)
+async def assign_dossier(
+    dossier_id: uuid.UUID,
+    body: DossierAssignIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Valide le rattachement d'un dossier « à ranger » à une analyse
+    (issue #54). L'utilisateur peut valider une suggestion ou choisir
+    manuellement une autre analyse."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    analyse = await AnalyseRepository(db).get(body.analyse_id)
+    if analyse is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
+    await repository.assign_analyse(dossier, analyse)
+    return await _get_or_404(repository, dossier_id)
 
 
 @router.get("/{dossier_id}/conversations", response_model=Page[ConversationOut])
