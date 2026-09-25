@@ -42,6 +42,8 @@ from app.schemas.dossier import (
     SummaryStatusIn,
     TextExtractionStatusIn,
 )
+from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
+from app.services.user_task_service import update_task
 
 # Routes appelées par les workers Celery (pas par le navigateur) : le worker
 # dépose ici le résultat de son travail - logs en cours d'exécution, étape
@@ -378,3 +380,18 @@ async def get_internal_analyse(analyse_id: uuid.UUID, db: Annotated[AsyncSession
         ),
         agents=[InternalAgentOut.model_validate(agent) for agent in analyse.agents],
     )
+
+
+@router.put("/user-tasks/{task_id}", response_model=UserTaskOut)
+async def update_user_task(
+    task_id: uuid.UUID,
+    body: UserTaskUpdateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Callback interne : un worker met à jour le statut d'une tâche
+    utilisateur (PENDING → RUNNING → SUCCESS/FAILURE). Appelé par les
+    workers via l'API interne, authentifié par app token."""
+    task = await update_task(db, task_id, body)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tâche introuvable")
+    return task

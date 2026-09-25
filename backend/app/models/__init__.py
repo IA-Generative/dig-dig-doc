@@ -41,6 +41,7 @@ from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValu
 from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
 from .user_preference import UserPreference
+from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
     "Agent",
@@ -96,5 +97,8 @@ __all__ = [
     "SummaryStatus",
     "TextExtractionStatus",
     "UserPreference",
+    "UserTask",
+    "UserTaskKind",
+    "UserTaskStatus",
     "VersionedField",
 ]
