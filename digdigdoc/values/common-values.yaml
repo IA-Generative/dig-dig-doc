@@ -1,0 +1,520 @@
+fullnameOverride: digdigdoc
+
+global:
+  ingress:
+    enabled: true
+    annotations:
+      monitor: enabled
+      nginx.ingress.kubernetes.io/whitelist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+      k8s.apisix.apache.org/allowlist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+  imagePullSecrets:
+  - name: "registry-pull-secret"
+
+backend:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-backend"
+    pullPolicy: "Always"
+  replicaCount: 2
+  # FastAPI/uvicorn listens on 8000, not the chart default 8080. Without this override the
+  # probes hit 8080 (connection refused) and the Service targetPort is wrong too.
+  containerPort: 8000
+  # The chart defines probes with `port: *backendContainerPort` (a YAML anchor resolved to 8080
+  # at parse time). Overriding containerPort above does NOT change the anchor, so the probes
+  # still hit 8080. We must re-declare the probes with the correct port. Paths and timings are
+  # copied verbatim from the chart defaults (values.yaml).
+  probes:
+    # All probes use /api/health (checks redis, meilisearch, db).
+    startupProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 0
+      successThreshold: 1
+      failureThreshold: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+    # readinessProbe/livenessProbe use /api/health - traffic is only routed to the backend
+    # once all dependencies are healthy, and the pod is restarted if it becomes unhealthy.
+    readinessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 10
+      successThreshold: 2
+      failureThreshold: 2
+      periodSeconds: 10
+      timeoutSeconds: 5
+    livenessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 30
+      successThreshold: 1
+      failureThreshold: 3
+      periodSeconds: 30
+      timeoutSeconds: 5
+  service:
+    port: 8000
+  serviceAccount:
+    enabled: true
+    create: true
+  envFrom:
+  - secretRef:
+      name: "digdigdoc-s3"
+  - secretRef:
+      name: "digdigdoc-keycloak"
+  - secretRef:
+      name: "digdigdoc-openai"
+  - secretRef:
+      name: "digdigdoc-worker"
+  - secretRef:
+      name: "digdigdoc-redis"
+  - secretRef:
+      name: "digdigdoc-meilisearch"
+  # Listed last: envFrom's later-source-wins rule guarantees this computed DATABASE_URL is what
+  # actually lands in the container even if another secret above ever grows a stray field of the
+  # same name.
+  - secretRef:
+      name: "digdigdoc-db-infos"
+  # Plain (non-secret) app config - see backend/app/config/*.py for the full settings contract.
+  env:
+    KEYCLOAK_REALM: "mirai"
+    KEYCLOAK_CLIENT_ID: "digdigdoc"
+    SESSION_COOKIE_SECURE: "true"
+    # Same S3 endpoint already used for cnpg backups below - no need to self-host rustfs when a
+    # known S3 exists. Only the access/secret key are Vault-backed (`digdigdoc-s3`); bucket differs
+    # per env (see values-<env>.yaml).
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    # Same OpenAI-compatible LLM hub used by ocr's worker.
+    # OPENAI_API_BASE_URL: ""
+    LOG_LEVEL: "INFO"
+
+# Celery worker - document ingestion/OCR pipeline (worker/document_process).
+worker_document:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-worker-document-process"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue replaces the chart-native HPA - the digdigdoc
+  # chart has no KEDA support, so ScaledObjects + TriggerAuthentications are declared in
+  # `extraObjects` below. Scales on actual queue length instead of CPU.
+  #
+  # Probes disabled: the chart default uses `celery inspect ping` exec probes, but these
+  # can cause false-positive restarts under load (the inspect call itself can timeout when
+  # the worker is busy processing a long task). KEDA on queue length is the real liveness
+  # signal here - if the queue drains, the worker is healthy by definition.
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  envFrom:
+  - secretRef:
+      name: "digdigdoc-s3"
+  - secretRef:
+      name: "digdigdoc-worker"
+  - secretRef:
+      name: "digdigdoc-redis"
+  env:
+    CELERY_QUEUE_NAME: "document_processing"
+    BACKEND_API_URL: "http://digdigdoc-backend:8000"
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    OCR_LANGUAGE: "fra"
+
+# Celery worker - agentic research/chat execution (worker/agent_execution).
+# NOTE: this worker's LangGraph checkpointer needs RediSearch (redis-stack), which is why
+# `redis.image` below is overridden away from the chart's plain redis default - see comment there.
+worker_agent:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-worker-agent-execution"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue - see document_process above.
+  # Probes disabled - see document_process above for rationale.
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  envFrom:
+  - secretRef:
+      name: "digdigdoc-s3"
+  - secretRef:
+      name: "digdigdoc-worker"
+  - secretRef:
+      name: "digdigdoc-redis"
+  env:
+    CELERY_QUEUE_NAME: "agent_execution"
+    BACKEND_API_URL: "http://digdigdoc-backend:8000"
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    # Internal ClusterIP service (sub-chart `searxng`). Web search is opt-in per run (off by
+    # default - see worker/agent_execution/app/config.py SEARXNG_URL).
+    # Named `digdigdoc-searxng` (not `searxng`) to avoid ArgoCD conflict: open-webui also deploys
+    # a `searxng` Deployment, and ArgoCD tracks resources by name across apps.
+    SEARXNG_URL: "http://digdigdoc-searxng:8080"
+
+jobs:
+  migration:
+    image:
+      registry: "harbor.sdid.cpin.numerique-interieur.com"
+      repository: "exploration/dig-dig-doc-backend"
+      pullPolicy: "Always"
+    command: ["alembic"]
+    args: ["upgrade", "head"]
+    envFrom:
+    - secretRef:
+        name: "digdigdoc-db-infos"
+    serviceAccount:
+      enabled: true
+      create: true
+    initContainers:
+    - name: wait-for-postgres
+      image: busybox:1.35
+      command: ["sh", "-c", "until nc -z digdigdoc-pg-cluster-rw 5432; do echo \"Waiting for PostgreSQL...\"; sleep 5; done;"]
+      securityContext:
+        runAsUser: 10001
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: "RuntimeDefault"
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "250m"
+        memory: "128Mi"
+
+frontend:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-frontend"
+    pullPolicy: "Always"
+  replicaCount: 2
+  service:
+    port: 8080
+  serviceAccount:
+    enabled: true
+    create: true
+  # No VITE_* runtime override here: unlike ocr's frontend, digdigdoc's frontend has no config.js
+  # runtime-injection entrypoint - VITE_API_BASE_URL is baked in at `pnpm build` time (see
+  # frontend/src/composables/*.ts). See digdigdoc/VARIABLES.md for the follow-up needed before prod.
+
+redis:
+  # RediSearch is required by the agent_execution worker's Redis-backed LangGraph checkpointer
+  # (see worker/agent_execution - a HITL pause must survive being resumed by a different Celery
+  # prefork child). Swap the plain redis image for redis-stack-server, which is a superset.
+  fullnameOverride: digdigdoc-redis
+  image:
+    registry: "docker.io"
+    repository: "redis/redis-stack-server"
+    tag: "7.4.0-v6"
+  architecture: standalone
+  auth:
+    existingSecret: "digdigdoc-redis"
+    existingSecretPasswordKey: "REDIS_PASSWORD"
+  # The chart's generated redis.conf has no `dir` directive, so redis defaults to CWD (/).
+  # With readOnlyRootFilesystem: true (chart default), RDB snapshots fail with
+  # "MISCONF Redis is configured to save RDB snapshots, but it's currently unable to persist
+  # to disk." Point `dir` at the persistent volume mount (/data) so dump.rdb lands on the PVC.
+  config:
+    content: |
+      # Redis configuration
+      bind * -::*
+      dir /data
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+
+extraObjects:
+  digdigdoc-s3:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-s3
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-s3
+        create: true
+  digdigdoc-openai:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-openai
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-openai
+        create: true
+  digdigdoc-keycloak:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-keycloak
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-keycloak
+        create: true
+  digdigdoc-worker:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-worker
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-worker
+        create: true
+  digdigdoc-redis:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-redis
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-redis
+        create: true
+        # Keeps the raw REDIS_PASSWORD (used by the redis chart's own `auth.existingSecret`
+        # above) and adds a computed REDIS_URL for the app's envFrom - single Vault path serves
+        # both. Assumes the Vault-stored password has no URL-reserved characters.
+        transformation:
+          templates:
+            REDIS_URL:
+              text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@digdigdoc-redis:6379/0'
+  digdigdoc-db-superuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-db-superuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-db-superuser
+        create: true
+        # CNPG requires a kubernetes.io/basic-auth secret (username + password keys)
+        # for superuserSecret - an Opaque secret (VSO default) makes the Cluster
+        # loop forever waiting for a usable secret.
+        type: kubernetes.io/basic-auth
+  digdigdoc-db-appuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-db-appuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-db-appuser
+        create: true
+        # CNPG requires a kubernetes.io/basic-auth secret (username + password keys)
+        # for initdb.secret - an Opaque secret (VSO default) makes the Cluster
+        # loop forever waiting for a usable secret.
+        type: kubernetes.io/basic-auth
+  digdigdoc-db-infos:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-db-infos
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-db-infos
+        create: true
+        transformation:
+          excludes:
+          - ".*"
+          templates:
+            # Host must match `cnpg.fullnameOverride`-rw; port/dbname match `cnpg.cluster.initdb`
+            # below. Driver is `postgresql+asyncpg` (backend/app/config/database.py), not plain
+            # `postgresql` like ocr. Assumes the Vault-stored password has no URL-reserved
+            # characters - if it does, this needs URL-encoding, which VSO templates don't provide.
+            DATABASE_URL:
+              text: 'postgresql+asyncpg://{{ "{{" }} get .Secrets "username" {{ "}}" }}:{{ "{{" }} get .Secrets "password" {{ "}}" }}@digdigdoc-pg-cluster-rw:5432/digdigdoc'
+  digdigdoc-db-backups:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-db-backups
+    spec:
+      vaultAuthRef: vault-auth
+      mount: mirai
+      type: kv-v2
+      destination:
+        name: digdigdoc-db-backups
+        create: true
+  # --- KEDA ScaledObjects (Redis queue length autoscaling for Celery workers) ---
+  # The digdigdoc chart has no native KEDA support, so ScaledObjects + TriggerAuthentications are
+  # declared here as extraObjects. Each worker has its own Celery queue (listName) and scales
+  # independently based on the number of pending messages in its Redis list.
+  # KEDA polls the Redis Service directly (not Sentinel-aware, same pattern as ocr). The
+  # address MUST be a FQDN (`digdigdoc-redis.<namespace>.svc.cluster.local`), not the short
+  # name `digdigdoc-redis`: KEDA runs in its own namespace (`keda-system`) and can't resolve
+  # short names from digdigdoc's namespace. Same pattern as ocr's chart, which builds the
+  # address as `<fullname>-master.<Release.Namespace>:6379`.
+  # The TriggerAuthentication references `digdigdoc-redis` (same Vault-managed secret as the
+  # app's envFrom) for the REDIS_PASSWORD - KEDA resolves the Secret by name across
+  # namespaces only if the Secret is in the same namespace as the ScaledObject, which is
+  # why the ScaledObjects are deployed in digdigdoc's namespace (not keda-system).
+  #
+  # Per-env overrides (minReplicaCount, maxReplicaCount, pollingInterval, listLength) live
+  # in `values-<env>.yaml` under `extraObjects.<name>.spec`.
+
+  # TriggerAuthentication: shared by both worker ScaledObjects.
+  digdigdoc-keda-triggerauth:
+    apiVersion: keda.sh/v1alpha1
+    kind: TriggerAuthentication
+    metadata:
+      name: digdigdoc-keda-triggerauth
+    spec:
+      secretTargetRef:
+      - parameter: "password"
+        name: "digdigdoc-redis"
+        key: "REDIS_PASSWORD"
+
+  # ScaledObject for document_process (queue: document_processing)
+  digdigdoc-keda-document-process:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: digdigdoc-document-process
+    spec:
+      scaleTargetRef:
+        name: digdigdoc-document-process
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 2
+      maxReplicaCount: 4
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "digdigdoc-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "document_processing"
+          listLength: "5"
+        authenticationRef:
+          name: digdigdoc-keda-triggerauth
+
+  # ScaledObject for agent_execution (queue: agent_execution)
+  digdigdoc-keda-agent-execution:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: digdigdoc-agent-execution
+    spec:
+      scaleTargetRef:
+        name: digdigdoc-agent-execution
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 2
+      maxReplicaCount: 4
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "digdigdoc-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "agent_execution"
+          listLength: "5"
+        authenticationRef:
+          name: digdigdoc-keda-triggerauth
+
+postgres:
+  enabled: false
+
+# A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
+# no need to self-host object storage.
+rustfs:
+  enabled: false
+
+cnpg:
+  enabled: true
+  fullnameOverride: "digdigdoc-pg-cluster"
+  mode: "standalone"
+  cluster:
+    imageName: "ghcr.io/cloudnative-pg/postgresql:17.7"
+    enableSuperuserAccess: true
+    superuserSecret: "digdigdoc-db-superuser"
+    initdb:
+      database: "digdigdoc"
+      owner: "digdigdoc"
+      secret:
+        name: "digdigdoc-db-appuser"
+    monitoring:
+      enabled: true
+  backups:
+    method: "barmanObjectStore"
+    endpointURL: "https://s3.fr-par.scw.cloud"
+    provider: "s3"
+    data:
+      compression: "gzip"
+      encryption: ""
+      jobs: 2
+    wal:
+      compression: "gzip"
+      encryption: ""
+      maxParallel: 2
+    secret:
+      create: false
+      name: "digdigdoc-db-backups"
+  recovery:
+    method: "object_store"
+    clusterName: "digdigdoc-pg-cluster"
+    database: "digdigdoc"
+    owner: "digdigdoc"
+    endpointURL: "https://s3.fr-par.scw.cloud"
+    provider: "s3"
+    secret:
+      create: false
+      name: "digdigdoc-db-backups"
+  replica:
+    bootstrap:
+      source: "object_store"
+      database: "digdigdoc"
+      owner: "digdigdoc"
+    origin:
+      objectStore:
+        clusterName: "digdigdoc-pg-cluster"
+        endpointURL: "https://s3.fr-par.scw.cloud"
+        provider: "s3"
+        secret:
+          create: false
+          name: "digdigdoc-db-backups"
