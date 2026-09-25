@@ -103,6 +103,18 @@ function handleOutsideClick(event: MouseEvent) {
   }
 }
 
+// Raccourci clavier Ctrl+K / Cmd+K pour ouvrir l'assistant.
+function handleKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    showUserMenu.value = false;
+    showHelperAgent.value = true;
+  }
+  if (event.key === "Escape" && showHelperAgent.value) {
+    showHelperAgent.value = false;
+  }
+}
+
 function initials(name: string): string {
   return name
     .split(" ")
@@ -112,8 +124,14 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-onMounted(() => document.addEventListener("click", handleOutsideClick));
-onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick));
+onMounted(() => {
+  document.addEventListener("click", handleOutsideClick);
+  document.addEventListener("keydown", handleKeydown);
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleOutsideClick);
+  document.removeEventListener("keydown", handleKeydown);
+});
 </script>
 
 <template>
@@ -138,6 +156,7 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
       <button type="button" class="user-menu__item" role="menuitem" @click="openHelperAgent">
         <VIcon name="ri-robot-2-line" />
         <span>Assistant</span>
+        <kbd class="user-menu__shortcut">⌘K</kbd>
       </button>
 
       <div class="user-menu__separator" />
@@ -416,5 +435,17 @@ onBeforeUnmount(() => document.removeEventListener("click", handleOutsideClick))
   border: none;
   border-top: 1px solid var(--border-default-grey);
   margin: 1rem 0;
+}
+
+.user-menu__shortcut {
+  margin-left: auto;
+  padding: 0.0625rem 0.375rem;
+  font-size: 0.6875rem;
+  font-family: inherit;
+  color: var(--text-mention-grey);
+  background: var(--background-alt-grey);
+  border: 1px solid var(--border-default-grey);
+  border-radius: 0.25rem;
+  line-height: 1.4;
 }
 </style>

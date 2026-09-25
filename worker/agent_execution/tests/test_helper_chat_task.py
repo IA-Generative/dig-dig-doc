@@ -37,12 +37,15 @@ def test_run_helper_chat_deposits_answer_with_resources(monkeypatch) -> None:
     monkeypatch.setattr(
         api_client,
         "get_client",
-        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+        lambda: httpx.Client(
+            base_url="http://backend/api/internal",
+            transport=httpx.MockTransport(handler),
+        ),
     )
 
     from app.helper_tools import ConsultedResource
 
-    def fake_graph(conversation_history, tools, on_event=None):
+    def fake_graph(conversation_history, tools, on_event=None, model=None):
         assert conversation_history == [{"role": "user", "content": "Trouve-moi le dossier CNI"}]
         if on_event:
             on_event("tool_call", {"tool_name": "search_dossiers", "arguments": {}})
@@ -72,10 +75,13 @@ def test_run_helper_chat_emits_error_event_and_reraises(monkeypatch) -> None:
     monkeypatch.setattr(
         api_client,
         "get_client",
-        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+        lambda: httpx.Client(
+            base_url="http://backend/api/internal",
+            transport=httpx.MockTransport(handler),
+        ),
     )
 
-    def failing_graph(conversation_history, tools, on_event=None):
+    def failing_graph(conversation_history, tools, on_event=None, model=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(helper_chat_mod, "run_helper_chat_graph", failing_graph)

@@ -309,8 +309,8 @@ function formatRelativeTime(iso: string): string {
 .helper-agent {
   display: flex;
   gap: 1rem;
-  height: 60vh;
-  min-height: 24rem;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Mini-sidebar façon ChatGPT */
