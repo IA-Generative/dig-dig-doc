@@ -4,6 +4,7 @@ Les tests ne peuvent pas assumer un état vide de la DB (les versions
 créées par les tests précédents persistent). Chaque test crée donc ses
 propres versions et vérifie les comportements relatifs.
 """
+
 from fastapi.testclient import TestClient
 
 

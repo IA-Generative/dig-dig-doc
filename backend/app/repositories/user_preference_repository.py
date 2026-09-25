@@ -17,9 +17,7 @@ class UserPreferenceRepository:
     async def get_or_create(self, *, user_id: str) -> UserPreference:
         """Retourne les préférences d'un utilisateur, en créant une ligne
         par défaut si nécessaire."""
-        result = await self.db.execute(
-            select(UserPreference).where(UserPreference.user_id == user_id)
-        )
+        result = await self.db.execute(select(UserPreference).where(UserPreference.user_id == user_id))
         record = result.scalar_one_or_none()
         if record is not None:
             return record

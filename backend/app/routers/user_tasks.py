@@ -5,6 +5,7 @@ asynchrones (Celery) en cours et terminées. Les tâches sont créées au
 moment du dispatch (côté routers backend) et mises à jour par les workers
 via le router interne.
 """
+
 from typing import Annotated
 from uuid import UUID
 

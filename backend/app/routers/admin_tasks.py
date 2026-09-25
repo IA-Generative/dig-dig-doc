@@ -10,7 +10,10 @@ router = APIRouter(prefix="/admin/tasks", tags=["Admin"], dependencies=[Depends(
 
 def _require_admin(user: RequestContext) -> None:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
 
 
 @router.get("")
@@ -53,15 +56,17 @@ def _flatten_tasks(by_worker: dict) -> list[dict]:
             continue
         for task in tasks:
             if isinstance(task, dict):
-                result.append({
-                    "worker": worker,
-                    "name": task.get("name") or task.get("type") or "unknown",
-                    "id": task.get("id"),
-                    "args": task.get("args"),
-                    "kwargs": task.get("kwargs"),
-                    "time_start": task.get("time_start"),
-                    "acknowledged": task.get("acknowledged"),
-                })
+                result.append(
+                    {
+                        "worker": worker,
+                        "name": task.get("name") or task.get("type") or "unknown",
+                        "id": task.get("id"),
+                        "args": task.get("args"),
+                        "kwargs": task.get("kwargs"),
+                        "time_start": task.get("time_start"),
+                        "acknowledged": task.get("acknowledged"),
+                    }
+                )
             elif isinstance(task, str):
                 result.append({"worker": worker, "name": task})
     return result

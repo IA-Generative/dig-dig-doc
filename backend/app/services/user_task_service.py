@@ -9,6 +9,7 @@ Deux points d'entrée :
 - ``update_task`` : appelée par le router interne (callback worker) pour
   faire évoluer le statut (PENDING → RUNNING → SUCCESS/FAILURE).
 """
+
 from uuid import UUID
 
 from sqlalchemy import select, update

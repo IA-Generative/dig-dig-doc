@@ -8,7 +8,13 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.repositories.cgu_acceptance_repository import CguAcceptanceRepository
 from app.repositories.cgu_repository import CguRepository
-from app.schemas.cgu import CguAcceptanceStatus, CguAdminOut, CguCreate, CguOut, CguUpdate
+from app.schemas.cgu import (
+    CguAcceptanceStatus,
+    CguAdminOut,
+    CguCreate,
+    CguOut,
+    CguUpdate,
+)
 
 # ── Route publique (pas d'auth) ────────────────────────────────────────
 public_router = APIRouter(prefix="/cgu", tags=["CGU"])
@@ -40,9 +46,7 @@ async def get_acceptance_status(
     if cgu is None:
         return CguAcceptanceStatus(accepted=True, cgu=None)
 
-    accepted = await CguAcceptanceRepository(db).has_accepted(
-        user_id=user.user_id, cgu_id=cgu.id
-    )
+    accepted = await CguAcceptanceRepository(db).has_accepted(user_id=user.user_id, cgu_id=cgu.id)
     return CguAcceptanceStatus(accepted=accepted, cgu=CguOut.model_validate(cgu))
 
 
@@ -70,7 +74,10 @@ admin_router = APIRouter(prefix="/admin/cgu", tags=["Admin"], dependencies=[Depe
 
 def _require_admin(user: RequestContext) -> None:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
 
 
 @admin_router.get("/versions", response_model=list[CguAdminOut])

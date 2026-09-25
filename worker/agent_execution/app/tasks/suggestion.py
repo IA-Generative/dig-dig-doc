@@ -38,9 +38,7 @@ def _document_text(document: dict) -> str | None:
     pages = document.get("pages", [])
     if not pages:
         return None
-    page_content = "\n".join(
-        f"Page {p['page_number']}: {p.get('content') or '(vide)'}" for p in pages
-    )
+    page_content = "\n".join(f"Page {p['page_number']}: {p.get('content') or '(vide)'}" for p in pages)
     return f"### Document : {document['name']}\n{page_content}"
 
 
@@ -71,9 +69,7 @@ def _build_dossier_content(dossier: dict) -> str:
     return "\n\n".join(parts) if parts else ""
 
 
-def _enrich_suggestions(
-    suggestions: list, analyses_by_id: dict[str, dict]
-) -> list[dict]:
+def _enrich_suggestions(suggestions: list, analyses_by_id: dict[str, dict]) -> list[dict]:
     """Enrichit les suggestions du LLM avec le nom de l'analyse pour
     l'affichage côté frontend. Filtre les suggestions référençant des
     analyses inconnues."""
@@ -81,9 +77,7 @@ def _enrich_suggestions(
     for suggestion in suggestions:
         analyse = analyses_by_id.get(suggestion.analyse_id)
         if analyse is None:
-            logger.warning(
-                "LLM suggested unknown analyse %s, skipping", suggestion.analyse_id
-            )
+            logger.warning("LLM suggested unknown analyse %s, skipping", suggestion.analyse_id)
             continue
         result.append(
             {
@@ -133,9 +127,7 @@ def suggest_dossier_analyse(self, dossier_id: str) -> None:
             suggestions_out = _enrich_suggestions(result.suggestions, analyses_by_id)
 
             api_client.deposit_suggested_analyses(client, dossier_id, suggestions=suggestions_out)
-            logger.info(
-                "Suggested %d analyses for dossier %s", len(suggestions_out), dossier_id
-            )
+            logger.info("Suggested %d analyses for dossier %s", len(suggestions_out), dossier_id)
         except Exception as error:
             logger.exception("Analyse suggestion failed for %s", dossier_id)
             api_client.set_suggestion_status(client, dossier_id, status="échec", error=str(error))

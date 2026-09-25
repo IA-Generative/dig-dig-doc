@@ -48,9 +48,7 @@ class UserTask(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "user_tasks"
 
     user_id: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    kind: Mapped[UserTaskKind] = mapped_column(
-        Enum(UserTaskKind, name="user_task_kind"), nullable=False
-    )
+    kind: Mapped[UserTaskKind] = mapped_column(Enum(UserTaskKind, name="user_task_kind"), nullable=False)
     status: Mapped[UserTaskStatus] = mapped_column(
         Enum(UserTaskStatus, name="user_task_status"),
         nullable=False,
@@ -68,9 +66,7 @@ class UserTask(UUIDMixin, TimestampMixin, Base):
     # conversation). On stocke l'UUID en string plutôt qu'en ForeignKey car
     # la tâche peut concerner différents types d'objets et que la suppression
     # d'un dossier ne doit pas effacer l'historique des tâches.
-    target_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    target_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
     # Type de la cible (dossier, analyse, conversation, agent_conversation)
     # pour construire le lien côté frontend.
     target_type: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -80,10 +76,6 @@ class UserTask(UUIDMixin, TimestampMixin, Base):
 
     # Horodatage du passage en RUNNING (distinct de created_at qui marque
     # la création de la ligne = dispatch).
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Horodatage de la fin (SUCCESS ou FAILURE).
-    ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -218,4 +218,3 @@ def test_internal_update_task_404(client: TestClient) -> None:
         headers={"X-App-Token": "dev-only-worker-token-not-for-prod"},
     )
     assert response.status_code == 404
-

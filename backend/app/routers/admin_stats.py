@@ -19,7 +19,10 @@ router = APIRouter(prefix="/admin/stats", tags=["Admin"], dependencies=[Depends(
 
 def _require_admin(user: RequestContext) -> None:
     if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux administrateurs",
+        )
 
 
 @router.get("")
@@ -41,11 +44,7 @@ async def get_platform_stats(
     users_count = await db.scalar(select(func.count()).select_from(UserPreference))
 
     # Dossiers par statut
-    status_rows = (
-        await db.execute(
-            select(Dossier.status, func.count()).group_by(Dossier.status)
-        )
-    ).all()
+    status_rows = (await db.execute(select(Dossier.status, func.count()).group_by(Dossier.status))).all()
     dossiers_by_status = {row[0].value if hasattr(row[0], "value") else str(row[0]): row[1] for row in status_rows}
 
     # Créations par jour (7 derniers jours)
@@ -58,9 +57,7 @@ async def get_platform_stats(
             .order_by("day")
         )
     ).all()
-    daily_creations = [
-        {"date": row[0].isoformat() if row[0] else None, "count": row[1]} for row in daily_dossiers
-    ]
+    daily_creations = [{"date": row[0].isoformat() if row[0] else None, "count": row[1]} for row in daily_dossiers]
 
     # Top modèles LLM utilisés (dans les conversations de dossier)
     model_rows = (

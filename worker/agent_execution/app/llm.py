@@ -264,8 +264,7 @@ def suggest_analyses(
         return SuggestionResult(suggestions=[])
 
     analyses_desc = "\n".join(
-        f"- ID: {a['id']} | Nom: {a['name']} | Description: {a.get('description') or '(aucune)'}"
-        for a in analyses
+        f"- ID: {a['id']} | Nom: {a['name']} | Description: {a.get('description') or '(aucune)'}" for a in analyses
     )
     user_content = (
         f"## Résumé du dossier\n\n{dossier_summary or '(dossier sans contenu)'}\n\n"
