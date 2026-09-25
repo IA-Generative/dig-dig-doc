@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.0...v0.4.1) (2026-09-25)
+
+
+### Bug Fixes
+
+* **helm:** sanitize underscores out of Kubernetes object/container names ([96f2b4b](https://github.com/IA-Generative/dig-dig-doc/commit/96f2b4ba2336f93ec046f52c857b65f7279b38e2))
+
 ## [0.4.1-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.4.0...v0.4.1-rc) (2026-09-25)
 
 
