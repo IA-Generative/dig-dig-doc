@@ -22,13 +22,19 @@ def get_client() -> httpx.Client:
 # --- Execution steps ---
 
 
-def add_execution_log(client: httpx.Client, step_id: str, *, level: str = "info", message: str) -> dict:
-    response = client.post(f"/execution-steps/{step_id}/logs", json={"level": level, "message": message})
+def add_execution_log(
+    client: httpx.Client, step_id: str, *, level: str = "info", message: str
+) -> dict:
+    response = client.post(
+        f"/execution-steps/{step_id}/logs", json={"level": level, "message": message}
+    )
     response.raise_for_status()
     return response.json()
 
 
-def complete_execution_step(client: httpx.Client, step_id: str, *, status: str, output: str | None = None) -> dict:
+def complete_execution_step(
+    client: httpx.Client, step_id: str, *, status: str, output: str | None = None
+) -> dict:
     response = client.post(
         f"/execution-steps/{step_id}/complete",
         json={"status": status, "output": output},
@@ -148,14 +154,23 @@ def get_agent_conversation(client: httpx.Client, conversation_id: str) -> dict:
     return response.json()
 
 
-def add_agent_chat_event(client: httpx.Client, conversation_id: str, *, kind: str, data: dict) -> dict:
-    response = client.post(f"/agent-conversations/{conversation_id}/chat-events", json={"kind": kind, "data": data})
+def add_agent_chat_event(
+    client: httpx.Client, conversation_id: str, *, kind: str, data: dict
+) -> dict:
+    response = client.post(
+        f"/agent-conversations/{conversation_id}/chat-events",
+        json={"kind": kind, "data": data},
+    )
     response.raise_for_status()
     return response.json()
 
 
 def deposit_agent_assistant_message(
-    client: httpx.Client, conversation_id: str, *, content: str, sources: list[dict] | None = None
+    client: httpx.Client,
+    conversation_id: str,
+    *,
+    content: str,
+    sources: list[dict] | None = None,
 ) -> dict:
     response = client.post(
         f"/agent-conversations/{conversation_id}/messages",
@@ -168,7 +183,9 @@ def deposit_agent_assistant_message(
 # --- Agent helper : tools (analyses, dossiers) ---
 
 
-def list_agent_analyses(client: httpx.Client, *, page: int = 1, page_size: int = 20, q: str | None = None) -> dict:
+def list_agent_analyses(
+    client: httpx.Client, *, page: int = 1, page_size: int = 20, q: str | None = None
+) -> dict:
     params: dict[str, str | int] = {"page": page, "page_size": page_size}
     if q:
         params["q"] = q
@@ -184,13 +201,19 @@ def get_agent_analysis(client: httpx.Client, analyse_id: str) -> dict:
 
 
 def create_agent_analysis(client: httpx.Client, *, name: str, description: str) -> dict:
-    response = client.post("/agent/analyses", json={"name": name, "description": description})
+    response = client.post(
+        "/agent/analyses", json={"name": name, "description": description}
+    )
     response.raise_for_status()
     return response.json()
 
 
-def list_agent_dossiers(client: httpx.Client, *, page: int = 1, page_size: int = 20) -> dict:
-    response = client.get("/agent/dossiers", params={"page": page, "page_size": page_size})
+def list_agent_dossiers(
+    client: httpx.Client, *, page: int = 1, page_size: int = 20
+) -> dict:
+    response = client.get(
+        "/agent/dossiers", params={"page": page, "page_size": page_size}
+    )
     response.raise_for_status()
     return response.json()
 
@@ -202,7 +225,9 @@ def get_agent_dossier(client: httpx.Client, dossier_id: str) -> dict:
 
 
 def create_agent_dossier(client: httpx.Client, *, name: str, analyse_id: str) -> dict:
-    response = client.post("/agent/dossiers", json={"name": name, "analyse_id": analyse_id})
+    response = client.post(
+        "/agent/dossiers", json={"name": name, "analyse_id": analyse_id}
+    )
     response.raise_for_status()
     return response.json()
 

@@ -92,11 +92,6 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
         """Dernier résumé généré (le plus récent par created_at), ou None."""
         return self.summaries[0] if self.summaries else None
 
-    @property
-    def summary(self) -> "DossierSummary | None":
-        """Dernier résumé généré (le plus récent par created_at), ou None."""
-        return self.summaries[0] if self.summaries else None
-
 
 class ExecutionStep(UUIDMixin, Base):
     __tablename__ = "execution_steps"
@@ -163,11 +158,6 @@ class DossierDocument(UUIDMixin, TimestampMixin, Base):
     summaries: Mapped[list["DocumentSummary"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentSummary.created_at.desc()"
     )
-
-    @property
-    def summary(self) -> "DocumentSummary | None":
-        """Dernier résumé généré (le plus récent par created_at), ou None."""
-        return self.summaries[0] if self.summaries else None
 
     @property
     def summary(self) -> "DocumentSummary | None":

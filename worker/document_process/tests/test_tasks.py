@@ -18,8 +18,13 @@ def test_extract_document_text_writes_pages_bboxes_screenshots_and_status(monkey
         if request.url.path.endswith("/extraction-status"):
             status_bodies.append(json.loads(request.content))
             return httpx.Response(200, json={"id": "doc-1", **status_bodies[-1]})
+        if request.url.path.endswith("/file-hash"):
+            return httpx.Response(200, json={"id": "doc-1", "file_hash": json.loads(request.content)["file_hash"]})
         if request.url.path.endswith("/documents/doc-1"):
-            return httpx.Response(200, json={"id": "doc-1", "name": "cni.pdf", "s3_key": "dossiers/x/cni.pdf"})
+            return httpx.Response(
+                200,
+                json={"id": "doc-1", "name": "cni.pdf", "s3_key": "dossiers/x/cni.pdf", "dossier_id": "dossier-xyz"},
+            )
         if request.url.path.endswith("/pages"):
             return httpx.Response(201, json={"id": next(page_ids)})
         if request.url.path.endswith("/bounding-boxes"):
@@ -61,12 +66,19 @@ def test_extract_document_text_writes_pages_bboxes_screenshots_and_status(monkey
     )
     monkeypatch.setattr("app.tasks.parse_file", lambda data: parsed)
 
+    sent_tasks: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(
+        "app.tasks.celery_app.send_task",
+        lambda name, args=None, queue=None: sent_tasks.append((name, tuple(args or ()))),
+    )
+
     extract_document_text.run("doc-1")
 
     assert put_calls == [("screenshots/doc-1/page-1.png", b"fake-png-bytes", "image/png")]
     assert calls == [
         ("PUT", "/api/internal/documents/doc-1/extraction-status"),
         ("GET", "/api/internal/documents/doc-1"),
+        ("PUT", "/api/internal/documents/doc-1/file-hash"),
         ("POST", "/api/internal/documents/doc-1/pages"),
         ("POST", "/api/internal/pages/page-1/bounding-boxes"),
         ("POST", "/api/internal/documents/doc-1/pages"),
@@ -74,6 +86,7 @@ def test_extract_document_text_writes_pages_bboxes_screenshots_and_status(monkey
     ]
     assert bbox_bodies == [{"x_min": 0.1, "y_min": 0.14285714285714285, "x_max": 0.5, "y_max": 0.17857142857142858}]
     assert status_bodies == [{"status": "en_cours", "error": None}, {"status": "terminé", "error": None}]
+    assert sent_tasks == [("app.tasks.run_document_summary", ("dossier-xyz", "doc-1"))]
 
 
 def test_extract_document_text_reports_failure_status(monkeypatch) -> None:
