@@ -41,15 +41,11 @@ def run_document_summary(self, dossier_id: str, document_id: str) -> None:
                 None,
             )
             if document is None:
-                raise ValueError(
-                    f"Document {document_id} not found in dossier {dossier_id}"
-                )
+                raise ValueError(f"Document {document_id} not found in dossier {dossier_id}")
 
             pages = document.get("pages", [])
             if not pages:
-                logger.warning(
-                    "No pages for document %s, skipping summary", document_id
-                )
+                logger.warning("No pages for document %s, skipping summary", document_id)
                 api_client.deposit_document_summary(
                     client,
                     document_id,
@@ -59,8 +55,7 @@ def run_document_summary(self, dossier_id: str, document_id: str) -> None:
                 return
 
             content = "\n\n".join(
-                f"--- Page {page['page_number']} ---\n{page.get('content') or '(vide)'}"
-                for page in pages
+                f"--- Page {page['page_number']} ---\n{page.get('content') or '(vide)'}" for page in pages
             )
             content = _truncate(content)
 
@@ -72,15 +67,11 @@ def run_document_summary(self, dossier_id: str, document_id: str) -> None:
             )
             summary = summarize_text(content)
 
-            api_client.deposit_document_summary(
-                client, document_id, content=summary, model=settings.LLM_MODEL
-            )
+            api_client.deposit_document_summary(client, document_id, content=summary, model=settings.LLM_MODEL)
             logger.info("Document summary deposited for %s", document_id)
         except Exception as error:
             logger.exception("Document summary failed for %s", document_id)
-            api_client.set_document_summary_status(
-                client, document_id, status="échec", error=str(error)
-            )
+            api_client.set_document_summary_status(client, document_id, status="échec", error=str(error))
             raise
 
 
@@ -106,12 +97,9 @@ def run_dossier_summary(self, dossier_id: str) -> None:
                     pages = document.get("pages", [])
                     if pages:
                         page_content = "\n".join(
-                            f"Page {p['page_number']}: {p.get('content') or '(vide)'}"
-                            for p in pages
+                            f"Page {p['page_number']}: {p.get('content') or '(vide)'}" for p in pages
                         )
-                        parts.append(
-                            f"### Document : {document['name']}\n{page_content}"
-                        )
+                        parts.append(f"### Document : {document['name']}\n{page_content}")
 
             # Synthèses des agents (ExecutionStep.output)
             for step in dossier.get("execution_steps", []):
@@ -135,13 +123,9 @@ def run_dossier_summary(self, dossier_id: str) -> None:
             logger.info("Summarizing dossier %s (%d chars)", dossier_id, len(content))
             summary = summarize_text(content)
 
-            api_client.deposit_dossier_summary(
-                client, dossier_id, content=summary, model=settings.LLM_MODEL
-            )
+            api_client.deposit_dossier_summary(client, dossier_id, content=summary, model=settings.LLM_MODEL)
             logger.info("Dossier summary deposited for %s", dossier_id)
         except Exception as error:
             logger.exception("Dossier summary failed for %s", dossier_id)
-            api_client.set_dossier_summary_status(
-                client, dossier_id, status="échec", error=str(error)
-            )
+            api_client.set_dossier_summary_status(client, dossier_id, status="échec", error=str(error))
             raise
