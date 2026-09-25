@@ -7,6 +7,7 @@ import InfoModal from "@/components/InfoModal.vue";
 import ReportFormModal from "@/components/ReportFormModal.vue";
 import TutorialModal from "@/components/TutorialModal.vue";
 import { useAuth } from "@/composables/useAuth";
+import { useCgu } from "@/composables/useCgu";
 import { renderMarkdown } from "@/utils/markdown";
 
 // Version lue à la compilation depuis package.json (injectée par Vite via define).
@@ -14,6 +15,7 @@ const APP_VERSION = __APP_VERSION__;
 
 const router = useRouter();
 const { isAuthenticated, userName, isAdmin, profile, loading, login, logout } = useAuth();
+const { fetchActive } = useCgu();
 
 const showUserMenu = ref(false);
 const userWrapper = ref<HTMLElement>();
@@ -79,9 +81,12 @@ async function openCgu() {
   showCgu.value = true;
   if (!cguHtml.value && !cguError.value) {
     try {
-      const res = await fetch("/cgu.md");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      cguHtml.value = renderMarkdown(await res.text());
+      const cgu = await fetchActive();
+      if (cgu === null) {
+        cguError.value = "Aucune version des conditions d'utilisation n'est disponible pour le moment.";
+        return;
+      }
+      cguHtml.value = renderMarkdown(cgu.content);
     } catch {
       cguError.value =
         "Impossible de charger les conditions d'utilisation. Réessayez plus tard.";
