@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.2...v0.5.3) (2026-09-25)
+
+
+### Bug Fixes
+
+* outofsync ([56ab74c](https://github.com/IA-Generative/dig-dig-doc/commit/56ab74c6e329780be93427d8af59718e1023b626))
+
 ## [0.5.2](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.1...v0.5.2) (2026-09-25)
 
 
