@@ -8,6 +8,7 @@ from app.config import KeycloakSettings
 from app.mcp.auth import BearerTokenAuthMiddleware
 from app.mcp.server import mcp_server
 from app.routers.admin_reports import router as admin_reports_router
+from app.routers.agent_conversations import router as agent_conversations_router
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
 from app.routers.app_tokens import router as app_tokens_router
@@ -76,6 +77,11 @@ app = FastAPI(
             "description": "Analyses et dossiers à la demande, temporaires par défaut (TTL) - "
             "voir docs/ephemeral-api.md.",
         },
+        {
+            "name": "Agent",
+            "description": "Conversation avec l'agent helper (recherche/création d'analyses et de dossiers, "
+            "lancement du pipeline) - pas rattachée à un dossier unique, voir docs/mcp-helper-agent-plan.md.",
+        },
     ],
 )
 
@@ -93,6 +99,7 @@ app.include_router(auth_router, prefix="/api/auth")
 app.include_router(health_router, prefix="/api")
 app.include_router(analyses_public_router, prefix="/api")
 app.include_router(analyses_router, prefix="/api")
+app.include_router(agent_conversations_router, prefix="/api")
 app.include_router(dossiers_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(models_router, prefix="/api")

@@ -57,6 +57,11 @@ class AgentConversationRepository:
         await self.db.delete(conversation)
         await self.db.commit()
 
+    async def set_title(self, conversation: AgentConversation, title: str) -> AgentConversation:
+        conversation.title = title
+        await self.db.commit()
+        return await self.get(conversation.id)
+
     async def add_message(
         self,
         conversation: AgentConversation,
