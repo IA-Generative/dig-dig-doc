@@ -22,9 +22,9 @@ class WorkerSettings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_API_BASE_URL: str = ""
     # Modèle vision pour décrire la capture de chaque page (VLM).
-    VLM_MODEL: str = "gpt-4o"
+    VLM_MODEL: str = "pixtral-12b-2409"
     # Modèle texte pour la classification et l'extraction d'entités.
-    LLM_MODEL: str = "gpt-4o"
+    LLM_MODEL: str = "llama-3.3-70b-instruct"
     # Taille de batch pour l'extraction d'entités : nombre de pages
     # envoyées en un seul appel LLM (compromis contexte/coût).
     EXTRACTION_BATCH_SIZE: int = 5
