@@ -22,9 +22,11 @@ from app.schemas.dossier import (
     DocumentPredictionIn,
     DocumentPredictionOut,
     DossierDocumentOut,
+    DossierSummaryOut,
     ExecutionLogIn,
     ExecutionStepCompleteIn,
     ExecutionStepOut,
+    FileHashIn,
     InternalAgentOut,
     InternalAnalyseOut,
     InternalClassificationOut,
@@ -34,6 +36,8 @@ from app.schemas.dossier import (
     InternalExtractionOut,
     InternalLabelDefinitionOut,
     InternalMessageIn,
+    SummaryDepositIn,
+    SummaryStatusIn,
     TextExtractionStatusIn,
 )
 
@@ -97,6 +101,91 @@ async def set_document_extraction_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     await repository.set_text_extraction_status(document, body.status, body.error)
     return document
+
+
+@router.put("/documents/{document_id}/file-hash", response_model=DossierDocumentOut)
+async def set_document_file_hash(
+    document_id: uuid.UUID,
+    body: FileHashIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose le hash SHA-256 d'un document, calculé par le worker
+    document_process au moment de l'extraction (les bytes sont déjà en
+    mémoire)."""
+    repository = DossierRepository(db)
+    document = await repository.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    await repository.set_file_hash(document, body.file_hash)
+    return document
+
+
+@router.put("/documents/{document_id}/summary-status", response_model=DossierDocumentOut)
+async def set_document_summary_status(
+    document_id: uuid.UUID,
+    body: SummaryStatusIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Met à jour le statut de génération du résumé d'un document."""
+    repository = DossierRepository(db)
+    document = await repository.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    await repository.set_document_summary_status(document, body.status, body.error)
+    return document
+
+
+@router.post(
+    "/documents/{document_id}/summaries",
+    response_model=DossierSummaryOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def deposit_document_summary(
+    document_id: uuid.UUID,
+    body: SummaryDepositIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose un nouveau résumé pour un document (append-only). Le worker
+    appelle cette route après génération du résumé via LLM."""
+    repository = DossierRepository(db)
+    document = await repository.get_document_by_id(document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    return await repository.add_document_summary(document, content=body.content, model=body.model)
+
+
+@router.put("/dossiers/{dossier_id}/summary-status", response_model=InternalDossierOut)
+async def set_dossier_summary_status(
+    dossier_id: uuid.UUID,
+    body: SummaryStatusIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Met à jour le statut de génération du résumé global d'un dossier."""
+    repository = DossierRepository(db)
+    dossier = await repository.get(dossier_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    await repository.set_dossier_summary_status(dossier, body.status, body.error)
+    return dossier
+
+
+@router.post(
+    "/dossiers/{dossier_id}/summaries",
+    response_model=DossierSummaryOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def deposit_dossier_summary(
+    dossier_id: uuid.UUID,
+    body: SummaryDepositIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose un nouveau résumé global pour un dossier (append-only). Le
+    worker appelle cette route après génération du résumé via LLM."""
+    repository = DossierRepository(db)
+    dossier = await repository.get(dossier_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    return await repository.add_dossier_summary(dossier, content=body.content, model=body.model)
 
 
 @router.post(

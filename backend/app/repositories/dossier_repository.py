@@ -44,6 +44,11 @@ from app.models.feedback import (
     FeedbackReasonCode,
     FeedbackValue,
 )
+from app.models.summary import (
+    DocumentSummary,
+    DossierSummary,
+    SummaryStatus,
+)
 from app.repositories.analyse_repository import AnalyseRepository
 
 
@@ -64,6 +69,9 @@ class DossierRepository:
                 predictions_load.selectinload(DocumentPrediction.validations).selectinload(
                     PredictionValidation.bounding_box
                 ),
+                # Résumés du dossier + résumés de chaque document (issue #52).
+                selectinload(Dossier.summaries),
+                selectinload(Dossier.documents).selectinload(DossierDocument.summaries),
                 # populate_existing: nécessaire pour le SSE (/dossiers/{id}/stream),
                 # qui réinterroge en boucle sur la même session - sans ça, une
                 # fois le Dossier chargé une première fois, les requêtes
@@ -438,6 +446,7 @@ class DossierRepository:
             predictions_load.selectinload(DocumentPrediction.validations).selectinload(
                 PredictionValidation.bounding_box
             ),
+            selectinload(DossierDocument.summaries),
         )
 
     async def get_document(self, dossier_id: uuid.UUID, document_id: uuid.UUID) -> DossierDocument | None:
@@ -723,3 +732,72 @@ class DossierRepository:
                     await asyncio.to_thread(s3_connector.delete, page.screenshot_key)
         await self.db.delete(dossier)
         await self.db.commit()
+
+    # --- Hash de fichier et résumés (issue #52) ---
+
+    async def set_file_hash(self, document: DossierDocument, file_hash: str) -> None:
+        """Dépose le hash SHA-256 d'un document, calculé par le worker
+        document_process au moment de l'extraction."""
+        document.file_hash = file_hash
+        await self.db.commit()
+
+    async def set_document_summary_status(
+        self,
+        document: DossierDocument,
+        status: SummaryStatus,
+        error: str | None = None,
+    ) -> None:
+        document.summary_status = status
+        document.summary_error = error
+        await self.db.commit()
+
+    async def set_dossier_summary_status(
+        self,
+        dossier: Dossier,
+        status: SummaryStatus,
+        error: str | None = None,
+    ) -> None:
+        dossier.summary_status = status
+        dossier.summary_error = error
+        await self.db.commit()
+
+    async def add_document_summary(
+        self,
+        document: DossierDocument,
+        *,
+        content: str,
+        model: str | None = None,
+    ) -> DocumentSummary:
+        """Insère un nouveau résumé pour un document (append-only) et marque
+        le statut comme terminé. La dernière ligne (par created_at) fait foi
+        comme résumé courant."""
+        summary = DocumentSummary(
+            dossier_document_id=document.id,
+            content=content,
+            model=model,
+        )
+        self.db.add(summary)
+        document.summary_status = SummaryStatus.TERMINE
+        document.summary_error = None
+        await self.db.commit()
+        return summary
+
+    async def add_dossier_summary(
+        self,
+        dossier: Dossier,
+        *,
+        content: str,
+        model: str | None = None,
+    ) -> DossierSummary:
+        """Insère un nouveau résumé global pour un dossier (append-only) et
+        marque le statut comme terminé."""
+        summary = DossierSummary(
+            dossier_id=dossier.id,
+            content=content,
+            model=model,
+        )
+        self.db.add(summary)
+        dossier.summary_status = SummaryStatus.TERMINE
+        dossier.summary_error = None
+        await self.db.commit()
+        return summary

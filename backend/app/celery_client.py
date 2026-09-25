@@ -64,3 +64,27 @@ def dispatch_helper_chat_response(conversation_id: str) -> None:
         args=[conversation_id],
         queue="agent_execution",
     )
+
+
+def dispatch_document_summary(dossier_id: str, document_id: str) -> None:
+    """Dépose la tâche de génération de résumé d'un document sur la file
+    agent_execution (issue #52). Le worker récupère les pages du document,
+    concatène leur contenu, appelle le LLM pour produire un résumé concis,
+    et dépose le résultat via l'API interne."""
+    celery_client.send_task(
+        "app.tasks.run_document_summary",
+        args=[dossier_id, document_id],
+        queue="agent_execution",
+    )
+
+
+def dispatch_dossier_summary(dossier_id: str) -> None:
+    """Dépose la tâche de génération du résumé global d'un dossier sur la
+    file agent_execution (issue #52). Le worker récupère les résumés
+    individuels des documents + les synthèses des agents, et produit une
+    vue d'ensemble du dossier."""
+    celery_client.send_task(
+        "app.tasks.run_dossier_summary",
+        args=[dossier_id],
+        queue="agent_execution",
+    )

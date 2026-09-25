@@ -8,6 +8,7 @@ document (en_attente -> en_cours -> terminé/échec) est reporté au backend à
 chaque étape, pour que le frontend puisse le suivre.
 """
 
+import hashlib
 import logging
 
 from liteparse.types import AnnotationRect
@@ -41,6 +42,12 @@ def extract_document_text(self, document_id: str) -> None:
             logger.info("Extracting text for document %s (%s)", document_id, document["name"])
 
             data = storage.get_object(document["s3_key"])
+
+            # Hash SHA-256 du contenu du fichier (issue #52) : les bytes
+            # sont déjà en mémoire, c'est le moment idéal pour le calculer.
+            file_hash = hashlib.sha256(data).hexdigest()
+            api_client.set_file_hash(client, document_id, file_hash=file_hash)
+
             result = parse_file(data)
             screenshots_by_page = {screenshot.page_num: screenshot for screenshot in result.screenshots}
 
@@ -77,3 +84,13 @@ def extract_document_text(self, document_id: str) -> None:
             raise
         else:
             api_client.set_extraction_status(client, document_id, status="terminé")
+            # Déclenche la génération du résumé du document (issue #52) :
+            # le texte des pages est maintenant disponible, on l'envoie sur
+            # la file agent_execution pour que le LLM le résume.
+            dossier_id = document.get("dossier_id")
+            if dossier_id:
+                celery_app.send_task(
+                    "app.tasks.run_document_summary",
+                    args=[str(dossier_id), document_id],
+                    queue="agent_execution",
+                )

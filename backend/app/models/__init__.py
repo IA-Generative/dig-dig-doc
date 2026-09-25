@@ -37,6 +37,7 @@ from .dossier_ephemere import DossierEphemere
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
 from .report import Report, ReportStatus, ReportType
+from .summary import DocumentSummary, DossierSummary, SummaryStatus
 
 __all__ = [
     "Agent",
@@ -59,10 +60,12 @@ __all__ = [
     "Conversation",
     "DocumentPage",
     "DocumentPrediction",
+    "DocumentSummary",
     "Dossier",
     "DossierDocument",
     "DossierEphemere",
     "DossierStatus",
+    "DossierSummary",
     "EntityDefinition",
     "EntityType",
     "ExecutionLog",
@@ -85,6 +88,7 @@ __all__ = [
     "Report",
     "ReportStatus",
     "ReportType",
+    "SummaryStatus",
     "TextExtractionStatus",
     "VersionedField",
 ]
