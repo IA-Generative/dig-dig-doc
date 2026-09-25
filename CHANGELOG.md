@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.4](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.3...v0.5.4) (2026-09-25)
+
+
+### Bug Fixes
+
+* callback url ([56b25f7](https://github.com/IA-Generative/dig-dig-doc/commit/56b25f75fd3d73e266b8bee38123142f7901a8bc))
+
 ## [0.5.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.2...v0.5.3) (2026-09-25)
 
 
