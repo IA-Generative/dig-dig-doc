@@ -173,23 +173,54 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
   un événement `done` seedé à la main.
 - [x] `uv run pytest` (backend) toujours à 97 passed.
 
-## Phase 6 — Serveur MCP helper (`backend/app/mcp/helper_server.py`)
+## Phase 6 — Serveur MCP helper (`backend/app/mcp/helper_server.py`) ✅ fait le 2026-09-25
 
-- [ ] Nouveau `MCPServer` (nom `dig-dig-doc-helper`), monté sous `/mcp/helper` dans `app/main.py`
-  (même `BearerTokenAuthMiddleware` que `/mcp`, cf. `app.mount("/mcp", ...)` existant).
-- [ ] Tools, appelant directement les fonctions de router (comme `app/mcp/server.py` le fait pour
-  l'éphémère, avec `async with async_session_factory() as db`) :
-  `list_analyses`, `search_analyses`, `get_analysis`, `create_analysis`, `create_dossier`,
-  `add_dossier_files`, `list_dossiers`, `get_dossier`, `run_dossier` (→ `launch_dossier`),
+- [x] Nouveau `MCPServer` (nom `dig-dig-doc-helper`), monté sous `/mcp/helper` dans `app/main.py`
+  (même `BearerTokenAuthMiddleware` que `/mcp`). **Piège d'ordre de montage** : Starlette résout
+  les `Mount` par préfixe dans l'ordre d'enregistrement, et `/mcp/helper/...` commence aussi par
+  `/mcp` - `app.mount("/mcp/helper", ...)` doit être enregistré **avant**
+  `app.mount("/mcp", ...)`, sinon tout irait au mauvais sous-app. Le lifespan du helper
+  (`helper_mcp_app.router.lifespan_context`) est entré dans le même `async with` que celui de
+  l'éphémère.
+- [x] Tools, appelant directement les fonctions de router (comme `app/mcp/server.py` le fait pour
+  l'éphémère) : `list_analyses`, `search_analyses`, `get_analysis`, `create_analysis`,
+  `create_dossier`, `add_dossier_files` (réutilise directement
+  `internal_agent.py::add_agent_dossier_files` - même logique base64→S3 que Phase 3, pas
+  dupliquée), `list_dossiers`, `get_dossier`, `run_dossier` (→ `launch_dossier`),
   `get_dossier_results` (→ `get_dossier`).
-- [ ] `conversation_id` optionnel sur chaque tool (décision de l'issue) : si fourni, journalise un
-  `agent_message` `tool_call`/`tool_result` via `AgentConversationRepository`, scopé par
-  `identity.id` (`get_current_identity()`, comme `app/mcp/server.py`).
-- [ ] Pas de tool dédié `start_agent_conversation` côté MCP (design final de l'issue) — un client
-  externe qui veut journaliser crée la conversation via l'API interne/produit au préalable, ou on
-  ajoute un tool `create_agent_conversation` minimal si ça s'avère plus pratique à l'usage (à
-  garder en tête, non bloquant).
-- [ ] Tests `backend/tests/test_mcp_helper.py`, sur le modèle de `test_mcp.py`.
+- [x] **Découverte en cours de route, importante** : contrairement aux endpoints `analyses.py`
+  (qui renvoient explicitement des schémas Pydantic - `AnalyseOut`/`Page[AnalyseListItem]` -
+  utilisables tels quels), les endpoints `dossiers.py` (`create_dossier`, `get_dossier`,
+  `launch_dossier`, `list_dossiers`) renvoient l'objet **ORM** `Dossier` brut : la conversion vers
+  `DossierOut` est normalement faite par FastAPI via `response_model`, qui ne s'applique **pas**
+  quand on appelle la fonction Python directement (bypass total du framework, même mécanisme que
+  l'éphémère). D'où un helper `_dossier_out()` qui fait `DossierOut.model_validate(dossier)
+  .model_dump(mode="json")` partout où c'est nécessaire, et `list_dossiers` reconstruit sa propre
+  pagination via `DossierRepository.list_paginated()` plutôt que d'appeler le router
+  `list_dossiers` (dont le typage `Page[T]` non paramétré au moment de l'appel direct est ambigu).
+- [x] `conversation_id` optionnel sur chaque tool (décision de l'issue) : centralisé dans un
+  helper `_call_traced()` qui journalise `tool_call` avant l'appel et `tool_result`/`error` après
+  (scope vérifié : `conversation.created_by == identity.id`, 404 sinon) et convertit au passage
+  les `HTTPException` en `{"error", "status_code"}` - un seul endroit pour cette logique plutôt
+  que répétée dans chaque tool.
+- [x] Décision tranchée (différent de la formulation initiale de l'issue) : un tool
+  `create_agent_conversation(title=None)` **a été ajouté** côté MCP (pas seulement gardé "en
+  tête") - sans lui, un client MCP externe (auth par jeton API, pas Keycloak) n'a aucun moyen
+  d'obtenir un `conversation_id` à journaliser, `/api/agent-conversations` (Phase 5) étant
+  réservé à l'auth Keycloak produit. Pas de `list_agent_conversations`/`get_agent_conversation`
+  côté MCP (ceux-là restent uniquement côté produit, Phase 5).
+- [x] `backend/tests/test_mcp_helper.py` (3 tests, vrai client MCP comme `test_mcp.py` - handshake
+  et session Streamable HTTP, pas d'appel direct aux tools) : cycle complet (conversation → analyse
+  → dossier → fichiers → run → résultats), 401 sans jeton, et **isolation entre jetons API** sur
+  `conversation_id` (jeton B ne peut pas journaliser sur une conversation créée par le jeton A).
+  **Piège rencontré** : l'URL du client MCP doit avoir un slash final
+  (`http://testserver/mcp/helper/`) - sans lui, `POST /mcp/helper` renvoie 404 au lieu du 307
+  redirect habituel (le serveur éphémère fonctionne avec ou sans, la différence n'est pas
+  élucidée plus avant, non bloquant).
+- [x] `mcp/README.md` : nouvelle section "Serveur MCP helper" (config client, tableau des tools,
+  scénario complet), sous-titres démotés d'un niveau (`##`→`###`) pour rester sous l'unique `#`
+  du document.
+- [x] `uv run pytest` (backend) à 100 passed (97 + 3 nouveaux tests MCP helper).
 
 ## Phase 7 — Worker (`worker/agent_execution`)
 

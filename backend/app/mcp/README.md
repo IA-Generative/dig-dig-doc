@@ -167,3 +167,92 @@ puis supprime tout (documents, résultats, fichiers) immédiatement.
 5. `delete_ephemeral_run` (et éventuellement `delete_ephemeral_analysis`
    si elle n'est pas réutilisée) si le résultat n'a plus besoin d'être
    conservé - sinon, laisser faire la purge automatique au TTL.
+
+## Serveur MCP helper (issue #50)
+
+Un second serveur MCP, distinct du précédent, qui expose l'API **classique**
+(`/api/analyses`, `/api/dossiers`) plutôt que l'éphémère : recherche/création
+d'analyses et de dossiers **persistants** (pas de TTL), ajout de fichiers,
+lancement du pipeline en asynchrone, consultation des résultats. Design
+complet dans `docs/mcp-helper-agent-plan.md`.
+
+### Ce que c'est - et ce que ce n'est pas
+
+- Même process backend, même pattern d'appel direct aux fonctions des
+  routers REST (pas d'aller-retour HTTP) que le serveur éphémère - voir
+  `app/mcp/helper_server.py`.
+- Transport Streamable HTTP, monté sous `/mcp/helper` (donc
+  `http://localhost:8000/mcp/helper` en dev local, ou
+  `<BACKEND_PUBLIC_URL>/mcp/helper` en déploiement) - **séparé** de `/mcp`
+  (l'éphémère), pas une extension de celui-ci : deux cycles de vie
+  différents (one-shot vs persistant/interactif).
+- Même auth par jeton API (`POST /api/app-tokens`) que le serveur éphémère.
+- **Persistant, pas de TTL** : contrairement à `/mcp`, les analyses et
+  dossiers créés ici sont les mêmes ressources durables que celles gérées
+  depuis l'UI - aucune purge automatique.
+- Chaque tool accepte un `conversation_id` optionnel, obtenu via
+  `create_agent_conversation` : s'il est fourni, l'appel (arguments +
+  résultat) est journalisé dans `agent_messages`, pour l'audit ou pour
+  qu'un futur agent conversationnel interne au produit (modal, à venir)
+  retrouve l'historique de ce que l'agent a fait. Sans lui, le serveur
+  reste stateless comme `/mcp` : le client porte son propre contexte.
+
+### Déclarer le serveur dans un client MCP
+
+#### Claude Code
+
+```bash
+claude mcp add --transport http dig-dig-doc-helper http://localhost:8000/mcp/helper \
+  --header "Authorization: Bearer <votre-jeton-api>"
+```
+
+#### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "dig-dig-doc-helper": {
+      "url": "http://localhost:8000/mcp/helper",
+      "headers": {
+        "Authorization": "Bearer <votre-jeton-api>"
+      }
+    }
+  }
+}
+```
+
+### Tools exposés
+
+Mêmes conventions que le serveur éphémère : les erreurs (404, 400...) sont
+renvoyées comme `{"error": str, "status_code": int}` plutôt que comme une
+erreur de protocole MCP.
+
+| Tool | Endpoint REST équivalent | Description |
+| ---- | ------------------------- | ------------ |
+| `create_agent_conversation` | *(aucun)* | Crée une conversation pour journaliser les appels suivants. `{"conversation_id": "<uuid>"}`. |
+| `list_analyses` | `GET /api/analyses` | Liste paginée des analyses persistantes. |
+| `search_analyses` | `GET /api/analyses?q=` | Recherche par nom (insensible à la casse). |
+| `get_analysis` | `GET /api/analyses/{id}` | Détail complet (labels, entités, agents, prompts). |
+| `create_analysis` | `POST /api/analyses` | Crée une analyse (nom + description seulement - la classification/extraction/agents se configurent ensuite via la plateforme). |
+| `create_dossier` | `POST /api/dossiers` | Crée un dossier lié à une analyse. |
+| `add_dossier_files` | `POST /api/dossiers/{id}/documents` | Ajoute des fichiers (base64). |
+| `list_dossiers` | `GET /api/dossiers` | Liste paginée des dossiers. |
+| `get_dossier` | `GET /api/dossiers/{id}` | Détail d'un dossier (documents, statut, étapes, résultats). |
+| `run_dossier` | `POST /api/dossiers/{id}/launch` | Lance le pipeline en asynchrone (classification, extraction, agents). |
+| `get_dossier_results` | `GET /api/dossiers/{id}` | Alias de `get_dossier`, à appeler en boucle jusqu'à statut terminal. |
+
+Tous les tools sauf `create_agent_conversation` acceptent en plus un
+paramètre optionnel `conversation_id: str`.
+
+### Scénario complet
+
+1. `create_agent_conversation` (optionnel) → récupère `conversation_id`.
+2. `search_analyses` ou `create_analysis` → récupère `analyse_id`.
+3. `create_dossier` avec cet `analyse_id` → récupère `dossier_id`.
+4. `add_dossier_files` avec les fichiers (base64).
+5. `run_dossier` → démarre le pipeline, revient immédiatement.
+6. `get_dossier_results` en boucle (avec une pause entre chaque appel)
+   jusqu'à ce que `status` soit `termine`, `arrete` ou `echec`.
+7. Exploiter le résultat (`execution_steps[].output`,
+   `documents[].pages[].predictions`) - rien à supprimer, ces ressources
+   sont persistantes.
