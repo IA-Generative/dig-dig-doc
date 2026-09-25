@@ -64,6 +64,15 @@ const navItems = [
   { to: "/analyses", label: "Analyses", icon: "ri-file-list-3-line" },
   { to: "/dossiers", label: "Dossiers", icon: "ri-folder-line" },
 ];
+
+// Logo Marianne (profil officiel français) affiché dans la sidebar et
+// utilisé comme favicon. Le SVG est inline pour éviter une requête
+// supplémentaire et reste net à toutes les tailles.
+const MARIANNE_SVG = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Marianne">
+  <rect width="100" height="100" rx="6" fill="#000091"/>
+  <path d="M50 20 C39 20 31 29 31 41 C31 49 34 55 39 59 C35 63 33 69 33 77 L33 100 L67 100 L67 77 C67 69 65 63 61 59 C66 55 69 49 69 41 C69 29 61 20 50 20 Z" fill="#fff"/>
+  <path d="M31 41 C29 33 33 23 42 20 C38 27 36 34 38 41 L31 41 Z M69 41 C71 33 67 23 58 20 C62 27 64 34 62 41 L69 41 Z" fill="#e1000f"/>
+</svg>`;
 </script>
 
 <template>
@@ -73,12 +82,16 @@ const navItems = [
   <!-- Application (connecté) : sidebar façon Muffin + contenu -->
   <div v-else class="app-shell">
     <aside class="app-sidebar" :class="{ 'app-sidebar--collapsed': isSidebarCollapsed }">
-      <!-- Brand : logo + bouton collapse -->
-      <div class="app-sidebar__brand">
-        <p class="app-sidebar__logo">
-          <span v-if="!isSidebarCollapsed">dig-dig-doc</span>
-          <span v-else class="app-sidebar__logo-badge">d</span>
-        </p>
+      <!-- Brand : logo Marianne + bouton collapse -->
+      <div
+        class="app-sidebar__brand"
+        title="Creuser dans vos dossiers pour trouver de la valeur"
+      >
+        <div class="app-sidebar__logo">
+          <span class="app-sidebar__logo-marianne" v-html="MARIANNE_SVG" />
+          <span v-if="!isSidebarCollapsed" class="app-sidebar__logo-text">dig-dig-doc</span>
+          <span v-else class="app-sidebar__logo-badge">DDD</span>
+        </div>
         <button
           type="button"
           class="app-sidebar__collapse-toggle"
@@ -188,33 +201,47 @@ const navItems = [
 }
 
 .app-sidebar__logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 1.05rem;
   font-weight: 700;
   color: var(--text-default-grey);
   margin: 0;
   min-width: 0;
   overflow: hidden;
+}
+
+.app-sidebar__logo-marianne {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-sidebar__logo-marianne :deep(svg) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.25rem;
+}
+
+.app-sidebar__logo-text {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-sidebar--collapsed .app-sidebar__brand {
+.app-sidebar--collapsed .app-sidebar__logo {
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.app-sidebar--collapsed .app-sidebar__logo {
-  width: 1.5rem;
-  height: 1.5rem;
-  min-width: 1.5rem;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-  border-radius: 0.375rem;
-  background: var(--background-action-high-blue-france);
-  color: var(--text-inverted-blue-france);
+.app-sidebar--collapsed .app-sidebar__logo-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-default-grey);
 }
 
 .app-sidebar__collapse-toggle {
