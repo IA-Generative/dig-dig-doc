@@ -1,7 +1,13 @@
 import { computed, reactive, ref } from "vue";
 
 import { API_BASE_URL, apiFetch } from "@/utils/api";
-import type { Dossier, DossierDocument, ExecutionStep, Summary } from "@/types/dossier";
+import type {
+  AnalyseSuggestion,
+  Dossier,
+  DossierDocument,
+  ExecutionStep,
+  Summary,
+} from "@/types/dossier";
 
 function mapSummary(api: any): Summary | undefined {
   if (!api) return undefined;
@@ -42,11 +48,20 @@ function mapStep(api: any): ExecutionStep {
   };
 }
 
+function mapSuggestion(api: any): AnalyseSuggestion {
+  return {
+    analyseId: api.analyse_id,
+    name: api.name,
+    score: api.score,
+    rationale: api.rationale,
+  };
+}
+
 function mapDossier(api: any): Dossier {
   return {
     id: api.id,
     name: api.name,
-    analyseId: api.analyse_id,
+    analyseId: api.analyse_id ?? undefined,
     analyseVersion: api.analyse_version,
     createdAt: api.created_at,
     status: api.status,
@@ -57,6 +72,8 @@ function mapDossier(api: any): Dossier {
     summaryStatus: api.summary_status,
     summaryError: api.summary_error ?? undefined,
     summary: mapSummary(api.summary),
+    suggestionStatus: api.suggestion_status,
+    suggestedAnalyses: api.suggested_analyses?.map(mapSuggestion),
   };
 }
 
@@ -100,10 +117,12 @@ export function useDossiers() {
     return dossier;
   };
 
-  const create = async (name: string, analyseId: string) => {
+  const create = async (name: string, analyseId?: string) => {
+    const body: Record<string, string> = { name };
+    if (analyseId) body.analyse_id = analyseId;
     const data = await apiFetch<any>("/api/dossiers", {
       method: "POST",
-      body: JSON.stringify({ name, analyse_id: analyseId }),
+      body: JSON.stringify(body),
     });
     const dossier = mapDossier(data);
     upsert(dossier);
@@ -145,6 +164,25 @@ export function useDossiers() {
   // Régénère le résumé global du dossier (issue #52).
   const regenerateDossierSummary = async (dossierId: string) => {
     await apiFetch<any>(`/api/dossiers/${dossierId}/summary`, { method: "POST" });
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}`);
+    upsert(mapDossier(data));
+  };
+
+  // Déclenche la génération des suggestions d'analyse pour un dossier
+  // « à ranger » (issue #54).
+  const suggestAnalyse = async (dossierId: string) => {
+    await apiFetch<any>(`/api/dossiers/${dossierId}/suggest-analysis`, { method: "POST" });
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}`);
+    upsert(mapDossier(data));
+  };
+
+  // Valide le rattachement d'un dossier « à ranger » à une analyse
+  // (issue #54).
+  const assignAnalyse = async (dossierId: string, analyseId: string) => {
+    await apiFetch<any>(`/api/dossiers/${dossierId}/assign`, {
+      method: "POST",
+      body: JSON.stringify({ analyse_id: analyseId }),
+    });
     const data = await apiFetch<any>(`/api/dossiers/${dossierId}`);
     upsert(mapDossier(data));
   };
@@ -197,6 +235,8 @@ export function useDossiers() {
     stop,
     regenerateDocumentSummary,
     regenerateDossierSummary,
+    suggestAnalyse,
+    assignAnalyse,
     streamDossier,
   };
 }

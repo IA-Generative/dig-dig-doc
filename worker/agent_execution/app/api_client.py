@@ -259,3 +259,24 @@ def deposit_dossier_summary(client: httpx.Client, dossier_id: str, *, content: s
     )
     response.raise_for_status()
     return response.json()
+
+
+# --- Analyse suggestions (issue #54 : dossier « à ranger ») ---
+
+
+def set_suggestion_status(client: httpx.Client, dossier_id: str, *, status: str, error: str | None = None) -> dict:
+    response = client.put(
+        f"/dossiers/{dossier_id}/suggestion-status",
+        json={"status": status, "error": error},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def deposit_suggested_analyses(client: httpx.Client, dossier_id: str, *, suggestions: list[dict]) -> dict:
+    response = client.post(
+        f"/dossiers/{dossier_id}/suggestions",
+        json={"suggestions": suggestions},
+    )
+    response.raise_for_status()
+    return response.json()

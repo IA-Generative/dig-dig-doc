@@ -51,6 +51,23 @@ export const SUMMARY_STATUS_LABELS: Record<SummaryStatus, string> = {
   échec: "Échec du résumé",
 };
 
+export type SuggestionStatus = "en_attente" | "en_cours" | "terminé" | "échec";
+
+export const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
+  en_attente: "Suggestion en attente",
+  en_cours: "Suggestion en cours",
+  terminé: "Suggestions prêtes",
+  échec: "Échec de la suggestion",
+};
+
+/** Suggestion d'analyse pour un dossier « à ranger » (issue #54). */
+export interface AnalyseSuggestion {
+  analyseId: string;
+  name: string;
+  score: number;
+  rationale: string;
+}
+
 /** Résumé d'un document ou d'un dossier (version append-only, la plus récente gagne). */
 export interface Summary {
   id: string;
@@ -82,8 +99,12 @@ export interface DossierDocument {
 export interface Dossier {
   id: string;
   name: string;
-  /** Une analyse est obligatoire : un dossier ne peut pas exister sans être lié à une analyse. */
-  analyseId: string;
+  /**
+   * Analyse rattachée au dossier. Optionnel : un dossier « à ranger » peut
+   * être créé sans analyse, puis recevoir des suggestions via le LLM
+   * (issue #54).
+   */
+  analyseId?: string;
   /** Version de l'analyse utilisée pour l'exécution (snapshot au lancement). */
   analyseVersion: string;
   createdAt: string;
@@ -97,4 +118,8 @@ export interface Dossier {
   summaryError?: string;
   /** Dernier résumé global généré avec succès, ou undefined si aucun. */
   summary?: Summary;
+  /** Suivi de la génération des suggestions d'analyse (issue #54). */
+  suggestionStatus: SuggestionStatus;
+  /** Suggestions d'analyse générées par le LLM, ou undefined si aucune. */
+  suggestedAnalyses?: AnalyseSuggestion[];
 }

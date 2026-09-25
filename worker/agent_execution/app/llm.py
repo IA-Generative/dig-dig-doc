@@ -215,3 +215,72 @@ def summarize_text(content: str, *, max_tokens: int = 500) -> str:
         temperature=0.1,
     )
     return response.choices[0].message.content or ""
+
+
+# ---------------------------------------------------------------------------
+# LLM : suggestion d'analyse pour dossier « à ranger » (issue #54)
+# ---------------------------------------------------------------------------
+
+
+class AnalyseSuggestion(BaseModel):
+    """Une analyse candidate pour un dossier « à ranger », avec un score de
+    pertinence et une justification."""
+
+    analyse_id: str = Field(description="Identifiant UUID de l'analyse")
+    score: float = Field(description="Score de pertinence entre 0 et 1", ge=0.0, le=1.0)
+    rationale: str = Field(description="Brève justification du score (1-2 phrases)")
+
+
+class SuggestionResult(BaseModel):
+    """Résultat de la suggestion d'analyse : liste triée par pertinence
+    décroissante."""
+
+    suggestions: list[AnalyseSuggestion] = Field(
+        description="Liste des analyses candidates, triées par score décroissant"
+    )
+
+
+_SUGGESTION_SYSTEM_PROMPT = (
+    "Tu es un assistant de classification documentaire. "
+    "On te fournit le résumé d'un dossier (ensemble de documents) et la liste "
+    "des analyses disponibles (chacune avec son nom et sa description). "
+    "Ton rôle est d'identifier quelles analyses sont les plus pertinentes "
+    "pour ce dossier, en justifiant ton choix. "
+    "Réponds uniquement avec le JSON demandé."
+)
+
+
+def suggest_analyses(
+    *,
+    dossier_summary: str,
+    analyses: list[dict],
+) -> SuggestionResult:
+    """Demande au LLM de classer les analyses disponibles par pertinence
+    pour un dossier « à ranger ». Chaque analyse est un dict avec `id`,
+    `name`, et `description`. Renvoie un résultat structuré
+    (SuggestionResult) garantissant que chaque suggestion référence une
+    analyse fournie."""
+    if not analyses:
+        return SuggestionResult(suggestions=[])
+
+    analyses_desc = "\n".join(
+        f"- ID: {a['id']} | Nom: {a['name']} | Description: {a.get('description') or '(aucune)'}"
+        for a in analyses
+    )
+    user_content = (
+        f"## Résumé du dossier\n\n{dossier_summary or '(dossier sans contenu)'}\n\n"
+        f"## Analyses disponibles\n\n{analyses_desc}\n\n"
+        f"Quelles analyses sont les plus pertinentes pour ce dossier ? "
+        f"Donne un score entre 0 et 1 pour chaque analyse, avec une brève "
+        f"justification. Trie par score décroissant."
+    )
+    response = _client().beta.chat.completions.parse(
+        model=settings.LLM_MODEL,
+        messages=[
+            {"role": "system", "content": _SUGGESTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        response_format=SuggestionResult,
+        temperature=0.1,
+    )
+    return response.choices[0].message.parsed

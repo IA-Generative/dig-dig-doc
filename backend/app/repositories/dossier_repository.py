@@ -35,6 +35,7 @@ from app.models.dossier import (
     ExecutionStep,
     ExecutionStepKind,
     ExecutionStepStatus,
+    SuggestionStatus,
     TextExtractionStatus,
 )
 from app.models.execution_log import ExecutionLog, ExecutionLogLevel
@@ -96,11 +97,11 @@ class DossierRepository:
         result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))
         return result.scalar_one_or_none()
 
-    async def create(self, *, name: str, analyse: Analyse) -> Dossier:
+    async def create(self, *, name: str, analyse: Analyse | None = None) -> Dossier:
         dossier = Dossier(
             name=name,
-            analyse_id=analyse.id,
-            analyse_version=self._analyse_repository.get_version_label(analyse),
+            analyse_id=analyse.id if analyse else None,
+            analyse_version=self._analyse_repository.get_version_label(analyse) if analyse else "v1",
             status=DossierStatus.EN_ATTENTE,
         )
         self.db.add(dossier)
@@ -801,3 +802,37 @@ class DossierRepository:
         dossier.summary_error = None
         await self.db.commit()
         return summary
+
+    # --- Suggestions d'analyse (issue #54 : dossier « à ranger ») ---
+
+    async def set_suggestion_status(
+        self,
+        dossier: Dossier,
+        status: SuggestionStatus,
+        error: str | None = None,
+    ) -> None:
+        """Met à jour le statut de génération des suggestions d'analyse."""
+        dossier.suggestion_status = status
+        # Pas de champ suggestion_error dédié : on loge l'erreur dans
+        # summary_error (qui sert déjà de canal d'erreur pour les résumés).
+        if error:
+            dossier.summary_error = error
+        await self.db.commit()
+
+    async def set_suggested_analyses(
+        self,
+        dossier: Dossier,
+        suggestions: list[dict],
+    ) -> None:
+        """Dépose les suggestions d'analyse générées par le LLM et marque le
+        statut comme terminé."""
+        dossier.suggested_analyses = suggestions
+        dossier.suggestion_status = SuggestionStatus.TERMINE
+        await self.db.commit()
+
+    async def assign_analyse(self, dossier: Dossier, analyse: Analyse) -> None:
+        """Valide le rattachement d'un dossier « à ranger » à une analyse.
+        Met à jour analyse_id et analyse_version."""
+        dossier.analyse_id = analyse.id
+        dossier.analyse_version = self._analyse_repository.get_version_label(analyse)
+        await self.db.commit()

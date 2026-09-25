@@ -649,3 +649,132 @@ def test_feedback_is_private_to_its_user(client: TestClient) -> None:
         assert response.status_code == 404
     finally:
         del app.dependency_overrides[get_current_user]
+
+
+# ---------------------------------------------------------------------------
+# Issue #54 : « Dossier à ranger » — suggestion automatique d'analyse
+# ---------------------------------------------------------------------------
+
+
+def test_create_dossier_without_analyse(client: TestClient) -> None:
+    """Un dossier peut être créé sans analyse (« à ranger »).
+    Le statut de suggestion démarre à en_attente."""
+    dossier = client.post("/api/dossiers", json={"name": "Dossier à ranger"}).json()
+    assert dossier["analyse_id"] is None
+    assert dossier["suggestion_status"] == "en_attente"
+    assert dossier["suggested_analyses"] is None
+
+
+def test_suggest_analysis_dispatches_celery_task(client: TestClient, monkeypatch) -> None:
+    """POST /dossiers/{id}/suggest-analysis dispatche la tâche Celery."""
+    dossier = client.post("/api/dossiers", json={"name": "Dossier suggestion"}).json()
+
+    dispatched: list[str] = []
+    monkeypatch.setattr("app.routers.dossiers.dispatch_analyse_suggestion", lambda d: dispatched.append(d))
+
+    response = client.post(f"/api/dossiers/{dossier['id']}/suggest-analysis")
+    assert response.status_code == 200
+    assert dispatched == [dossier["id"]]
+
+
+def test_assign_analyse_to_dossier(client: TestClient) -> None:
+    """POST /dossiers/{id}/assign rattache une analyse valide à un dossier
+    « à ranger » et récupère la version courante de l'analyse."""
+    analyse_id = _create_analyse(client, "Analyse à rattacher")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier à assigner"}).json()
+    assert dossier["analyse_id"] is None
+
+    response = client.post(f"/api/dossiers/{dossier['id']}/assign", json={"analyse_id": analyse_id})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["analyse_id"] == analyse_id
+    assert body["analyse_version"] == "v1"
+
+
+def test_assign_analyse_404_for_unknown_dossier(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse 404 assign")
+    response = client.post(f"/api/dossiers/{uuid.uuid4()}/assign", json={"analyse_id": analyse_id})
+    assert response.status_code == 404
+
+
+def test_assign_analyse_400_for_unknown_analyse(client: TestClient) -> None:
+    dossier = client.post("/api/dossiers", json={"name": "Dossier assign 400"}).json()
+    response = client.post(f"/api/dossiers/{dossier['id']}/assign", json={"analyse_id": str(uuid.uuid4())})
+    assert response.status_code == 400
+
+
+def test_internal_set_suggestion_status(client: TestClient) -> None:
+    """PUT /internal/dossiers/{id}/suggestion-status met à jour le statut."""
+    dossier = client.post("/api/dossiers", json={"name": "Dossier statut suggestion"}).json()
+
+    response = client.put(
+        f"/api/internal/dossiers/{dossier['id']}/suggestion-status",
+        json={"status": "en_cours"},
+        headers=INTERNAL_HEADERS,
+    )
+    assert response.status_code == 200
+    assert response.json()["suggestion_status"] == "en_cours"
+
+    response = client.put(
+        f"/api/internal/dossiers/{dossier['id']}/suggestion-status",
+        json={"status": "échec", "error": "LLM indisponible"},
+        headers=INTERNAL_HEADERS,
+    )
+    assert response.status_code == 200
+    assert response.json()["suggestion_status"] == "échec"
+
+    # L'erreur est stockée dans summary_error (canal d'erreur partagé) :
+    # vérifiable via l'endpoint public qui expose ce champ.
+    public = client.get(f"/api/dossiers/{dossier['id']}").json()
+    assert public["summary_error"] == "LLM indisponible"
+
+
+def test_internal_deposit_suggested_analyses(client: TestClient) -> None:
+    """POST /internal/dossiers/{id}/suggestions dépose les suggestions du
+    worker et passe le statut à terminé."""
+    analyse_id = _create_analyse(client, "Analyse suggérée")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier dépôt suggestions"}).json()
+
+    suggestions = [
+        {"analyse_id": analyse_id, "name": "Analyse suggérée", "score": 0.92, "rationale": "Correspondance forte."},
+        {"analyse_id": str(uuid.uuid4()), "name": "Autre analyse", "score": 0.45, "rationale": "Moins pertinent."},
+    ]
+    response = client.post(
+        f"/api/internal/dossiers/{dossier['id']}/suggestions",
+        json={"suggestions": suggestions},
+        headers=INTERNAL_HEADERS,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["suggestion_status"] == "terminé"
+    assert len(body["suggested_analyses"]) == 2
+    assert body["suggested_analyses"][0]["analyse_id"] == analyse_id
+    assert body["suggested_analyses"][0]["score"] == 0.92
+
+
+def test_internal_deposit_suggestions_404(client: TestClient) -> None:
+    response = client.post(
+        f"/api/internal/dossiers/{uuid.uuid4()}/suggestions",
+        json={"suggestions": []},
+        headers=INTERNAL_HEADERS,
+    )
+    assert response.status_code == 404
+
+
+def test_internal_suggestion_routes_require_app_token(client: TestClient) -> None:
+    dossier = client.post("/api/dossiers", json={"name": "Dossier token suggestion"}).json()
+
+    # Sans token : 401 (ou 422 si le header est absent selon FastAPI).
+    response = client.put(
+        f"/api/internal/dossiers/{dossier['id']}/suggestion-status",
+        json={"status": "en_cours"},
+    )
+    assert response.status_code in (401, 422)
+
+    # Mauvais token : 401.
+    response = client.put(
+        f"/api/internal/dossiers/{dossier['id']}/suggestion-status",
+        json={"status": "en_cours"},
+        headers={"X-App-Token": "wrong-token"},
+    )
+    assert response.status_code == 401

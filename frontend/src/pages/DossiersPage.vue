@@ -5,10 +5,16 @@ import { RouterLink, useRouter } from "vue-router";
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
-import { DOSSIER_STATUS_LABELS, type Dossier, type DossierStatus } from "@/types/dossier";
+import {
+  DOSSIER_STATUS_LABELS,
+  SUGGESTION_STATUS_LABELS,
+  type Dossier,
+  type DossierStatus,
+  type SuggestionStatus,
+} from "@/types/dossier";
 
 const router = useRouter();
-const { list: dossiers, pageCount, fetchList, launch, stop } = useDossiers();
+const { list: dossiers, pageCount, fetchList, launch, stop, suggestAnalyse } = useDossiers();
 const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 
 const isCreateModalOpened = ref(false);
@@ -36,6 +42,7 @@ const statusBadgeType: Record<DossierStatus, "new" | "info" | "success" | "warni
 };
 
 function analyseName(dossier: Dossier) {
+  if (!dossier.analyseId) return "À ranger";
   return analyses.value.find((a) => a.id === dossier.analyseId)?.name ?? "Analyse introuvable";
 }
 
@@ -56,8 +63,19 @@ function relevantDate(dossier: Dossier) {
   return dossier.createdAt;
 }
 
+const suggestionBadgeType: Record<SuggestionStatus, "new" | "info" | "success" | "warning" | "error"> = {
+  en_attente: "new",
+  en_cours: "info",
+  terminé: "success",
+  échec: "error",
+};
+
 function goToDossier(dossier: Dossier) {
   router.push(`/dossiers/${dossier.id}`);
+}
+
+function isUnassigned(dossier: Dossier) {
+  return !dossier.analyseId;
 }
 </script>
 
@@ -102,7 +120,14 @@ function goToDossier(dossier: Dossier) {
                   <td>
                     <div class="dossiers-page__analyse-cell">
                       <span class="dossiers-page__analyse-name">{{ analyseName(dossier) }}</span>
-                      <span class="fr-text--xs dossiers-page__version">v{{ dossier.analyseVersion }}</span>
+                      <span v-if="!isUnassigned(dossier)" class="fr-text--xs dossiers-page__version">v{{ dossier.analyseVersion }}</span>
+                      <DsfrBadge
+                        v-if="isUnassigned(dossier)"
+                        :label="SUGGESTION_STATUS_LABELS[dossier.suggestionStatus]"
+                        :type="suggestionBadgeType[dossier.suggestionStatus]"
+                        small
+                        class="dossiers-page__suggestion-badge"
+                      />
                     </div>
                   </td>
                   <td><DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small /></td>
@@ -115,7 +140,16 @@ function goToDossier(dossier: Dossier) {
                   <td @click.stop>
                     <div class="dossiers-page__actions">
                       <DsfrButton
-                        v-if="dossier.status === 'en_cours'"
+                        v-if="isUnassigned(dossier)"
+                        label="Suggérer"
+                        secondary
+                        icon="ri-lightbulb-flash-line"
+                        size="sm"
+                        :disabled="dossier.suggestionStatus === 'en_cours'"
+                        @click="suggestAnalyse(dossier.id)"
+                      />
+                      <DsfrButton
+                        v-else-if="dossier.status === 'en_cours'"
                         label="Arrêter"
                         secondary
                         icon="ri-stop-circle-line"
@@ -123,7 +157,7 @@ function goToDossier(dossier: Dossier) {
                         @click="stop(dossier.id)"
                       />
                       <DsfrButton
-                        v-else-if="dossier.status === 'en_attente' || dossier.status === 'arrêté'"
+                        v-else-if="(dossier.status === 'en_attente' || dossier.status === 'arrêté') && !isUnassigned(dossier)"
                         label="Lancer"
                         icon="ri-play-circle-line"
                         size="sm"
@@ -199,6 +233,10 @@ function goToDossier(dossier: Dossier) {
 
 .dossiers-page__version {
   color: var(--text-mention-grey);
+}
+
+.dossiers-page__suggestion-badge {
+  margin-top: 0.25rem;
 }
 
 .dossiers-page__date-cell {
