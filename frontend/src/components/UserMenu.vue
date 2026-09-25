@@ -5,6 +5,7 @@ import { useRouter } from "vue-router";
 import HelperAgentModal from "@/components/HelperAgentModal.vue";
 import InfoModal from "@/components/InfoModal.vue";
 import ReportFormModal from "@/components/ReportFormModal.vue";
+import TutorialModal from "@/components/TutorialModal.vue";
 import { useAuth } from "@/composables/useAuth";
 import { renderMarkdown } from "@/utils/markdown";
 
@@ -22,6 +23,7 @@ const showChangelog = ref(false);
 const showCgu = ref(false);
 const showReport = ref(false);
 const showHelperAgent = ref(false);
+const showTutorials = ref(false);
 
 const changelogHtml = ref("");
 const cguHtml = ref("");
@@ -97,6 +99,11 @@ function openHelperAgent() {
   showHelperAgent.value = true;
 }
 
+function openTutorials() {
+  closeMenu();
+  showTutorials.value = true;
+}
+
 function handleOutsideClick(event: MouseEvent) {
   if (showUserMenu.value && !userWrapper.value?.contains(event.target as Node)) {
     showUserMenu.value = false;
@@ -157,6 +164,11 @@ onBeforeUnmount(() => {
         <VIcon name="ri-robot-2-line" />
         <span>Assistant</span>
         <kbd class="user-menu__shortcut">⌘K</kbd>
+      </button>
+
+      <button type="button" class="user-menu__item" role="menuitem" @click="openTutorials">
+        <VIcon name="ri-book-open-line" />
+        <span>Tutoriels</span>
       </button>
 
       <div class="user-menu__separator" />
@@ -228,6 +240,8 @@ onBeforeUnmount(() => {
   <ReportFormModal :open="showReport" @close="showReport = false" />
 
   <HelperAgentModal :open="showHelperAgent" @close="showHelperAgent = false" />
+
+  <TutorialModal :open="showTutorials" @close="showTutorials = false" />
 </template>
 
 <style scoped>
