@@ -40,6 +40,7 @@ from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
 from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
+from .user_preference import UserPreference
 
 __all__ = [
     "Agent",
@@ -94,5 +95,6 @@ __all__ = [
     "ReportType",
     "SummaryStatus",
     "TextExtractionStatus",
+    "UserPreference",
     "VersionedField",
 ]
