@@ -30,6 +30,7 @@ from app.celery_client import (
 from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
+from app.models.analyse import Analyse
 from app.models.conversation import Conversation, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.repositories.analyse_repository import AnalyseRepository

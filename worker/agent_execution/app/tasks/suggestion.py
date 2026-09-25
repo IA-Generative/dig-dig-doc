@@ -13,7 +13,6 @@ import logging
 
 from app import api_client
 from app.celery_app import celery_app
-from app.config import settings
 from app.llm import suggest_analyses
 
 logger = logging.getLogger(__name__)
