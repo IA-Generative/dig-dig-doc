@@ -29,6 +29,7 @@ from app.routers.internal_agent import router as internal_agent_router
 from app.routers.models import router as models_router
 from app.routers.profile import router as profile_router
 from app.routers.reports import router as reports_router
+from app.routers.user_tasks import router as user_tasks_router
 
 _keycloak_settings = KeycloakSettings()
 
@@ -131,6 +132,7 @@ app.include_router(admin_tasks_router, prefix="/api")
 app.include_router(cgu_public_router, prefix="/api")
 app.include_router(cgu_admin_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
+app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
 # préfixe dans l'ordre d'enregistrement, et "/mcp/helper/..." commence
