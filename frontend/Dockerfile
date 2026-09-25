@@ -6,6 +6,11 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* .dsfr.yml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# VITE_API_BASE_URL is baked in at build time. Empty (default) means relative
+# URLs, which works when frontend and backend share the same host (K8s ingress).
+# For split-host setups (docker-compose dev), pass --build-arg VITE_API_BASE_URL=http://localhost:8000.
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm build
 
 # nginxinc/nginx-unprivileged already runs as the unprivileged `nginx` user

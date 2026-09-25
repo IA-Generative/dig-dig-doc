@@ -3,6 +3,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # In docker-compose dev, frontend (:8081) and backend (:8000) are on
+        # different ports, so the frontend needs an absolute API base URL.
+        VITE_API_BASE_URL: http://localhost:8000
     ports:
       # Host 8081, not 8080: Keycloak already claims host 8080 below.
       - "8081:8080"
@@ -137,9 +141,15 @@ services:
     # dans /tmp plutôt que le cwd par défaut.
     command:
       [
-        "celery", "-A", "app.tasks:celery_client", "worker", "-B",
-        "-s", "/tmp/celerybeat-schedule",
-        "--loglevel=info", "--queues=maintenance",
+        "celery",
+        "-A",
+        "app.tasks:celery_client",
+        "worker",
+        "-B",
+        "-s",
+        "/tmp/celerybeat-schedule",
+        "--loglevel=info",
+        "--queues=maintenance",
       ]
     environment:
       DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc

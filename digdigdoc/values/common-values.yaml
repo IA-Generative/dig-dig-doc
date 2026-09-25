@@ -209,9 +209,9 @@ frontend:
   serviceAccount:
     enabled: true
     create: true
-  # No VITE_* runtime override here: unlike ocr's frontend, digdigdoc's frontend has no config.js
-  # runtime-injection entrypoint - VITE_API_BASE_URL is baked in at `pnpm build` time (see
-  # frontend/src/composables/*.ts). See digdigdoc/VARIABLES.md for the follow-up needed before prod.
+  # No VITE_API_BASE_URL build arg needed here: in K8s the ingress routes /api/ to the
+  # backend on the same host, so the frontend uses relative URLs (empty API_BASE_URL).
+  # The Dockerfile defaults VITE_API_BASE_URL to "" (relative), which is correct for prod.
 
 redis:
   # RediSearch is required by the agent_execution worker's Redis-backed LangGraph checkpointer

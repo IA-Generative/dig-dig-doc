@@ -14,6 +14,10 @@ services:
       dockerfile: Dockerfile.dev
     ports:
       - "5173:5173"
+    environment:
+      # In dev with HMR, Vite reads VITE_API_BASE_URL at runtime (not build time).
+      # Frontend (:5173) and backend (:8000) are on different ports.
+      VITE_API_BASE_URL: http://localhost:8000
     volumes:
       # Bind mount : les modifs dans frontend/src/ sont détectées par Vite HMR.
       - ./frontend:/app

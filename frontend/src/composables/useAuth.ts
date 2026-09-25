@@ -58,7 +58,7 @@ export function useAuth() {
     // demandée après login. Sinon, on revient sur /analyses.
     const params = new URLSearchParams(window.location.search);
     const current = params.get("redirect") ?? "/analyses";
-    window.location.href = `${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000"}/api/auth/login?redirect=${encodeURIComponent(current)}`;
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/auth/login?redirect=${encodeURIComponent(current)}`;
   };
 
   const logout = async () => {
