@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 import pytest
+from contract import example
 
 from digdigdoc_ephemeral import EphemeralClient
 
@@ -13,34 +13,17 @@ NOW = "2026-09-30T10:00:00Z"
 
 
 def analyse_json(analyse_id: str | None = None, persist: bool = False) -> dict[str, Any]:
-    return {
-        "id": analyse_id or str(uuid.uuid4()),
-        "name": "A",
-        "description": "d",
-        "created_at": NOW,
-        "classification": {"prompt": "", "prompt_versions": [], "labels": [], "labels_versions": []},
-        "extraction": {"prompt": "", "prompt_versions": [], "entities": [], "entities_versions": []},
-        "agents": [],
-        "persist": persist,
-        "expires_at": None,
-    }
+    """Réponse `EphemeralAnalyseOut` générée depuis l'OpenAPI du backend."""
+    return example(
+        "EphemeralAnalyseOut", **({"id": analyse_id} if analyse_id else {}), persist=persist, expires_at=None
+    )
 
 
 def run_json(run_id: str | None = None, status: str = "en_cours") -> dict[str, Any]:
-    return {
-        "id": run_id or str(uuid.uuid4()),
-        "name": "Run",
-        "analyse_id": None,
-        "created_at": NOW,
-        "status": status,
-        "started_at": NOW,
-        "ended_at": None,
-        "execution_steps": [],
-        "documents": [],
-        "persist": False,
-        "ttl_hours": 24,
-        "expires_at": None,
-    }
+    """Réponse `EphemeralRunOut` générée depuis l'OpenAPI du backend."""
+    return example(
+        "EphemeralRunOut", **({"id": run_id} if run_id else {}), status=status, ttl_hours=24, expires_at=None
+    )
 
 
 @pytest.fixture

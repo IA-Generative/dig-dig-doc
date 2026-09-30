@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import Callable
 from typing import Any
 
 import httpx
 import pytest
+from contract import example
 
 from digdigdoc import DigDigDocClient
 
@@ -13,29 +13,13 @@ NOW = "2026-09-30T10:00:00Z"
 
 
 def analyse_json(analyse_id: str | None = None, name: str = "A") -> dict[str, Any]:
-    return {
-        "id": analyse_id or str(uuid.uuid4()),
-        "name": name,
-        "description": "d",
-        "created_at": NOW,
-        "classification": {"prompt": "", "prompt_versions": [], "labels": [], "labels_versions": []},
-        "extraction": {"prompt": "", "prompt_versions": [], "entities": [], "entities_versions": []},
-        "agents": [],
-    }
+    """Réponse `AnalyseOut` générée depuis l'OpenAPI du backend."""
+    return example("AnalyseOut", **({"id": analyse_id} if analyse_id else {}), name=name)
 
 
 def dossier_json(dossier_id: str | None = None, status: str = "en_attente") -> dict[str, Any]:
-    return {
-        "id": dossier_id or str(uuid.uuid4()),
-        "name": "D",
-        "analyse_id": None,
-        "created_at": NOW,
-        "status": status,
-        "started_at": None,
-        "ended_at": None,
-        "execution_steps": [],
-        "documents": [],
-    }
+    """Réponse `DossierOut` générée depuis l'OpenAPI du backend."""
+    return example("DossierOut", **({"id": dossier_id} if dossier_id else {}), status=status)
 
 
 @pytest.fixture
