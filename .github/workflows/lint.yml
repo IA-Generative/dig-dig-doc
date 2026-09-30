@@ -13,6 +13,12 @@ on:
         required: false
         type: string
         default: "3.12"
+    secrets:
+      ASYNC_API_TOKEN:
+        description: >-
+          Jeton en lecture (Contents: read) sur le dépôt privé IA-Generative/async-api, qui héberge
+          `mic-worker`. Absent, les jobs du worker async_api sont ignorés.
+        required: false
   workflow_dispatch:
     inputs:
       NODE_VERSION:
@@ -141,4 +147,53 @@ jobs:
 
       - name: Ruff format check
         working-directory: worker/agent_execution
+        run: uv run ruff format --check .
+
+  lint-worker-async-api:
+    name: Lint worker/async_api
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ASYNC_API_TOKEN: ${{ secrets.ASYNC_API_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # mic-worker vit dans un dépôt privé : sans jeton, on ne peut pas installer le worker.
+      - name: Check async-api access
+        id: access
+        run: |
+          if [ -n "$ASYNC_API_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secret ASYNC_API_TOKEN absent : lint de worker/async_api ignoré."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up uv
+        if: steps.access.outputs.available == 'true'
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: worker/async_api/uv.lock
+
+      - name: Install worker dependencies
+        if: steps.access.outputs.available == 'true'
+        working-directory: worker/async_api
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.ASYNC_API_TOKEN }}@github.com/.insteadOf
+          GIT_CONFIG_VALUE_0: https://github.com/
+        run: uv sync --group dev
+
+      - name: Ruff check
+        if: steps.access.outputs.available == 'true'
+        working-directory: worker/async_api
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        if: steps.access.outputs.available == 'true'
+        working-directory: worker/async_api
         run: uv run ruff format --check .
