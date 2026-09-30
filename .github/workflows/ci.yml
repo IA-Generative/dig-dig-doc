@@ -36,6 +36,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       worker_document_process: ${{ steps.filter.outputs.worker_document_process }}
       worker_agent_execution: ${{ steps.filter.outputs.worker_agent_execution }}
+      worker_async_api: ${{ steps.filter.outputs.worker_async_api }}
       ci: ${{ steps.filter.outputs.ci }}
       helm: ${{ steps.filter.outputs.helm }}
       services: ${{ steps.services.outputs.services }}
@@ -56,6 +57,9 @@ jobs:
               - 'worker/document_process/**'
             worker_agent_execution:
               - 'worker/agent_execution/**'
+            worker_async_api:
+              - 'worker/async_api/**'
+              - 'sdks/python/**'
             ci:
               - '.github/workflows/**'
             helm:
@@ -69,6 +73,9 @@ jobs:
           BACKEND: ${{ steps.filter.outputs.backend }}
           WORKER_DOCUMENT_PROCESS: ${{ steps.filter.outputs.worker_document_process }}
           WORKER_AGENT_EXECUTION: ${{ steps.filter.outputs.worker_agent_execution }}
+          WORKER_ASYNC_API: ${{ steps.filter.outputs.worker_async_api }}
+          # Sans ce jeton (lecture sur le dépôt privé async-api), l'image du worker async_api ne peut pas être construite.
+          ASYNC_API_TOKEN: ${{ secrets.ASYNC_API_TOKEN }}
           CI: ${{ steps.filter.outputs.ci }}
         run: |
           set -euo pipefail
@@ -87,6 +94,14 @@ jobs:
           fi
           if [ "$WORKER_AGENT_EXECUTION" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"worker-agent-execution","context":"worker/agent_execution","dockerfile":"worker/agent_execution/Dockerfile","target":"runtime"}'
+          fi
+          if [ "$WORKER_ASYNC_API" = "true" ] || [ "$CI" = "true" ]; then
+            if [ -n "$ASYNC_API_TOKEN" ]; then
+              # Contexte = racine du dépôt : le worker embarque les SDK de sdks/python/.
+              add '{"name":"worker-async-api","context":".","dockerfile":"worker/async_api/Dockerfile","target":"runtime"}'
+            else
+              echo "::warning::Secret ASYNC_API_TOKEN absent : image worker-async-api non construite."
+            fi
           fi
 
           echo "Images to build: $SERVICES"
@@ -137,17 +152,21 @@ jobs:
     uses: ./.github/workflows/lint.yml
     needs:
       - path-filter
-    if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
+    secrets:
+      ASYNC_API_TOKEN: ${{ secrets.ASYNC_API_TOKEN }}
 
   unit-tests:
     uses: ./.github/workflows/unit-tests.yml
     needs:
       - path-filter
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
+    secrets:
+      ASYNC_API_TOKEN: ${{ secrets.ASYNC_API_TOKEN }}
 
   scan-gitleaks:
     uses: dnum-mi/fabnum-cicd/.github/workflows/scan-gitleaks.yml@v0
@@ -205,6 +224,10 @@ jobs:
       CACHE_MODE: min
       BUILD_ARGS: |
         APP_VERSION=${{ needs.expose-vars.outputs.IMAGE_TAG }}
+    secrets:
+      # Lu uniquement par le Dockerfile de worker/async_api (--mount=type=secret,id=github_token).
+      BUILD_SECRETS: |
+        github_token=${{ secrets.ASYNC_API_TOKEN }}
 
   scan-trivy-images:
     uses: dnum-mi/fabnum-cicd/.github/workflows/scan-trivy.yml@v0
