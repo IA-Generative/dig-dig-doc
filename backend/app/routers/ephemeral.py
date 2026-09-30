@@ -22,7 +22,6 @@ from app.models.dossier_ephemere import DossierEphemere
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
-from app.schemas.dossier import DossierOut
 from app.schemas.ephemeral import (
     EphemeralAnalyseCreate,
     EphemeralAnalyseCreated,
@@ -30,6 +29,7 @@ from app.schemas.ephemeral import (
     EphemeralRunCreated,
     EphemeralRunOut,
 )
+from app.services.ephemeral_run_service import finalize_run, to_run_schema
 
 router = APIRouter(prefix="/ephemeral", tags=["Ephemeral"], dependencies=[Depends(get_ephemeral_identity)])
 
@@ -315,7 +315,9 @@ async def _get_owned_run_or_404(
     db: AsyncSession, run_id: uuid.UUID, identity: EphemeralIdentity
 ) -> tuple[Dossier, DossierEphemere]:
     """404, pas 403 (même rationale que _get_analyse_ephemere_or_404) : scope
-    strict aux dossiers créés via ce routeur et à leur créateur."""
+    strict aux dossiers créés via ce routeur et à leur créateur. Ne couvre que
+    les runs encore actifs ou persist=True : un run terminé persist=false n'a
+    plus de dossier, son résultat se lit via _get_run_out_or_404."""
     record = await EphemeralRepository(db).get_dossier_ephemere(run_id)
     if record is None or record.created_by != identity.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
@@ -325,13 +327,17 @@ async def _get_owned_run_or_404(
     return dossier, record
 
 
-def _to_run_schema(dossier: Dossier, record: DossierEphemere) -> EphemeralRunOut:
-    return EphemeralRunOut(
-        **DossierOut.model_validate(dossier).model_dump(),
-        persist=record.persist,
-        ttl_hours=record.ttl_hours,
-        expires_at=record.expires_at,
-    )
+async def _get_run_out_or_404(db: AsyncSession, run_id: uuid.UUID, identity: EphemeralIdentity) -> EphemeralRunOut:
+    """Le run vu par le client : dossier vivant s'il existe, sinon le résultat
+    conservé après sa fin (ephemeral_results, cf. ephemeral_run_service)."""
+    ephemeral_repository = EphemeralRepository(db)
+    if await ephemeral_repository.get_dossier_ephemere(run_id) is not None:
+        dossier, record = await _get_owned_run_or_404(db, run_id, identity)
+        return to_run_schema(dossier, record)
+    result = await ephemeral_repository.get_result(run_id)
+    if result is None or result.created_by != identity.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run éphémère introuvable")
+    return EphemeralRunOut.model_validate(result.payload)
 
 
 @router.get(
@@ -348,8 +354,7 @@ async def get_ephemeral_run(
     db: Annotated[AsyncSession, Depends(get_db)],
     identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
 ) -> EphemeralRunOut:
-    dossier, record = await _get_owned_run_or_404(db, run_id, identity)
-    return _to_run_schema(dossier, record)
+    return await _get_run_out_or_404(db, run_id, identity)
 
 
 @router.post(
@@ -357,9 +362,9 @@ async def get_ephemeral_run(
     response_model=EphemeralRunOut,
     summary="Arrête un run en cours",
     description="No-op si le run est déjà dans un état terminal (terminé/arrêté/échec) - même comportement "
-    "que POST /api/dossiers/{id}/stop. Pose expires_at (voir docs/ephemeral-api.md) si ce n'est pas déjà "
-    "fait. N'efface rien : le run reste consultable via GET, et sera purgé normalement au TTL, ou "
-    "supprimable immédiatement via DELETE.",
+    "que POST /api/dossiers/{id}/stop. Un run persist=false arrêté est finalisé comme un run terminé : "
+    "son résultat reste consultable via GET jusqu'à expires_at, mais son dossier, ses fichiers et son analyse "
+    "éphémère sont supprimés (voir docs/ephemeral-api.md). Un run persist=true reste intact.",
     responses={404: {"description": "Run introuvable, pas éphémère, ou appartenant à un autre créateur."}},
 )
 async def stop_ephemeral_run(
@@ -367,9 +372,12 @@ async def stop_ephemeral_run(
     db: Annotated[AsyncSession, Depends(get_db)],
     identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
 ) -> EphemeralRunOut:
+    ephemeral_repository = EphemeralRepository(db)
+    if await ephemeral_repository.get_dossier_ephemere(run_id) is None:
+        # Run déjà finalisé (résultat seul conservé) : rien à arrêter.
+        return await _get_run_out_or_404(db, run_id, identity)
     dossier, _ = await _get_owned_run_or_404(db, run_id, identity)
     dossier_repository = DossierRepository(db)
-    ephemeral_repository = EphemeralRepository(db)
     # No-op si déjà dans un état terminal (terminé/arrêté/échec) - même
     # comportement que POST /api/dossiers/{id}/stop.
     await dossier_repository.stop(dossier)
@@ -378,8 +386,8 @@ async def stop_ephemeral_run(
     # systématiquement plutôt que seulement quand stop() vient d'agir, pour
     # rattraper un éventuel dossier déjà arrêté/terminé sans expires_at.
     await ephemeral_repository.mark_dossier_terminal(dossier)
-    record = await ephemeral_repository.get_dossier_ephemere(run_id)
-    return _to_run_schema(dossier, record)
+    await finalize_run(db, run_id)
+    return await _get_run_out_or_404(db, run_id, identity)
 
 
 @router.delete(
@@ -387,9 +395,9 @@ async def stop_ephemeral_run(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Arrête (si besoin) et supprime un run immédiatement",
     description="Si le run est encore en_cours, l'arrête d'abord (même effet que POST .../stop), puis "
-    "supprime immédiatement le dossier (documents, étapes d'exécution, résultats, fichiers S3), sans "
-    "attendre expires_at. Ne touche pas à l'analyse liée (analyse_ephemere conservée). Même scope strict "
-    "que le GET.",
+    "supprime immédiatement le dossier (documents, étapes d'exécution, résultats, fichiers S3) et le "
+    "résultat conservé, sans attendre expires_at. Ne touche pas à l'analyse liée. Même scope strict que "
+    "le GET.",
     responses={404: {"description": "Run introuvable, pas éphémère, ou appartenant à un autre créateur."}},
 )
 async def delete_ephemeral_run(
@@ -397,6 +405,12 @@ async def delete_ephemeral_run(
     db: Annotated[AsyncSession, Depends(get_db)],
     identity: Annotated[EphemeralIdentity, Depends(get_ephemeral_identity)],
 ) -> None:
+    ephemeral_repository = EphemeralRepository(db)
+    if await ephemeral_repository.get_dossier_ephemere(run_id) is None:
+        # Run finalisé : il ne reste que le résultat conservé.
+        await _get_run_out_or_404(db, run_id, identity)  # 404 si absent ou pas à l'appelant
+        await ephemeral_repository.delete_result(run_id)
+        return
     dossier, _ = await _get_owned_run_or_404(db, run_id, identity)
     dossier_repository = DossierRepository(db)
     if dossier.status == DossierStatus.EN_COURS:

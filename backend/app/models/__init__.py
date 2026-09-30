@@ -36,6 +36,7 @@ from .dossier import (
     TextExtractionStatus,
 )
 from .dossier_ephemere import DossierEphemere
+from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
 from .report import Report, ReportStatus, ReportType
@@ -70,6 +71,7 @@ __all__ = [
     "Dossier",
     "DossierDocument",
     "DossierEphemere",
+    "EphemeralResult",
     "DossierStatus",
     "DossierSummary",
     "EntityDefinition",
