@@ -156,6 +156,38 @@ worker_agent:
     # a `searxng` Deployment, and ArgoCD tracks resources by name across apps.
     SEARXNG_URL: "http://digdigdoc-searxng:8080"
 
+# AsyncTaskAPI worker - RabbitMQ consumer, no Celery (worker/async_api). Lets dig-dig-doc be consumed
+# by the async-api platform (https://github.com/IA-Generative/async-api): it runs analyses through
+# the backend's ephemeral API (/api/ephemeral/*).
+# Opt-in: flip `enabled` once the `digdigdoc-async-api-worker` secret exists (see below). Not scaled
+# by KEDA: it consumes RabbitMQ, not the Celery Redis queues, and its concurrency is
+# WORKER_CONCURRENCY (bounded by memory, since files are loaded in RAM - see worker/async_api/README.md).
+worker_async_api:
+  enabled: false
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-worker-async-api"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # Chart defaults apply: liveness `/health`, readiness `/ready` (checks the async-api object
+  # storage), on port 8084 - both served by the worker itself, no Celery inspect involved.
+  # Secret `digdigdoc-async-api-worker` (create it out of band, it holds credentials):
+  #   BROKER_URL             amqp://<user>:<password>@<rabbitmq host>:5672
+  #   S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET_NAME
+  #                          async-api object storage, where files are uploaded before the task
+  #   DIGDIGDOC_API_TOKEN    API token (X-App-Token) created via POST /api/app-tokens
+  envFrom:
+  - secretRef:
+      name: "digdigdoc-async-api-worker"
+  env:
+    IN_QUEUE_NAME: "dig_dig_doc_queue_in"
+    OUT_QUEUE_NAME: "dig_dig_doc_queue_out"
+    SERVICE_CLASS: "long"
+    WORKER_CONCURRENCY: "2"
+    DIGDIGDOC_BASE_URL: "http://digdigdoc-backend:8000"
+
 jobs:
   migration:
     image:

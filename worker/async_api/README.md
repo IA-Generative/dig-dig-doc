@@ -96,8 +96,30 @@ docker build -f worker/async_api/Dockerfile --secret id=github_token,env=GH_TOKE
 ASYNC_API_WORKER_TOKEN=<token API> docker compose --profile async-api up --build worker-async-api
 ```
 
+## Déploiement Helm
+
+Le chart [`digdigdoc`](../../digdigdoc/README.md) porte le composant `worker_async_api` (Deployment, sans Service :
+le worker ne reçoit aucun trafic). Il est **désactivé par défaut** : il faut un RabbitMQ et le stockage objet
+d'AsyncTaskAPI, que le chart ne fournit pas.
+
+```bash
+helm template digdigdoc ./digdigdoc -f digdigdoc/values/common-values.yaml --set worker_async_api.enabled=true
+```
+
+Le pod lit sa configuration dans le secret `digdigdoc-async-api-worker` (à créer hors du chart : il porte des
+identifiants) : `BROKER_URL`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME` et
+`DIGDIGDOC_API_TOKEN`. Le reste (files, `SERVICE_CLASS`, `DIGDIGDOC_BASE_URL`...) est dans `env`. Sondes : `/health`
+(vivacité) et `/ready` (stockage objet), sur le port `8084`. Pas de mise à l'échelle KEDA : le worker consomme
+RabbitMQ, pas les files Celery ; régler `WORKER_CONCURRENCY` et `replicaCount` selon la mémoire.
+
+L'image `worker-async-api` doit être publiée avant d'activer le composant (voir ci-dessous).
+
 ## CI
 
 `lint.yml`, `unit-tests.yml` et le build d'image de `ci.yml` ont besoin du secret de dépôt **`ASYNC_API_TOKEN`** :
 un jeton fine-grained en lecture (*Contents: read*) sur `IA-Generative/async-api`. Sans lui, ces jobs sont ignorés
 avec un avertissement (le reste de la CI n'est pas affecté).
+
+**Publication de l'image à la release** : `cd.yml` ne construit pas encore l'image `worker-async-api` (son build a
+besoin du secret `ASYNC_API_TOKEN`, et un build en échec bloquerait `bump-chart` et `release-chart`). Tant que ce n'est
+pas fait, le composant Helm reste désactivé, ou pointe vers une image construite à la main.
