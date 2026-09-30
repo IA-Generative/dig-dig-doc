@@ -28,7 +28,9 @@ def _create_ephemeral_analyse(client: TestClient, name: str = "Analyse purge tes
     return client.post("/api/ephemeral/analyses", json={"name": name, "description": ""}).json()["analyse_id"]
 
 
-def _create_and_stop_run(client: TestClient, analyse_id: str, *, persist: bool = False) -> str:
+def _create_and_stop_run(client: TestClient, analyse_id: str, *, persist: bool = False, finalize: bool = True) -> str:
+    """`finalize=False` simule un run terminé dont la finalisation (résultat conservé + suppression du
+    dossier) a échoué : le dossier terminal reste en base, c'est le filet de sécurité de la purge."""
     created = client.post(
         "/api/ephemeral/runs",
         params={"ttl_hours": 1},
@@ -36,8 +38,17 @@ def _create_and_stop_run(client: TestClient, analyse_id: str, *, persist: bool =
         data={"analyse_id": analyse_id, "persist": "true" if persist else "false"},
     )
     run_id = created.json()["run_id"]
-    client.post(f"/api/ephemeral/runs/{run_id}/stop")
+    if finalize:
+        client.post(f"/api/ephemeral/runs/{run_id}/stop")
+    else:
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr("app.routers.ephemeral.finalize_run", _no_finalize)
+            client.post(f"/api/ephemeral/runs/{run_id}/stop")
     return run_id
+
+
+async def _no_finalize(*args: object, **kwargs: object) -> bool:
+    return False
 
 
 async def _backdate_dossier_ephemere(dossier_id: uuid.UUID) -> None:
@@ -62,7 +73,7 @@ async def _backdate_analyse_ephemere(analyse_id: uuid.UUID) -> None:
 
 def test_purge_deletes_expired_run_including_s3_files(client: TestClient) -> None:
     analyse_id = _create_ephemeral_analyse(client)
-    run_id = _create_and_stop_run(client, analyse_id)
+    run_id = _create_and_stop_run(client, analyse_id, finalize=False)
     s3_key = client.get(f"/api/ephemeral/runs/{run_id}").json()["documents"][0]["s3_key"]
     client.portal.call(_backdate_dossier_ephemere, uuid.UUID(run_id))
 
@@ -76,7 +87,7 @@ def test_purge_deletes_expired_run_including_s3_files(client: TestClient) -> Non
 
 def test_purge_does_not_delete_a_run_not_yet_expired(client: TestClient) -> None:
     analyse_id = _create_ephemeral_analyse(client)
-    run_id = _create_and_stop_run(client, analyse_id)
+    run_id = _create_and_stop_run(client, analyse_id, finalize=False)
     # ttl_hours=1, pas de backdate : expires_at est dans le futur.
 
     summary = client.portal.call(run_purge)
@@ -109,7 +120,7 @@ def test_purge_deletes_expired_analyse_without_remaining_runs(client: TestClient
 
 def test_purge_keeps_expired_analyse_while_a_run_still_references_it(client: TestClient) -> None:
     analyse_id = _create_ephemeral_analyse(client)
-    run_id = _create_and_stop_run(client, analyse_id)
+    run_id = _create_and_stop_run(client, analyse_id, finalize=False)
     client.portal.call(_backdate_analyse_ephemere, uuid.UUID(analyse_id))
     # Le run, lui, n'est pas backdaté : il reste actif et référence encore
     # l'analyse.
@@ -122,7 +133,7 @@ def test_purge_keeps_expired_analyse_while_a_run_still_references_it(client: Tes
 
 def test_purge_deletes_both_run_then_its_analyse_once_both_expired(client: TestClient) -> None:
     analyse_id = _create_ephemeral_analyse(client)
-    run_id = _create_and_stop_run(client, analyse_id)
+    run_id = _create_and_stop_run(client, analyse_id, finalize=False)
     client.portal.call(_backdate_dossier_ephemere, uuid.UUID(run_id))
     client.portal.call(_backdate_analyse_ephemere, uuid.UUID(analyse_id))
 

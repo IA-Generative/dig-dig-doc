@@ -101,10 +101,12 @@ def test_mcp_full_cycle(client: TestClient) -> None:
                 deleted_run = _call_tool_json(await session.call_tool("delete_ephemeral_run", {"run_id": run_id}))
                 assert deleted_run == {"deleted": True}
 
+                # L'analyse persist=false a déjà été supprimée à l'arrêt du run (seul son résultat était
+                # conservé, et vient d'être supprimé par delete_ephemeral_run).
                 deleted_analyse = _call_tool_json(
                     await session.call_tool("delete_ephemeral_analysis", {"analyse_id": analyse_id})
                 )
-                assert deleted_analyse == {"deleted": True}
+                assert deleted_analyse == {"error": "Analyse éphémère introuvable", "status_code": 404}
 
                 gone = _call_tool_json(await session.call_tool("get_ephemeral_run", {"run_id": run_id}))
                 assert gone == {"error": "Run éphémère introuvable", "status_code": 404}

@@ -46,7 +46,13 @@ async def run_purge() -> dict[str, int]:
                 await analyse_repository.delete(analyse)
                 purged_analyses += 1
 
-        summary = {"purged_dossiers": purged_dossiers, "purged_analyses": purged_analyses}
+        purged_results = await ephemeral_repository.delete_expired_results()
+
+        summary = {
+            "purged_dossiers": purged_dossiers,
+            "purged_analyses": purged_analyses,
+            "purged_results": purged_results,
+        }
         logger.info("Purge éphémère : %s", summary)
         return summary
 
