@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from digdigdoc.models import AppToken, CreatedAppToken, Page
+from digdigdoc.models import AppToken, AppTokenCreate, CreatedAppToken, Page
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -21,7 +21,10 @@ class AppTokensResource:
 
     def create(self, name: str) -> CreatedAppToken:
         """Crée un token. `token` (en clair) n'est renvoyé qu'ici, une seule fois."""
-        return CreatedAppToken.model_validate(self._http.request("POST", "/app-tokens", json={"name": name}).json())
+        body = AppTokenCreate(name=name)
+        return CreatedAppToken.model_validate(
+            self._http.request("POST", "/app-tokens", json=body.model_dump(mode="json")).json()
+        )
 
     def revoke(self, token_id: uuid.UUID | str) -> None:
         self._http.request("DELETE", f"/app-tokens/{token_id}")

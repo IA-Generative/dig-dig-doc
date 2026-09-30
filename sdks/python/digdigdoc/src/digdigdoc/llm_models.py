@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from digdigdoc.models import LlmModel
+from digdigdoc.models import LlmModel, LlmModelsResponse
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -15,5 +15,4 @@ class ModelsResource:
         self._http = http
 
     def list(self) -> list[LlmModel]:
-        data = self._http.get_json("/models")
-        return [LlmModel.model_validate(item) for item in data["models"]]
+        return LlmModelsResponse.model_validate(self._http.get_json("/models")).models

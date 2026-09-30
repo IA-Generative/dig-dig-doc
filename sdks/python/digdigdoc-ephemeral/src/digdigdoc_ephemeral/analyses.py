@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
-from digdigdoc_ephemeral.models import EphemeralAnalyse, EphemeralAnalysisConfig
+from digdigdoc.models import AgentCreate, EntityDefinitionIn, LabelDefinitionIn
+
+from digdigdoc_ephemeral.models import EphemeralAnalyse, EphemeralAnalyseCreated, EphemeralAnalysisConfig
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -21,10 +24,10 @@ class EphemeralAnalysesResource:
         description: str = "",
         persist: bool = False,
         classification_prompt: str = "",
-        labels: list[dict[str, str]] | None = None,
+        labels: Sequence[LabelDefinitionIn | Mapping[str, Any]] | None = None,
         extraction_prompt: str = "",
-        entities: list[dict[str, str]] | None = None,
-        agents: list[dict[str, object]] | None = None,
+        entities: Sequence[EntityDefinitionIn | Mapping[str, Any]] | None = None,
+        agents: Sequence[AgentCreate | Mapping[str, Any]] | None = None,
     ) -> EphemeralAnalyse:
         """Crée une analyse complète (classification, entités, agents) en un seul appel.
 
@@ -36,10 +39,10 @@ class EphemeralAnalysesResource:
                 "description": description,
                 "persist": persist,
                 "classification_prompt": classification_prompt,
-                "labels": labels or [],
+                "labels": list(labels or []),
                 "extraction_prompt": extraction_prompt,
-                "entities": entities or [],
-                "agents": agents or [],
+                "entities": list(entities or []),
+                "agents": list(agents or []),
             }
         )
         return self.create_from_config(config)
@@ -48,7 +51,7 @@ class EphemeralAnalysesResource:
         response = self._http.request(
             "POST", "/ephemeral/analyses", json=config.model_dump(mode="json", exclude_none=True)
         )
-        return self.get(response.json()["analyse_id"])
+        return self.get(EphemeralAnalyseCreated.model_validate(response.json()).analyse_id)
 
     def get(self, analyse_id: uuid.UUID | str) -> EphemeralAnalyse:
         """Définition complète + `persist` + `expires_at`."""

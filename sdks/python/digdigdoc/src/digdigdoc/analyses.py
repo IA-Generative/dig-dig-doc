@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from digdigdoc.models import Analyse, AnalyseListItem, Page
+from digdigdoc.models import Analyse, AnalyseCreate, AnalyseListItem, Page
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -26,7 +26,8 @@ class AnalysesResource:
 
     def create(self, name: str, description: str) -> Analyse:
         """Crée une analyse (nom + description, tous deux obligatoires côté serveur)."""
-        response = self._http.request("POST", "/analyses", json={"name": name, "description": description})
+        body = AnalyseCreate(name=name, description=description)
+        response = self._http.request("POST", "/analyses", json=body.model_dump(mode="json"))
         return Analyse.model_validate(response.json())
 
     def delete(self, analyse_id: uuid.UUID | str) -> None:
