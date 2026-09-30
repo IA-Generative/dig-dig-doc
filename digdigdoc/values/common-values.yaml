@@ -173,20 +173,44 @@ worker_async_api:
     create: true
   # Chart defaults apply: liveness `/health`, readiness `/ready` (checks the async-api object
   # storage), on port 8084 - both served by the worker itself, no Celery inspect involved.
-  # Secret `digdigdoc-async-api-worker` (create it out of band, it holds credentials):
+  #
+  # Secret `digdigdoc-async-api-worker` (Vault, see docs/secrets.md section 12) holds credentials ONLY:
   #   BROKER_URL             amqp://<user>:<password>@<rabbitmq host>:5672
-  #   S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET_NAME
-  #                          async-api object storage, where files are uploaded before the task
+  #   S3_ACCESS_KEY, S3_SECRET_KEY   async-api object storage credentials
   #   DIGDIGDOC_API_TOKEN    API token (X-App-Token) created via POST /api/app-tokens
   envFrom:
   - secretRef:
       name: "digdigdoc-async-api-worker"
+  # Everything that is not a secret, with its default (see worker/async_api/src/config.py).
+  # Env values must be strings.
   env:
+    # RabbitMQ queues of the dig-dig-doc service on the async-api platform.
     IN_QUEUE_NAME: "dig_dig_doc_queue_in"
     OUT_QUEUE_NAME: "dig_dig_doc_queue_out"
+    # Service class declared in async-api's config/services.yaml: `long` lets the worker emit progress.
     SERVICE_CLASS: "long"
+    # Concurrent tasks per pod. Files are loaded in RAM: peak ~ WORKER_CONCURRENCY x file sizes.
     WORKER_CONCURRENCY: "2"
+    HEALTH_CHECK_HOST: "0.0.0.0"
+    HEALTH_CHECK_PORT: "8084"
+    LOG_LEVEL: "INFO"
+    # async-api object storage (where files are uploaded before a task). Adapt to your environment.
+    S3_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    S3_BUCKET_NAME: "brio-prod-api-data"
+    S3_REGION_NAME: "fr-par"
+    S3_VERIFY_SSL: "true"
+    # dig-dig-doc backend, reached through its ephemeral API.
     DIGDIGDOC_BASE_URL: "http://digdigdoc-backend:8000"
+    DIGDIGDOC_REQUEST_TIMEOUT: "30"
+    # Memory guards, checked with a HEAD on S3 BEFORE any download (50 MiB / 100 MiB / 20 files).
+    MAX_FILE_SIZE_BYTES: "52428800"
+    MAX_TOTAL_SIZE_BYTES: "104857600"
+    MAX_FILES: "20"
+    # Wait for a run to finish (seconds), and polling interval.
+    RUN_TIMEOUT_SECONDS: "900"
+    POLL_INTERVAL_SECONDS: "3"
+    # Delete the result kept by dig-dig-doc once it has been returned in the `success` message.
+    DELETE_RUN_AFTER_RESULT: "true"
 
 jobs:
   migration:
@@ -329,11 +353,10 @@ extraObjects:
       destination:
         name: digdigdoc-worker
         create: true
-  # Only rendered when the AsyncTaskAPI worker is enabled (`worker_async_api.enabled`): otherwise
-  # the operator would sync a Vault path nobody created. Written as a template string so the
-  # whole object disappears when disabled. Keys expected in Vault: see docs/secrets.md, section 12.
-  digdigdoc-async-api-worker: |
-    {{- if .Values.worker_async_api.enabled }}
+  # Credentials of the AsyncTaskAPI worker (`worker_async_api`). Keys expected in Vault: see
+  # docs/secrets.md, section 12. Not conditioned on `worker_async_api.enabled`, like the other secrets:
+  # create the Vault path `digdigdoc-async-api-worker` before syncing.
+  digdigdoc-async-api-worker:
     apiVersion: secrets.hashicorp.com/v1beta1
     kind: VaultStaticSecret
     metadata:
@@ -345,7 +368,6 @@ extraObjects:
       destination:
         name: digdigdoc-async-api-worker
         create: true
-    {{- end }}
   digdigdoc-redis:
     apiVersion: secrets.hashicorp.com/v1beta1
     kind: VaultStaticSecret

@@ -22,7 +22,7 @@ Chaque secret ci-dessous correspond à un **chemin Vault** (`mirai` mount, kv-v2
 | `digdigdoc-db-appuser`    | `digdigdoc-db-appuser`         | kubernetes.io/basic-auth    | CNPG (initdb.secret)                  |
 | `digdigdoc-db-infos`      | `digdigdoc-db-appuser`         | Opaque (transformé)         | backend, job de migration             |
 | `digdigdoc-db-backups`    | `digdigdoc-db-backups`         | Opaque                      | CNPG (barmanObjectStore)              |
-| `digdigdoc-async-api-worker` | `digdigdoc-async-api-worker` | Opaque                   | worker_async_api (si activé)          |
+| `digdigdoc-async-api-worker` | `digdigdoc-async-api-worker` | Opaque                   | worker_async_api                      |
 | `registry-pull-secret`    | — (manuel ou ArgoCD)           | kubernetes.io/dockerconfigjson | Tous les pods (imagePullSecrets)    |
 
 ---
@@ -233,27 +233,25 @@ kubectl create secret docker-registry registry-pull-secret \
 
 ## 12. `digdigdoc-async-api-worker` — Worker AsyncTaskAPI (optionnel)
 
-Uniquement si le composant `worker_async_api` est activé (`worker_async_api.enabled: true`). Le `VaultStaticSecret`
-correspondant n'est rendu que dans ce cas (voir `extraObjects` dans `digdigdoc/values/common-values.yaml`).
+Utilisé par le composant `worker_async_api` (activé par `worker_async_api.enabled: true`). Le `VaultStaticSecret`
+est déclaré sans condition dans `extraObjects` (`digdigdoc/values/common-values.yaml`), comme les autres : **créer le
+chemin Vault avant la synchronisation**, même si le composant n'est pas encore activé.
+
+Ce secret ne contient que des **identifiants**. Tout le reste est un réglage normal, avec une valeur par défaut dans
+`env` de `worker_async_api` (`common-values.yaml`) : files, `SERVICE_CLASS`, `WORKER_CONCURRENCY`, endpoint, bucket et
+région S3, `DIGDIGDOC_BASE_URL`, limites de taille, délais...
 
 Variables attendues dans Vault :
 
-| Variable              | Obligatoire | Description                                                                   | Exemple                                  |
-| --------------------- | ----------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
-| `BROKER_URL`          | oui         | URL RabbitMQ d'AsyncTaskAPI, identifiants compris                              | `amqps://user:password@rabbitmq:5672`    |
-| `S3_ENDPOINT_URL`     | oui         | Endpoint du stockage objet **d'AsyncTaskAPI** (où les fichiers sont déposés)   | `https://s3.fr-par.scw.cloud`            |
-| `S3_ACCESS_KEY`       | oui         | Clé d'accès à ce stockage (lecture seule suffit : lecture des objets et `HEAD` du bucket)                                     | `SCW...`                                 |
-| `S3_SECRET_KEY`       | oui         | Clé secrète associée                                                           | `xxxxxxxx`                               |
-| `S3_BUCKET_NAME`      | oui         | Bucket où AsyncTaskAPI dépose les fichiers                                     | `brio-prod-api-data`                     |
-| `DIGDIGDOC_API_TOKEN` | oui         | Token API de dig-dig-doc (en-tête `X-App-Token`), voir ci-dessous              | `ddd_...`                                |
-| `S3_REGION_NAME`      | non         | Région du stockage (défaut `fr-par`)                                            | `fr-par`                                 |
-| `S3_VERIFY_SSL`       | non         | `false` pour un stockage à certificat auto-signé (défaut `true`)                | `true`                                   |
+| Variable              | Description                                                                   | Exemple                                  |
+| --------------------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| `BROKER_URL`          | URL RabbitMQ d'AsyncTaskAPI, identifiants compris                              | `amqps://user:password@rabbitmq:5672`    |
+| `S3_ACCESS_KEY`       | Clé d'accès au stockage objet **d'AsyncTaskAPI** (lecture seule suffit : lecture des objets et `HEAD` du bucket) | `SCW...` |
+| `S3_SECRET_KEY`       | Clé secrète associée                                                           | `xxxxxxxx`                               |
+| `DIGDIGDOC_API_TOKEN` | Token API de dig-dig-doc (en-tête `X-App-Token`), voir ci-dessous              | `ddd_...`                                |
 
 > **Ce n'est pas le stockage de dig-dig-doc** : `digdigdoc-s3` ne sert pas ici. Le worker lit les fichiers dans le
-> stockage d'AsyncTaskAPI, puis les envoie à dig-dig-doc par son API.
-
-Les réglages qui ne sont pas des secrets (`IN_QUEUE_NAME`, `OUT_QUEUE_NAME`, `SERVICE_CLASS`, `WORKER_CONCURRENCY`,
-`DIGDIGDOC_BASE_URL`, limites de taille...) restent dans `env` de `worker_async_api` (`common-values.yaml`).
+> stockage d'AsyncTaskAPI (endpoint et bucket dans `env`), puis les envoie à dig-dig-doc par son API.
 
 **Créer `DIGDIGDOC_API_TOKEN`** : le token est renvoyé **une seule fois** à sa création, par un utilisateur Keycloak
 (les routes `/api/app-tokens` n'acceptent pas un token API) :
@@ -323,10 +321,8 @@ vault kv put mirai/digdigdoc-worker \
 # Exemple : digdigdoc-async-api-worker (worker AsyncTaskAPI, optionnel)
 vault kv put mirai/digdigdoc-async-api-worker \
   BROKER_URL="amqps://user:password@rabbitmq.example.com:5672" \
-  S3_ENDPOINT_URL="https://s3.fr-par.scw.cloud" \
   S3_ACCESS_KEY="SCW..." \
   S3_SECRET_KEY="xxxxxxxx" \
-  S3_BUCKET_NAME="brio-prod-api-data" \
   DIGDIGDOC_API_TOKEN="ddd_..."
 
 # Exemple : digdigdoc-redis
