@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import uuid
 from collections.abc import Iterable
 from types import TracebackType
@@ -7,6 +8,7 @@ from types import TracebackType
 import httpx
 from digdigdoc._files import FileInput
 from digdigdoc._http import DEFAULT_TIMEOUT, HTTPClient
+from digdigdoc.exceptions import NotFoundError
 
 from digdigdoc_ephemeral.analyses import EphemeralAnalysesResource
 from digdigdoc_ephemeral.models import TTL_DEFAULT_HOURS, EphemeralAnalysisConfig, EphemeralRun
@@ -63,8 +65,8 @@ class EphemeralClient:
 
         Fournir `analysis_config` (l'analyse est créée) ou `analyse_id` (analyse existante réutilisée).
         `persist` s'applique au run ; l'analyse suit `analysis_config.persist`.
-        `cleanup=True` supprime le run (et l'analyse si elle a été créée ici) une fois le résultat
-        récupéré : le `EphemeralRun` renvoyé est alors un instantané, plus consultable côté serveur.
+        `cleanup=True` supprime le run (et le résultat conservé côté serveur) une fois celui-ci récupéré, ainsi
+        que l'analyse créée ici si elle existe encore : le `EphemeralRun` renvoyé est alors un instantané.
         `WaitTimeoutError` est levée si `timeout` est dépassé (le run continue côté serveur).
         """
         if (analysis_config is None) == (analyse_id is None):
@@ -86,7 +88,9 @@ class EphemeralClient:
         if cleanup:
             self.runs.delete(run.id)
             if created_analyse_id is not None:
-                self.analyses.delete(created_analyse_id)
+                # Une analyse persist=false est déjà supprimée par le serveur à la fin du run.
+                with contextlib.suppress(NotFoundError):
+                    self.analyses.delete(created_analyse_id)
         return result
 
     def _quiet_delete_analyse(self, analyse_id: uuid.UUID) -> None:

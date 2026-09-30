@@ -23,6 +23,17 @@ client = EphemeralClient("https://api.dig-dig-doc.example.fr", api_token="ddd_..
 
 Chaque compte ne voit que les analyses/runs qu'il a créés (404 sinon).
 
+## Cycle de vie côté serveur
+
+Quand un run `persist=False` se termine (ou est arrêté), le serveur **conserve son résultat** jusqu'à
+`expires_at` (fin du run + `ttl_hours`) et **supprime** le dossier, les fichiers envoyés et l'analyse
+`persist=False`. `client.runs.get(run_id)` continue de renvoyer le résultat (avec `analyse_id=None`) ;
+après `expires_at`, il lève `NotFoundError`. Conséquences :
+
+- une analyse `persist=False` n'est pas réutilisable après ses runs : pour enchaîner plusieurs runs, la
+  créer avec `persist=True` ;
+- un run `persist=True` n'est jamais nettoyé (dossier, fichiers et résultats conservés).
+
 ## One-liner
 
 ```python
@@ -46,7 +57,7 @@ print(result.status, result.expires_at)
 
 `analyze()` crée l'analyse, lance le run et attend la fin. Options : `analyse_id=` (réutiliser une
 analyse existante au lieu de `analysis_config`), `persist=` (conserver le run), `cleanup=True`
-(supprimer le run — et l'analyse créée par l'appel — après récupération du résultat).
+(supprimer aussi le résultat conservé côté serveur une fois récupéré).
 
 ## Flux A : réutiliser une analyse
 

@@ -274,3 +274,18 @@ def test_run_output_is_typed(make_client) -> None:
     client, _ = make_client(lambda r: httpx.Response(200, json=run_json(status="terminé")))
     run = client.runs.get("r")
     assert run.status is DossierStatus.TERMINE and run.ttl_hours == 24 and run.expires_at is None
+
+
+def test_analyze_cleanup_tolerates_analyse_already_deleted_by_the_server(make_client) -> None:
+    aid, rid = str(uuid.uuid4()), str(uuid.uuid4())
+    log: list[tuple[str, str]] = []
+    inner = _analyze_handler(aid, rid, log)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE" and "analyses" in request.url.path:
+            return httpx.Response(404, json={"detail": "Analyse éphémère introuvable"})
+        return inner(request)
+
+    client, _ = make_client(handler)
+    result = client.analyze([b"x"], EphemeralAnalysisConfig(name="N"), cleanup=True, poll_interval=0)
+    assert result.status.value == "terminé"
