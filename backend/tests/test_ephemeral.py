@@ -393,23 +393,16 @@ def test_run_expires_at_stays_null_when_persist_true(client: TestClient) -> None
     assert stopped["expires_at"] is None
 
 
-def test_analyse_ephemere_expires_at_follows_last_completed_run(client: TestClient) -> None:
+def test_analyse_ephemere_is_deleted_once_its_run_is_finished(client: TestClient) -> None:
     analyse_id = _create_ephemeral_analyse(client)
     assert client.get(f"/api/ephemeral/analyses/{analyse_id}").json()["expires_at"] is None
 
     run_id = _create_run(client, analyse_id)
     client.post(f"/api/ephemeral/runs/{run_id}/stop")
 
-    analyse = client.get(f"/api/ephemeral/analyses/{analyse_id}").json()
-    assert analyse["expires_at"] is not None
-
-    # Un second run qui termine plus tard recule l'expiration de l'analyse.
-    first_expires_at = analyse["expires_at"]
-    second_run_id = _create_run(client, analyse_id)
-    client.post(f"/api/ephemeral/runs/{second_run_id}/stop")
-
-    analyse = client.get(f"/api/ephemeral/analyses/{analyse_id}").json()
-    assert analyse["expires_at"] >= first_expires_at
+    assert client.get(f"/api/ephemeral/analyses/{analyse_id}").status_code == 404
+    # Le résultat, lui, reste consultable (voir tests/test_ephemeral_result.py).
+    assert client.get(f"/api/ephemeral/runs/{run_id}").json()["analyse_id"] is None
 
 
 def _as_other_keycloak_user():

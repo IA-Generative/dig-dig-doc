@@ -43,6 +43,7 @@ from app.schemas.dossier import (
     TextExtractionStatusIn,
 )
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
+from app.services.ephemeral_run_service import finalize_run
 from app.services.user_task_service import update_task
 
 # Routes appelées par les workers Celery (pas par le navigateur) : le worker
@@ -82,6 +83,9 @@ async def complete_execution_step(
     dossier = await repository.get(completed.dossier_id)
     if dossier is not None and dossier.status != DossierStatus.EN_COURS:
         await EphemeralRepository(db).mark_dossier_terminal(dossier)
+        # Run éphémère persist=false : on garde le résultat, on supprime dossier et analyse.
+        # `completed` est sérialisé après ; il a déjà été chargé (logs comprises) avant.
+        await finalize_run(db, dossier.id)
     return completed
 
 

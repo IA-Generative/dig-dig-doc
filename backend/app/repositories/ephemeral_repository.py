@@ -1,13 +1,15 @@
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.analyse_ephemere import AnalyseEphemere
 from app.models.dossier import Dossier
 from app.models.dossier_ephemere import DossierEphemere
+from app.models.ephemeral_result import EphemeralResult
 
 
 class EphemeralRepository:
@@ -106,3 +108,32 @@ class EphemeralRepository:
             )
         )
         return result.scalars().all()
+
+    # --- Résultats conservés après la fin d'un run (ephemeral_results) ---
+
+    async def save_result(
+        self, *, run_id: uuid.UUID, created_by: str, payload: dict[str, Any], expires_at: datetime
+    ) -> EphemeralResult:
+        """Idempotent : réécrit l'instantané si une ligne existe déjà pour ce run."""
+        record = await self.db.get(EphemeralResult, run_id)
+        if record is None:
+            record = EphemeralResult(run_id=run_id, created_by=created_by, payload=payload, expires_at=expires_at)
+            self.db.add(record)
+        else:
+            record.payload = payload
+            record.expires_at = expires_at
+        await self.db.commit()
+        return record
+
+    async def get_result(self, run_id: uuid.UUID) -> EphemeralResult | None:
+        return await self.db.get(EphemeralResult, run_id)
+
+    async def delete_result(self, run_id: uuid.UUID) -> None:
+        await self.db.execute(delete(EphemeralResult).where(EphemeralResult.run_id == run_id))
+        await self.db.commit()
+
+    async def delete_expired_results(self) -> int:
+        """Supprime les résultats dont le TTL est écoulé ; renvoie leur nombre."""
+        result = await self.db.execute(delete(EphemeralResult).where(EphemeralResult.expires_at < datetime.now(UTC)))
+        await self.db.commit()
+        return result.rowcount or 0

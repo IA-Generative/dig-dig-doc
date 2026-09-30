@@ -25,6 +25,22 @@ Le TTL est configurable par requête (`?ttl_hours=`) :
 
 Pas de limite de taille ni de nombre de documents spécifique aux runs éphémères : les limites standard de la plateforme (upload, taille de fichier) s'appliquent telles quelles, sans restriction additionnelle.
 
+## Fin de vie d'un run : on garde le résultat, on supprime le reste
+
+Quand un run `persist=false` atteint un état terminal (`terminé`, `échec` ou `arrêté`, y compris après un `stop` manuel), le backend le **finalise** (`app/services/ephemeral_run_service.py`) :
+
+1. le résultat complet du run (ce que renvoie `GET /api/ephemeral/runs/{id}` : statut, étapes, sorties des agents, pages, prédictions, résumés) est copié dans la table `ephemeral_results`, avec `expires_at = ended_at + ttl_hours` ;
+2. le `Dossier` est supprimé : documents, fichiers S3, captures de page, étapes d'exécution, prédictions (cascade existante) ;
+3. l'analyse éphémère `persist=false` liée est supprimée, **sauf** si un autre dossier la référence encore (le dernier run terminé la supprime). Une analyse `persist=true` ou une analyse classique n'est jamais supprimée.
+
+Le client ne voit pas de différence : `GET /api/ephemeral/runs/{id}` renvoie le même schéma, servi depuis l'instantané (avec `analyse_id = null` si l'analyse a été supprimée, et des `s3_key` qui ne pointent plus vers rien). À `expires_at`, la purge supprime le résultat, et `GET` répond alors 404.
+
+Un run `persist=true` n'est pas finalisé : dossier, fichiers et résultats restent tels quels, sans expiration.
+
+Conséquence : une analyse `persist=false` n'est plus réutilisable une fois ses runs terminés. Pour enchaîner plusieurs runs sur la même analyse, la créer avec `persist=true`.
+
+Limite connue : les résumés de documents sont générés en asynchrone ; si un résumé n'est pas terminé quand le pipeline finit, l'instantané le contient dans l'état où il était (`summary_status`), et le worker qui déposerait le résumé ensuite reçoit un 404.
+
 ## Modèle de données
 
 Pas de duplication : `Analyse`, `Dossier`, `ExecutionStep`, `DossierDocument` et les résultats restent les tables existantes, utilisées telles quelles par le pipeline actuel. On ajoute seulement deux **tables d'association 1-1**, qui portent la métadonnée « ce record est éphémère » sans toucher au schéma ni au code métier existants.
@@ -42,6 +58,18 @@ Association avec `Analyse`.
 | `expires_at` | timestamp, nullable | `NULL` si `persist=true` ou si jamais utilisée avant TTL ; sinon `last_run_ended_at + ttl_hours` |
 
 Une `Analyse` **sans** ligne dans `analyse_ephemere` = analyse classique de la plateforme, comportement inchangé.
+
+### `ephemeral_results`
+
+Résultat conservé d'un run `persist=false` terminé (voir « Fin de vie d'un run »).
+
+| Champ | Type | Notes |
+|---|---|---|
+| `run_id` | uuid, PK | même id que le run renvoyé au client ; pas de FK (le dossier n'existe plus) |
+| `created_by` | str | créateur, pour le scoping de visibilité |
+| `payload` | JSONB | instantané de `EphemeralRunOut` |
+| `expires_at` | timestamp, indexé | `ended_at + ttl_hours` |
+| `created_at` | timestamp | |
 
 ### `dossier_ephemere`
 
@@ -81,8 +109,8 @@ Une `Dossier` **sans** ligne dans `dossier_ephemere` = dossier classique, compor
 
 - `GET /api/ephemeral/analyses/{id}` — définition complète (agents/classification/entités)
 - `GET /api/ephemeral/runs/{id}` — statut, et résultats une fois `terminé`
-- `POST /api/ephemeral/runs/{id}/stop` — arrêt complet du run en cours (réutilise le `stop` existant de `dossiers.py:203`, coupe l'exécution Celery en cours), statut → `arrêté`. N'efface rien, juste stoppé, il reste consultable/purgeable normalement ensuite.
-- `DELETE /api/ephemeral/runs/{id}` — arrête d'abord le run s'il est encore en cours (même effet que `stop`), puis supprime immédiatement le `Dossier`, ses `DossierDocument`, `ExecutionStep` et résultats (cascade existante) + la ligne `dossier_ephemere`. Suppression immédiate, sans attendre le TTL, sans toucher à l'analyse liée.
+- `POST /api/ephemeral/runs/{id}/stop` — arrêt complet du run en cours (réutilise le `stop` existant de `dossiers.py:203`, coupe l'exécution Celery en cours), statut → `arrêté`. Un run `persist=false` arrêté est finalisé comme un run terminé (résultat conservé, dossier et analyse supprimés) ; no-op sur un run déjà finalisé.
+- `DELETE /api/ephemeral/runs/{id}` — arrête d'abord le run s'il est encore en cours (même effet que `stop`), puis supprime immédiatement le `Dossier`, ses `DossierDocument`, `ExecutionStep` et résultats (cascade existante) + la ligne `dossier_ephemere`, ou, si le run est déjà finalisé, le résultat conservé (`ephemeral_results`). Suppression immédiate, sans attendre le TTL, sans toucher à l'analyse liée.
 - `DELETE /api/ephemeral/analyses/{id}` — supprime immédiatement l'`Analyse` + la ligne `analyse_ephemere`. **Scope strict** : ne s'applique qu'aux analyses ayant une ligne `analyse_ephemere` (créées via `/api/ephemeral/analyses`). Si `{id}` correspond à une `Analyse` classique de la plateforme (jamais passée par ce flux), l'endpoint renvoie 404 — il ne la supprime jamais. Refusé (409) si des `dossier_ephemere` non supprimés y font encore référence, pour éviter une suppression en cascade surprise — le client doit d'abord `DELETE` les runs concernés.
 
 ### Comportement `persist` (validé)
@@ -96,7 +124,7 @@ Une `Dossier` **sans** ligne dans `dossier_ephemere` = dossier classique, compor
 Tâche Celery périodique, planifiée via **Celery beat** (réutilise l'infra Celery existante, pas de CronJob Helm à ajouter) :
 
 1. À chaque passage d'un `Dossier` en statut terminal (`terminé`/`échec`/`arrêté`, y compris après un `stop` manuel), si une ligne `dossier_ephemere` existe et `persist=false` : poser `expires_at = ended_at + ttl_hours` — fait directement dans le code qui marque le run terminé (callback worker → `/api/internal/*`), pas en batch, pour être réactif. Même logique pour `analyse_ephemere.last_run_ended_at` / `expires_at` si le run référence une analyse éphémère.
-2. Job périodique (ex. toutes les heures) : sélectionne les `dossier_ephemere` et `analyse_ephemere` avec `expires_at < now()` et `persist=false`, supprime le `Dossier`/`Analyse` correspondant (la cascade existante s'occupe de `DossierDocument`, `ExecutionStep`, résultats et fichiers S3 — même chemin de code qu'une suppression manuelle aujourd'hui).
+2. Job périodique (ex. toutes les heures) : supprime les `ephemeral_results` expirés, puis sélectionne les `dossier_ephemere` et `analyse_ephemere` avec `expires_at < now()` et `persist=false`, supprime le `Dossier`/`Analyse` correspondant (la cascade existante s'occupe de `DossierDocument`, `ExecutionStep`, résultats et fichiers S3 — même chemin de code qu'une suppression manuelle aujourd'hui).
 
 ## Authentification
 
