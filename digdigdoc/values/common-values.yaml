@@ -329,6 +329,23 @@ extraObjects:
       destination:
         name: digdigdoc-worker
         create: true
+  # Only rendered when the AsyncTaskAPI worker is enabled (`worker_async_api.enabled`): otherwise
+  # the operator would sync a Vault path nobody created. Written as a template string so the
+  # whole object disappears when disabled. Keys expected in Vault: see docs/secrets.md, section 12.
+  digdigdoc-async-api-worker: |
+    {{- if .Values.worker_async_api.enabled }}
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: digdigdoc-async-api-worker
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: digdigdoc-async-api-worker
+        create: true
+    {{- end }}
   digdigdoc-redis:
     apiVersion: secrets.hashicorp.com/v1beta1
     kind: VaultStaticSecret

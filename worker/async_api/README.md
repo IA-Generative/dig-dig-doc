@@ -71,6 +71,19 @@ bornes de taille vérifiées par `HEAD`. Le pic vaut `WORKER_CONCURRENCY × tail
 mesure réelle. Une redélivrance du message recrée un run (pas de clé d'idempotence côté backend) ; le doublon est
 purgé au TTL.
 
+## Secrets
+
+Trois endroits, selon l'usage. Le détail (Vault, création des jetons, rotation) est dans [docs/secrets.md](../../docs/secrets.md).
+
+| Où | Secret | Contenu |
+|---|---|---|
+| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `DIGDIGDOC_API_TOKEN` (+ `S3_REGION_NAME`, `S3_VERIFY_SSL` facultatifs) |
+| GitHub Actions | `ASYNC_API_TOKEN` | Jeton en lecture sur le dépôt privé `async-api` (installation de `mic-worker` : lint, tests, build d'image) |
+| Local / docker compose | `.env` | `ASYNC_API_WORKER_TOKEN` (token API dig-dig-doc), `GH_TOKEN` (build), `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (facultatifs, valeurs de dev par défaut) |
+
+Le `DIGDIGDOC_API_TOKEN` se crée avec `POST /api/app-tokens` (session ou jeton Keycloak) et n'est affiché qu'une fois.
+Les autres réglages (files, `SERVICE_CLASS`, `WORKER_CONCURRENCY`, limites...) ne sont pas des secrets : ils vont dans `env`.
+
 ## Développement
 
 Python 3.13 (exigé par `mic-worker`). `mic-worker` est dans un dépôt **privé** : `uv sync` a besoin d'un accès Git
