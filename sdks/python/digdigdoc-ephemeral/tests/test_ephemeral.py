@@ -244,3 +244,33 @@ def test_analyze_cleanup_error_does_not_mask_original(make_client) -> None:
     client, _ = make_client(handler)
     with pytest.raises(NotFoundError):
         client.analyze([b"x"], EphemeralAnalysisConfig(name="N"), cleanup=True)
+
+
+def test_config_validates_inputs() -> None:
+    from pydantic import ValidationError as PydanticValidationError
+
+    with pytest.raises(PydanticValidationError):
+        EphemeralAnalysisConfig(name="  ")
+    with pytest.raises(PydanticValidationError):
+        EphemeralAnalysisConfig(name="n", agents=[{"name": "a", "prompt": ""}])  # type: ignore[list-item]
+    with pytest.raises(PydanticValidationError):
+        EphemeralAnalysisConfig(name="n", entities=[{"name": "e", "type": "couleur"}])  # type: ignore[list-item]
+    with pytest.raises(PydanticValidationError):
+        EphemeralAnalysisConfig(name="n", persit=True)  # type: ignore[call-arg]
+
+
+def test_invalid_analysis_never_reaches_the_network(make_client) -> None:
+    from pydantic import ValidationError as PydanticValidationError
+
+    client, seen = make_client(lambda r: httpx.Response(500))
+    with pytest.raises(PydanticValidationError):
+        client.analyses.create("n", agents=[{"name": "a", "prompt": ""}])
+    assert seen == []
+
+
+def test_run_output_is_typed(make_client) -> None:
+    from digdigdoc.models import DossierStatus
+
+    client, _ = make_client(lambda r: httpx.Response(200, json=run_json(status="terminé")))
+    run = client.runs.get("r")
+    assert run.status is DossierStatus.TERMINE and run.ttl_hours == 24 and run.expires_at is None

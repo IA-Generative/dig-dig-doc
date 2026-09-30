@@ -8,7 +8,7 @@ from digdigdoc._files import FileInput, prepare_files
 from digdigdoc._polling import poll_until
 
 from digdigdoc_ephemeral._ttl import translate_ttl_errors, validate_ttl_hours
-from digdigdoc_ephemeral.models import EphemeralRun
+from digdigdoc_ephemeral.models import EphemeralRun, EphemeralRunCreated
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -37,7 +37,7 @@ class EphemeralRunsResource:
                 data={"analyse_id": str(analyse_id), "persist": persist},
                 files=prepare_files(files),
             )
-        return self.get(response.json()["run_id"])
+        return self.get(EphemeralRunCreated.model_validate(response.json()).run_id)
 
     def create_for_analyse(
         self,
@@ -56,7 +56,7 @@ class EphemeralRunsResource:
                 data={"persist": persist},
                 files=prepare_files(files),
             )
-        return self.get(response.json()["run_id"])
+        return self.get(EphemeralRunCreated.model_validate(response.json()).run_id)
 
     def get(self, run_id: uuid.UUID | str) -> EphemeralRun:
         """Statut, puis résultats une fois terminé."""

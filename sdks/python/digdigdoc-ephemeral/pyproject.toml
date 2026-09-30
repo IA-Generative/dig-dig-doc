@@ -35,6 +35,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests", "../testing"]
 markers = ["integration: nécessite un backend dig-dig-doc accessible (DIGDIGDOC_BASE_URL / DIGDIGDOC_API_TOKEN)"]
 addopts = "-m 'not integration' --cov=digdigdoc_ephemeral --cov-report=term-missing --cov-fail-under=90"
 

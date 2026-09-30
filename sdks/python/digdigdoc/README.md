@@ -52,6 +52,18 @@ Fichiers acceptés : chemins (`str`/`Path`), `bytes`, objets fichier binaires, o
 | `client.tokens` | `list`, `create(name)` (jeton en clair renvoyé une seule fois), `revoke` |
 | `client.models` | `list()` |
 
+## Typage des entrées et sorties
+
+- **Sorties** : chaque réponse est validée par pydantic (`digdigdoc.models`). Tous les champs du backend
+  sont typés, les valeurs fermées sont des enums (`DossierStatus`, `ExecutionStepKind`, `EntityType`,
+  `AgentTool`…). Une réponse incomplète ou une valeur d'enum inconnue lève une `ValidationError` pydantic.
+- **Entrées** : `AnalyseCreate`, `DossierCreate`, `AppTokenCreate`, `AgentCreate`, `LabelDefinitionIn`,
+  `EntityDefinitionIn` reprennent les validations du backend (description/prompt non vides, types d'entité
+  et outils valides) et refusent les champs inconnus. Une entrée invalide est rejetée **avant** tout appel réseau.
+- **Contrat** : `tests/test_contract.py` compare ces modèles à l'OpenAPI du backend (`sdks/python/openapi.json`)
+  et échoue au moindre écart (champ, caractère obligatoire, valeurs d'enum). Après un changement d'API
+  côté backend : `sdks/python/scripts/update_openapi.sh`, puis corriger les modèles signalés.
+
 ## Erreurs
 
 | HTTP | Exception |

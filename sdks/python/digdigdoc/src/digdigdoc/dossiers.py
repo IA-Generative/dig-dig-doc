@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from digdigdoc._files import FileInput, prepare_files
 from digdigdoc._polling import poll_until
-from digdigdoc.models import Dossier, Page
+from digdigdoc.models import Dossier, DossierCreate, Page
 
 if TYPE_CHECKING:
     from digdigdoc._http import HTTPClient
@@ -24,8 +24,8 @@ class DossiersResource:
 
     def create(self, name: str, analyse_id: uuid.UUID | str | None = None) -> Dossier:
         """Crée un dossier, lié ou non à une analyse."""
-        body = {"name": name, "analyse_id": str(analyse_id) if analyse_id else None}
-        return Dossier.model_validate(self._http.request("POST", "/dossiers", json=body).json())
+        body = DossierCreate(name=name, analyse_id=analyse_id)
+        return Dossier.model_validate(self._http.request("POST", "/dossiers", json=body.model_dump(mode="json")).json())
 
     def get(self, dossier_id: uuid.UUID | str) -> Dossier:
         """Détail complet : documents, statut, étapes d'exécution, résultats."""

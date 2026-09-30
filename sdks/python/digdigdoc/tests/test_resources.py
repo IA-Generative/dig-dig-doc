@@ -60,7 +60,7 @@ def test_dossiers_flow(make_client, tmp_path: Path) -> None:
     client, _ = make_client(handler)
     pdf = tmp_path / "cni.pdf"
     pdf.write_bytes(b"%PDF")
-    assert client.dossiers.list().items[0].name == "D"
+    assert str(client.dossiers.list().items[0].id) == did
     client.dossiers.create("D")
     client.dossiers.get(did)
     client.dossiers.add_files(did, [pdf, b"raw", ("named.txt", io.BytesIO(b"hi"))])
