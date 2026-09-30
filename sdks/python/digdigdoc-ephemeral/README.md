@@ -1,0 +1,89 @@
+# digdigdoc-ephemeral
+
+SDK Python pour l'API **éphémère** de dig-dig-doc (`/api/ephemeral/*`) : analyses et runs à la volée,
+résultats disponibles pendant un TTL (défaut 24 h, max 17 520 h / 2 ans), purge automatique côté
+serveur. Voir [docs/ephemeral-api.md](../../../docs/ephemeral-api.md).
+
+Dépend de [`digdigdoc`](../digdigdoc/README.md) (client HTTP, exceptions, modèles).
+
+## Installation
+
+```bash
+pip install digdigdoc-ephemeral
+```
+
+## Authentification
+
+```python
+from digdigdoc_ephemeral import EphemeralClient
+
+client = EphemeralClient("https://api.dig-dig-doc.example.fr", api_token="ddd_...")  # X-App-Token
+# ou bearer_token="<access token Keycloak>" / session_cookie="<cookie digdigdoc_session>"
+```
+
+Chaque compte ne voit que les analyses/runs qu'il a créés (404 sinon).
+
+## One-liner
+
+```python
+from digdigdoc_ephemeral import EphemeralAnalysisConfig
+
+result = client.analyze(
+    files=["cni.pdf", "justif_domicile.pdf"],
+    analysis_config=EphemeralAnalysisConfig(
+        name="Vérification CNI + justificatif",
+        classification_prompt="Classe le document (CNI, justificatif...)",
+        labels=[{"name": "CNI", "definition": "Carte nationale d'identité"}],
+        extraction_prompt="Extrait nom, prénom, adresse",
+        entities=[{"name": "nom", "definition": "Nom de famille", "type": "texte"}],
+        agents=[{"name": "vérif", "prompt": "Vérifie la cohérence des données"}],
+    ),
+    ttl_hours=48,
+    timeout=300,
+)
+print(result.status, result.expires_at)
+```
+
+`analyze()` crée l'analyse, lance le run et attend la fin. Options : `analyse_id=` (réutiliser une
+analyse existante au lieu de `analysis_config`), `persist=` (conserver le run), `cleanup=True`
+(supprimer le run — et l'analyse créée par l'appel — après récupération du résultat).
+
+## Flux A : réutiliser une analyse
+
+```python
+analyse = client.analyses.create(name="Réutilisable", persist=True, classification_prompt="...")
+run1 = client.runs.create_for_analyse(analyse.id, files=["doc1.pdf"], ttl_hours=24)
+result1 = client.runs.wait(run1.id)
+client.runs.delete(run1.id)  # optionnel : la purge automatique s'en charge
+client.analyses.delete(analyse.id)  # ConflictError si des runs y sont encore liés
+```
+
+## Flux B : un seul appel sur une analyse existante
+
+```python
+run = client.runs.create(analyse_id, files=["doc.pdf"], persist=False, ttl_hours=48)
+```
+
+`analyse_id` peut être une analyse éphémère ou une analyse classique de la plateforme.
+
+## API
+
+| Ressource | Méthodes |
+|---|---|
+| `client.analyses` | `create(name, description, persist, classification_prompt, labels, extraction_prompt, entities, agents)`, `create_from_config`, `get`, `delete` |
+| `client.runs` | `create` (flux B), `create_for_analyse` (flux A), `get`, `stop`, `delete`, `wait(timeout, poll_interval)` |
+| `client` | `analyze(...)` |
+
+Un run démarre dès sa création : il n'y a pas d'appel `launch`. `expires_at` reste `None` tant que le
+run n'est pas terminé (le TTL démarre à la fin du run) ou si `persist=True`.
+
+`ttl_hours` est validé côté client (1 à 17 520) : `TTLValidationError`, aussi levée si le serveur
+répond 400. Les autres erreurs sont celles de `digdigdoc` (`NotFoundError`, `ConflictError`, …).
+
+## Développement
+
+```bash
+uv sync
+uv run ruff check . && uv run mypy src && uv run pytest
+DIGDIGDOC_BASE_URL=... DIGDIGDOC_API_TOKEN=... uv run pytest -m integration
+```
