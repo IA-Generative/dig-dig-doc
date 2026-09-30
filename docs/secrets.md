@@ -22,6 +22,7 @@ Chaque secret ci-dessous correspond à un **chemin Vault** (`mirai` mount, kv-v2
 | `digdigdoc-db-appuser`    | `digdigdoc-db-appuser`         | kubernetes.io/basic-auth    | CNPG (initdb.secret)                  |
 | `digdigdoc-db-infos`      | `digdigdoc-db-appuser`         | Opaque (transformé)         | backend, job de migration             |
 | `digdigdoc-db-backups`    | `digdigdoc-db-backups`         | Opaque                      | CNPG (barmanObjectStore)              |
+| `digdigdoc-async-api-worker` | `digdigdoc-async-api-worker` | Opaque                   | worker_async_api (si activé)          |
 | `registry-pull-secret`    | — (manuel ou ArgoCD)           | kubernetes.io/dockerconfigjson | Tous les pods (imagePullSecrets)    |
 
 ---
@@ -230,6 +231,47 @@ kubectl create secret docker-registry registry-pull-secret \
 
 ---
 
+## 12. `digdigdoc-async-api-worker` — Worker AsyncTaskAPI (optionnel)
+
+Uniquement si le composant `worker_async_api` est activé (`worker_async_api.enabled: true`). Le `VaultStaticSecret`
+correspondant n'est rendu que dans ce cas (voir `extraObjects` dans `digdigdoc/values/common-values.yaml`).
+
+Variables attendues dans Vault :
+
+| Variable              | Obligatoire | Description                                                                   | Exemple                                  |
+| --------------------- | ----------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| `BROKER_URL`          | oui         | URL RabbitMQ d'AsyncTaskAPI, identifiants compris                              | `amqps://user:password@rabbitmq:5672`    |
+| `S3_ENDPOINT_URL`     | oui         | Endpoint du stockage objet **d'AsyncTaskAPI** (où les fichiers sont déposés)   | `https://s3.fr-par.scw.cloud`            |
+| `S3_ACCESS_KEY`       | oui         | Clé d'accès à ce stockage (lecture seule suffit : lecture des objets et `HEAD` du bucket)                                     | `SCW...`                                 |
+| `S3_SECRET_KEY`       | oui         | Clé secrète associée                                                           | `xxxxxxxx`                               |
+| `S3_BUCKET_NAME`      | oui         | Bucket où AsyncTaskAPI dépose les fichiers                                     | `brio-prod-api-data`                     |
+| `DIGDIGDOC_API_TOKEN` | oui         | Token API de dig-dig-doc (en-tête `X-App-Token`), voir ci-dessous              | `ddd_...`                                |
+| `S3_REGION_NAME`      | non         | Région du stockage (défaut `fr-par`)                                            | `fr-par`                                 |
+| `S3_VERIFY_SSL`       | non         | `false` pour un stockage à certificat auto-signé (défaut `true`)                | `true`                                   |
+
+> **Ce n'est pas le stockage de dig-dig-doc** : `digdigdoc-s3` ne sert pas ici. Le worker lit les fichiers dans le
+> stockage d'AsyncTaskAPI, puis les envoie à dig-dig-doc par son API.
+
+Les réglages qui ne sont pas des secrets (`IN_QUEUE_NAME`, `OUT_QUEUE_NAME`, `SERVICE_CLASS`, `WORKER_CONCURRENCY`,
+`DIGDIGDOC_BASE_URL`, limites de taille...) restent dans `env` de `worker_async_api` (`common-values.yaml`).
+
+**Créer `DIGDIGDOC_API_TOKEN`** : le token est renvoyé **une seule fois** à sa création, par un utilisateur Keycloak
+(les routes `/api/app-tokens` n'acceptent pas un token API) :
+
+```bash
+curl -s -X POST https://api.example.com/api/app-tokens \
+  -H "Authorization: Bearer $KEYCLOAK_ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "async-api-worker"}' | jq -r .token
+```
+
+Un token par déploiement, à révoquer avec `DELETE /api/app-tokens/{id}` (rotation : en créer un nouveau, mettre à jour
+Vault, redémarrer le worker, puis révoquer l'ancien). Le token donne accès à `/api/ephemeral/*` et `/api/internal/*`
+pour le créateur seul : les analyses et runs créés par le worker ne sont visibles que par lui.
+
+**Consommateurs** : worker_async_api.
+
+---
+
 ## Commandes Vault de référence
 
 ### Lister les chemins Vault existants
@@ -277,6 +319,15 @@ vault kv put mirai/digdigdoc-worker \
   OPENAI_API_BASE_URL="https://llm-hub.example.com/v1" \
   VLM_MODEL="pixtral-12b-2409" \
   LLM_MODEL="llama-3.3-70b-instruct"
+
+# Exemple : digdigdoc-async-api-worker (worker AsyncTaskAPI, optionnel)
+vault kv put mirai/digdigdoc-async-api-worker \
+  BROKER_URL="amqps://user:password@rabbitmq.example.com:5672" \
+  S3_ENDPOINT_URL="https://s3.fr-par.scw.cloud" \
+  S3_ACCESS_KEY="SCW..." \
+  S3_SECRET_KEY="xxxxxxxx" \
+  S3_BUCKET_NAME="brio-prod-api-data" \
+  DIGDIGDOC_API_TOKEN="ddd_..."
 
 # Exemple : digdigdoc-redis
 vault kv put mirai/digdigdoc-redis \
@@ -340,3 +391,21 @@ kubectl get vaultstaticsecret -n <namespace>
 
 5. **`REDIS_URL`** est calculée par transformation VSO à partir de `REDIS_PASSWORD` —
    ne pas la stocker manuellement dans Vault.
+
+---
+
+## Secrets GitHub Actions
+
+Distincts des secrets Kubernetes : ils servent à la CI, pas au déploiement.
+
+| Secret (Settings → Secrets and variables → Actions) | Obligatoire | Rôle |
+| --------------------------------------------------- | ----------- | ---- |
+| `ASYNC_API_TOKEN` | non (jobs ignorés sans lui) | Accès en lecture au dépôt **privé** `IA-Generative/async-api`, qui héberge `mic-worker` (dépendance du worker `worker/async_api`). Utilisé par les jobs de lint, de tests et de build d'image de ce worker. |
+
+Créer le jeton : *Settings → Developer settings → Personal access tokens → Fine-grained tokens*, **Resource owner**
+`IA-Generative`, **Only select repositories** → `async-api`, permission **Contents : Read-only** (et rien d'autre).
+L'organisation peut exiger l'approbation du jeton par un propriétaire. Choisir une expiration et la noter : à l'expiration, les jobs du worker sont de nouveau ignorés (avertissement dans la CI).
+Un compte de service ou une GitHub App limitée à ce dépôt vaut mieux qu'un jeton personnel. Ne jamais utiliser un jeton classic.
+
+En local, `docker compose --profile async-api build` lit le même jeton dans `GH_TOKEN` (`export GH_TOKEN=$(gh auth token)`).
+
