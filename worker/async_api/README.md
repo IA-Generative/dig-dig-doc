@@ -77,12 +77,12 @@ Trois endroits, selon l'usage. Le détail (Vault, création des jetons, rotation
 
 | Où | Secret | Contenu |
 |---|---|---|
-| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME`, `DIGDIGDOC_API_TOKEN` (+ `S3_REGION_NAME`, `S3_VERIFY_SSL` facultatifs) |
+| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `DIGDIGDOC_API_TOKEN` (identifiants uniquement) |
 | GitHub Actions | `ASYNC_API_TOKEN` | Jeton en lecture sur le dépôt privé `async-api` (installation de `mic-worker` : lint, tests, build d'image) |
 | Local / docker compose | `.env` | `ASYNC_API_WORKER_TOKEN` (token API dig-dig-doc), `GH_TOKEN` (build), `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (facultatifs, valeurs de dev par défaut) |
 
 Le `DIGDIGDOC_API_TOKEN` se crée avec `POST /api/app-tokens` (session ou jeton Keycloak) et n'est affiché qu'une fois.
-Les autres réglages (files, `SERVICE_CLASS`, `WORKER_CONCURRENCY`, limites...) ne sont pas des secrets : ils vont dans `env`.
+Les autres réglages (files, endpoint et bucket S3, `SERVICE_CLASS`, `WORKER_CONCURRENCY`, limites, délais...) ne sont pas des secrets : ils sont dans `env` de `common-values.yaml`, avec leur valeur par défaut.
 
 ## Développement
 
@@ -119,9 +119,8 @@ d'AsyncTaskAPI, que le chart ne fournit pas.
 helm template digdigdoc ./digdigdoc -f digdigdoc/values/common-values.yaml --set worker_async_api.enabled=true
 ```
 
-Le pod lit sa configuration dans le secret `digdigdoc-async-api-worker` (à créer hors du chart : il porte des
-identifiants) : `BROKER_URL`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_NAME` et
-`DIGDIGDOC_API_TOKEN`. Le reste (files, `SERVICE_CLASS`, `DIGDIGDOC_BASE_URL`...) est dans `env`. Sondes : `/health`
+Les identifiants (`BROKER_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `DIGDIGDOC_API_TOKEN`) viennent du secret
+`digdigdoc-async-api-worker` (Vault) ; tout le reste est dans `env`, avec des valeurs par défaut (`common-values.yaml`). Sondes : `/health`
 (vivacité) et `/ready` (stockage objet), sur le port `8084`. Pas de mise à l'échelle KEDA : le worker consomme
 RabbitMQ, pas les files Celery ; régler `WORKER_CONCURRENCY` et `replicaCount` selon la mémoire.
 
