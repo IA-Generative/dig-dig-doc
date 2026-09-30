@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.5...v0.6.0) (2026-09-30)
+
+
+### Features
+
+* **chart:** composant worker_async_api pour le worker AsyncTaskAPI (désactivé par défaut) ([b913064](https://github.com/IA-Generative/dig-dig-doc/commit/b913064466097c85e90988671541390854173381)), closes [#79](https://github.com/IA-Generative/dig-dig-doc/issues/79)
+* **chart:** réglages non secrets du worker async_api en env, identifiants seuls en secret ([aa38cee](https://github.com/IA-Generative/dig-dig-doc/commit/aa38ceea2c32ba35c69f3f5c6275922fac67f4f8)), closes [#79](https://github.com/IA-Generative/dig-dig-doc/issues/79)
+* **ephemeral:** conserver le résultat d'un run et supprimer dossier, fichiers et analyse à sa fin ([bfb0afd](https://github.com/IA-Generative/dig-dig-doc/commit/bfb0afda0763d467847073b86c9a772586409a0f)), closes [#76](https://github.com/IA-Generative/dig-dig-doc/issues/76)
+* **sdks:** ajout des SDK Python standard (digdigdoc) et éphémère (digdigdoc-ephemeral) ([81049c3](https://github.com/IA-Generative/dig-dig-doc/commit/81049c3339df917805eafc87f16befdf3f05c86a)), closes [#76](https://github.com/IA-Generative/dig-dig-doc/issues/76)
+* **sdks:** modèles pydantic stricts en entrée/sortie et test de contrat OpenAPI ([13dd74d](https://github.com/IA-Generative/dig-dig-doc/commit/13dd74da8743d48288a419495cebd99106f4b3fa)), closes [#76](https://github.com/IA-Generative/dig-dig-doc/issues/76)
+* **worker:** worker async_api (mic-worker, sans Celery) pour AsyncTaskAPI ([bc28e67](https://github.com/IA-Generative/dig-dig-doc/commit/bc28e6745d0629e60c697f2e874f91e2abd847af)), closes [#79](https://github.com/IA-Generative/dig-dig-doc/issues/79)
+
+
+### Bug Fixes
+
+* **sdks:** analyze(cleanup=True) tolère l'analyse déjà supprimée par le serveur ([19ac4d4](https://github.com/IA-Generative/dig-dig-doc/commit/19ac4d456dfe6ed5e826d4213a1e98fc5194af7c)), closes [#76](https://github.com/IA-Generative/dig-dig-doc/issues/76)
+
 ## [0.5.5](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.4...v0.5.5) (2026-09-25)
 
 
