@@ -33,6 +33,10 @@ const {
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const {
   conversation,
+  messages,
+  hasMoreMessages,
+  isLoadingMore,
+  loadOlderMessages,
   ensureConversation,
   sendMessage,
   refreshConversation,
@@ -156,10 +160,10 @@ const suggestionBadgeType: Record<SuggestionStatus, "new" | "info" | "success" |
 
 const isUnassigned = computed(() => !dossier.value?.analyseId);
 
-// Fil d'échange pour alimenter l'analyse (documents, notes) : les résultats
-// eux-mêmes sont présentés directement dans DossierResults, pas ici, pour
-// rester visibles sans avoir à remonter la conversation.
-const messages = computed(() => conversation.value?.messages ?? []);
+// Fil d'échange pour alimenter l'analyse : les résultats eux-mêmes sont
+// présentés directement dans DossierResults, pas ici, pour rester visibles
+// sans avoir à remonter la conversation. Les messages sont chargés par pages
+// (les plus anciens au défilement vers le haut, voir useConversations).
 
 async function onChatSubmit(content: string) {
   if (!dossier.value) return;
@@ -304,6 +308,9 @@ async function onDeleteConversation() {
 
     <ChatWindow
       :messages="messages"
+      :has-more="hasMoreMessages"
+      :loading-more="isLoadingMore"
+      @load-more="loadOlderMessages"
       :stream-events="chatEvents"
       :is-running="isChatRunning"
       intro-title="Alimenter l'analyse"
