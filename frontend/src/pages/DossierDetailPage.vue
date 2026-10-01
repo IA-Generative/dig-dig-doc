@@ -233,6 +233,14 @@ async function onDeleteConversation() {
           align="right"
           @update:model-value="onModelChange"
         />
+        <RouterLink
+          :to="`/dossiers/${dossierId}/analyse`"
+          class="dossier-detail__icon-button"
+          aria-label="Voir l'analyse du dossier"
+          title="Analyse du dossier : éléments, historique et propositions"
+        >
+          <VIcon name="ri-file-list-3-line" />
+        </RouterLink>
         <button
           type="button"
           class="dossier-detail__icon-button"
