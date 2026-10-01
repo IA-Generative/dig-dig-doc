@@ -42,6 +42,33 @@ _STEP_TO_UNIT_KIND = {
 }
 
 
+def prediction_element_args(prediction: DocumentPrediction, page: DocumentPage) -> dict:
+    """Champs de l'élément d'analyse correspondant à une prédiction (classification
+    ou entité) : type, valeur, définition, document, première page, source."""
+    if prediction.kind == PredictionKind.LABEL:
+        kind, value, definition_id = (
+            AnalysisElementKind.CLASSIFICATION,
+            {"label": prediction.value},
+            prediction.label_definition_id,
+        )
+    else:
+        kind, value, definition_id = (
+            AnalysisElementKind.ENTITY,
+            {"value": prediction.value},
+            prediction.entity_definition_id,
+        )
+    return {
+        "kind": kind,
+        "value": value,
+        "definition_id": definition_id,
+        "definition_name": prediction.name,
+        "document_id": page.dossier_document_id,
+        "first_page_number": page.page_number,
+        "source_prediction_id": prediction.id,
+        "confidence": prediction.confidence,
+    }
+
+
 async def record_prediction(unit_id: uuid.UUID, prediction_id: uuid.UUID, page_id: uuid.UUID) -> None:
     """Crée l'élément d'une prédiction déposée dans une unité, dans **sa propre
     session** : un échec est journalisé et n'affecte jamais le dépôt de la
@@ -74,30 +101,11 @@ async def _create_element_from_prediction(
     analysis = await repository.db.get(DossierAnalysis, unit.analysis_id)
     if analysis is None:
         return None
-    if prediction.kind == PredictionKind.LABEL:
-        kind, value, definition_id = (
-            AnalysisElementKind.CLASSIFICATION,
-            {"label": prediction.value},
-            prediction.label_definition_id,
-        )
-    else:
-        kind, value, definition_id = (
-            AnalysisElementKind.ENTITY,
-            {"value": prediction.value},
-            prediction.entity_definition_id,
-        )
     return await repository.create_element(
         analysis,
-        kind=kind,
-        value=value,
         origin=ElementVersionOrigin.MODEL,
         unit=unit,
-        definition_id=definition_id,
-        definition_name=prediction.name,
-        document_id=page.dossier_document_id,
-        first_page_number=page.page_number,
-        source_prediction_id=prediction.id,
-        confidence=prediction.confidence,
+        **prediction_element_args(prediction, page),
     )
 
 
