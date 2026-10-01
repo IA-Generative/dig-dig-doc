@@ -3,7 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import ModelPicker from "@/components/ModelPicker.vue";
-import ChatWindow from "@/components/ChatWindow.vue";
+import ChatWindow, { type ChatWindowSource } from "@/components/ChatWindow.vue";
+import SourceViewerModal from "@/components/SourceViewerModal.vue";
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
@@ -70,6 +71,14 @@ const { isRunning: isChatRunning, start: startChatStream, stop: stopChatStream }
 });
 
 const isDetailsModalOpened = ref(false);
+
+// Source citée par l'assistant, ouverte dans une modale (page + passage surligné).
+const viewedSource = ref<ChatWindowSource | null>(null);
+const isSourceOpened = ref(false);
+function openSource(source: ChatWindowSource) {
+  viewedSource.value = source;
+  isSourceOpened.value = true;
+}
 
 function formatDateTime(iso?: string) {
   if (!iso) return "—";
@@ -320,6 +329,16 @@ async function onDeleteConversation() {
         />
       </template>
 
+      <template #source="{ source }">
+        <button type="button" class="chat-source-button" @click="openSource(source)">
+          <span v-if="source.pages && source.pages.length > 0" class="chat-source-button__pages">
+            {{ source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") }}
+          </span>
+          <span v-if="source.excerpt" class="chat-source-button__excerpt">« {{ source.excerpt }} »</span>
+          <span class="chat-source-button__cta">Voir la source <VIcon name="ri-arrow-right-s-line" /></span>
+        </button>
+      </template>
+
       <template #message-actions="{ message }">
         <button
           type="button"
@@ -343,6 +362,13 @@ async function onDeleteConversation() {
         </button>
       </template>
     </ChatWindow>
+
+    <SourceViewerModal
+      :opened="isSourceOpened"
+      :dossier-id="dossierId"
+      :source="viewedSource"
+      @close="isSourceOpened = false"
+    />
 
     <DsfrModal
       :opened="isDetailsModalOpened"
@@ -438,6 +464,51 @@ async function onDeleteConversation() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+}
+
+/* Source citée dans une réponse : cliquable, ouvre la page dans une modale. */
+.chat-source-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border-default-grey);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-source-button:hover {
+  background: var(--background-default-grey-hover);
+}
+
+.chat-source-button__pages {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.chat-source-button__excerpt {
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-mention-grey);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.chat-source-button__cta {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-action-high-blue-france);
 }
 
 .dossier-detail__icon-button {
