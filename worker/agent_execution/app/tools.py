@@ -58,6 +58,24 @@ class AgentTools:
                 self._pages_by_id[page["id"]] = page
                 self._pages_by_number[page["page_number"]] = page
         self._consulted_sources: list[ConsultedSource] = []
+        self._assistant_question: str | None = None
+
+    # --- Passage de relais vers l'assistant de l'application ---
+
+    def suggest_assistant(self, question: str) -> str:
+        """Mémorise qu'on propose à l'utilisateur d'ouvrir l'assistant de
+        l'application avec cette question. Sans effet de bord : seul le
+        frontend ouvre l'assistant, après clic de l'utilisateur."""
+        self._assistant_question = question.strip() or None
+        return (
+            "Une proposition d'ouvrir l'assistant de l'application sera affichée "
+            "sous ta réponse. Explique brièvement que cette demande relève de "
+            "l'assistant, sans tenter d'y répondre toi-même."
+        )
+
+    def assistant_question(self) -> str | None:
+        """Question à pré-remplir dans l'assistant, si le LLM l'a proposé."""
+        return self._assistant_question
 
     # --- Suivi des sources ---
 
@@ -229,6 +247,32 @@ class AgentTools:
                     "parameters": {"type": "object", "properties": {}},
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "suggest_assistant",
+                    "description": (
+                        "À utiliser quand la demande de l'utilisateur concerne l'application "
+                        "elle-même et non le contenu du dossier : créer ou configurer une "
+                        "analyse, créer ou lancer un dossier, retrouver des analyses, "
+                        "comprendre le fonctionnement de la plateforme. Propose à "
+                        "l'utilisateur d'ouvrir l'assistant de l'application."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": (
+                                    "La demande de l'utilisateur, reformulée pour l'assistant "
+                                    "(elle sera pré-remplie dans sa zone de saisie)"
+                                ),
+                            }
+                        },
+                        "required": ["question"],
+                    },
+                },
+            },
         ]
 
     def dispatch_tool(self, name: str, arguments: dict[str, Any]) -> str:
@@ -241,4 +285,6 @@ class AgentTools:
             return self.view_classifications()
         if name == "view_entities":
             return self.view_entities()
+        if name == "suggest_assistant":
+            return self.suggest_assistant(arguments.get("question", ""))
         return f"Outil '{name}' inconnu."
