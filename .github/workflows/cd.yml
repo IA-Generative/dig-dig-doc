@@ -181,6 +181,10 @@ jobs:
     needs:
       - expose-vars
       - release
+      # bump-chart pousse le commit « chore(chart): release » sur main : la
+      # synchro doit passer après, sinon dev manque ce commit et le job
+      # « Assert dev is in sync with main » échoue à la release suivante.
+      - bump-chart
     if: ${{ github.ref_name == needs.expose-vars.outputs.RELEASE_BRANCH && needs.release.outputs.release-created == 'true' }}
     permissions:
       contents: write
