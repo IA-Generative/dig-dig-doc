@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.conversation import MessageRole
-from app.models.dossier import DossierStatus
+from app.models.dossier import DossierStatus, ExecutionStep
 from app.models.dossier_analysis import AnalysisUnitStatus, DossierAnalysisStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_proposal_repository import AnalysisProposalRepository, ProposalTargetError
@@ -48,15 +48,18 @@ from app.schemas.dossier import (
     TextExtractionStatusIn,
 )
 from app.schemas.dossier_analysis import (
+    AgentReuseIn,
+    AgentReuseOut,
     AnalysisUnitCompleteIn,
     AnalysisUnitCreateIn,
     AnalysisUnitRefOut,
     DossierAnalysisOut,
     InvalidElementValueError,
+    ReusedEntity,
 )
 from app.schemas.dossier_note import InternalNoteAnalysisIn, InternalNoteOut
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
-from app.services import analysis_builder
+from app.services import analysis_builder, analysis_carryover
 from app.services.ephemeral_run_service import finalize_run
 from app.services.user_task_service import update_task
 
@@ -343,9 +346,27 @@ async def create_analysis_unit(
     analysis = await analyses.get_current(dossier_id)
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
-    return await analyses.create_unit(
+    # Relance incrémentale (#119) : une unité dont l'empreinte est inchangée est
+    # reprise de l'analyse précédente (éléments copiés), le worker ne la calcule pas.
+    if body.input_fingerprint:
+        reused = await analysis_carryover.reuse_unit(
+            analyses,
+            analysis,
+            kind=body.kind,
+            description=body.description,
+            fingerprint=body.input_fingerprint,
+        )
+        if reused is not None:
+            return AnalysisUnitRefOut(
+                id=reused.unit.id,
+                analysis_id=analysis.id,
+                reused=True,
+                reused_entities=[ReusedEntity(name=n, value=v) for n, v in reused.entities],
+            )
+    unit = await analyses.create_unit(
         analysis.id, kind=body.kind, description=body.description, input_fingerprint=body.input_fingerprint
     )
+    return AnalysisUnitRefOut(id=unit.id, analysis_id=unit.analysis_id)
 
 
 @router.get("/dossiers/{dossier_id}/analysis", response_model=DossierAnalysisOut)
@@ -435,6 +456,26 @@ async def finish_note_analysis(
     return _internal_note(
         await repository.finish_analysis(note, status=body.status, proposal_count=body.proposal_count, error=body.error)
     )
+
+
+@router.post("/dossiers/{dossier_id}/agent-units/reuse", response_model=AgentReuseOut)
+async def reuse_agent_unit(dossier_id: uuid.UUID, body: AgentReuseIn, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Relance incrémentale (#119) : l'agent d'une étape peut-il reprendre la
+    synthèse de l'analyse précédente ? Oui si son empreinte (configuration et ce
+    qu'il lit) est inchangée ; le worker dépose alors cette synthèse sans appeler le
+    LLM. À appeler une fois la classification et l'extraction terminées."""
+    analyses = DossierAnalysisRepository(db)
+    analysis = await analyses.get_current(dossier_id)
+    step = await db.get(ExecutionStep, body.step_id)
+    if analysis is None or step is None or step.dossier_id != dossier_id:
+        return AgentReuseOut(reused=False)
+    fingerprint = await analysis_builder.agent_fingerprint(analyses, analysis, step)
+    if fingerprint is None:
+        return AgentReuseOut(reused=False)
+    reused = await analysis_carryover.reuse_agent_unit(analyses, analysis, step, fingerprint)
+    if reused is None:
+        return AgentReuseOut(reused=False)
+    return AgentReuseOut(reused=True, output=reused[1])
 
 
 @router.post("/analysis-units/{unit_id}/complete", response_model=AnalysisUnitRefOut)

@@ -379,6 +379,7 @@ class DossierAnalysisRepository:
             if origin == ElementVersionOrigin.INSTRUCTOR:
                 element.needs_review = False
                 element.review_reason = None
+                await self._flag_stale_syntheses(element)
         await self._finish(commit)
         return version
 
@@ -400,6 +401,23 @@ class DossierAnalysisRepository:
             author_id=author_id,
             reason=reason,
             restored_from_version_id=version.id,
+        )
+
+    async def _flag_stale_syntheses(self, element: AnalysisElement) -> None:
+        """Une synthèse dépend des éléments qu'elle lit : quand un instructeur en
+        corrige un, les synthèses de l'analyse sont signalées « à régénérer »
+        (jamais régénérées automatiquement). Elles se règlent quand l'instructeur
+        les confirme ou les corrige (#119)."""
+        if element.kind == AnalysisElementKind.SYNTHESIS:
+            return
+        await self.db.execute(
+            update(AnalysisElement)
+            .where(
+                AnalysisElement.analysis_id == element.analysis_id,
+                AnalysisElement.kind == AnalysisElementKind.SYNTHESIS,
+                AnalysisElement.needs_review.is_(False),
+            )
+            .values(needs_review=True, review_reason="Un élément qu'elle lit a été corrigé : à régénérer.")
         )
 
     async def _finish(self, commit: bool) -> None:

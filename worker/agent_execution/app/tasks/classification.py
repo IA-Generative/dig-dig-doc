@@ -126,18 +126,26 @@ def classify_dossier(self, dossier_id: str) -> None:
             label_by_name = {label["name"]: label for label in label_defs}
             total_pages = 0
             classified_pages = 0
+            reused_pages = 0
 
             for document in dossier["documents"]:
                 for page in document["pages"]:
                     total_pages += 1
                     # Une unité de calcul par page dans l'analyse de dossier.
-                    unit_id = api_client.declare_unit(
+                    unit = api_client.declare_unit(
                         client,
                         dossier_id,
                         "classification",
                         {"document_id": document["id"], "page_id": page["id"], "page_number": page["page_number"]},
                         fingerprint=classification_fingerprint(page, label_defs, classification_prompt),
                     )
+                    if unit is not None and unit.reused:
+                        # Relance incrémentale (#119) : entrées inchangées, résultat
+                        # déjà repris de l'analyse précédente, ni VLM ni LLM.
+                        classified_pages += 1
+                        reused_pages += 1
+                        continue
+                    unit_id = unit.id if unit else None
                     try:
                         if _classify_page(client, page, label_defs, label_by_name, classification_prompt, unit_id):
                             classified_pages += 1
@@ -147,6 +155,8 @@ def classify_dossier(self, dossier_id: str) -> None:
                     api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
 
             output = f"{classified_pages}/{total_pages} page(s) classifiée(s)"
+            if reused_pages:
+                output += f" (dont {reused_pages} reprise(s) de l'exécution précédente)"
             if step_id:
                 api_client.complete_execution_step(client, step_id, status=_STATUS_TERMINE, output=output)
             logger.info("Classification complete for dossier %s: %s", dossier_id, output)
