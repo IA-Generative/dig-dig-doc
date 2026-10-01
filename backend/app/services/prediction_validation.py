@@ -20,6 +20,7 @@ from app.models.dossier_analysis import (
     DossierAnalysisStatus,
     ElementVersionOrigin,
 )
+from app.repositories.analysis_collaboration_repository import ensure_not_locked_by_other, release_if_holder
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.services.analysis_builder import prediction_element_args
 
@@ -78,6 +79,8 @@ async def record_validation(
     Une zone corrigée crée toujours une nouvelle BoundingBox (jamais de mutation
     de celle de la prédiction), rattachée à la première page de la prédiction."""
     element = await ensure_element(repository, prediction, page)
+    # Un autre instructeur est en train de modifier cet élément (#118) : ElementLockedError.
+    ensure_not_locked_by_other(element, user_id)
     analysis = await repository.db.get(DossierAnalysis, element.analysis_id)
     if analysis is not None and analysis.status == DossierAnalysisStatus.FIGEE:
         raise AnalysisFrozenError()
@@ -106,5 +109,6 @@ async def record_validation(
     if status == PredictionValidationStatus.REJECTED:
         element.needs_review = True
         element.review_reason = "Prédiction rejetée par un instructeur"
+    await release_if_holder(repository.db, element, user_id)
     await repository.db.commit()
     return version

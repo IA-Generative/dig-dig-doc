@@ -14,6 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.dossier_analysis import DossierAnalysis, DossierAnalysisStatus, ElementVersionOrigin
+from app.repositories.analysis_collaboration_repository import (
+    ElementLockedError,
+    ensure_not_locked_by_other,
+    release_if_holder,
+)
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier_analysis import (
@@ -47,6 +52,21 @@ async def _analysis_or_404(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse de dossier introuvable")
     return analysis
+
+
+def _ensure_not_locked(element, user_id: str) -> None:
+    """Refuse l'écriture si un autre instructeur détient un verrou valide (#118)."""
+    try:
+        ensure_not_locked_by_other(element, user_id)
+    except ElementLockedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
+
+
+async def _release_lock(db: AsyncSession, element, user_id: str) -> None:
+    """L'écriture est faite : le détenteur du verrou le libère."""
+    if element.locked_by == user_id:
+        await release_if_holder(db, element, user_id)
+        await db.commit()
 
 
 def _ensure_editable(analysis: DossierAnalysis) -> None:
@@ -122,17 +142,20 @@ async def restore_element_version(
     reprend la valeur et devient la version retenue. Rien n'est supprimé."""
     repository = DossierAnalysisRepository(db)
     _ensure_editable(await _analysis_or_404(repository, dossier_id, analysis_id))
-    element = await repository.get_element(analysis_id, element_id)
+    element = await repository.get_element_for_update(analysis_id, element_id)
     if element is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément introuvable")
+    _ensure_not_locked(element, user.user_id)
     versions = await repository.list_versions(element_id)
     version = next((v for v in versions if v.id == body.version_id), None)
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable pour cet élément")
     try:
-        return await repository.restore_version(element, version, author_id=user.user_id, reason=body.reason)
+        restored = await repository.restore_version(element, version, author_id=user.user_id, reason=body.reason)
     except InvalidElementValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+    await _release_lock(db, element, user.user_id)
+    return restored
 
 
 @router.post(
@@ -186,11 +209,17 @@ async def add_element_version(
     devient la version retenue ; la prédiction du modèle reste conservée."""
     repository = DossierAnalysisRepository(db)
     _ensure_editable(await _analysis_or_404(repository, dossier_id, analysis_id))
-    element = await repository.get_element(analysis_id, element_id)
+    element = await repository.get_element_for_update(analysis_id, element_id)
     if element is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément introuvable")
+    _ensure_not_locked(element, user.user_id)
+    if body.base_version_id is not None and body.base_version_id != element.retained_version_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cet élément a été modifié depuis que vous l'avez ouvert : rechargez-le avant d'enregistrer.",
+        )
     try:
-        return await repository.add_version(
+        version = await repository.add_version(
             element,
             value=body.value,
             origin=ElementVersionOrigin.INSTRUCTOR,
@@ -201,6 +230,8 @@ async def add_element_version(
         )
     except InvalidElementValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+    await _release_lock(db, element, user.user_id)
+    return version
 
 
 @router.get("/{dossier_id}/analyses-dossier/{analysis_id}/revisions", response_model=list[AnalysisRevisionSummaryOut])

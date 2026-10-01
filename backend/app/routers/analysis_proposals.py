@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.analysis_proposal import ProposalStatus
+from app.repositories.analysis_collaboration_repository import ElementLockedError
 from app.repositories.analysis_proposal_repository import (
     AnalysisProposalRepository,
     ProposalAlreadyDecidedError,
@@ -129,6 +130,8 @@ async def _decide(db: AsyncSession, dossier_id: uuid.UUID, analysis_id: uuid.UUI
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Cette proposition a déjà été traitée"
         ) from error
+    except ElementLockedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
     except StaleProposalError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

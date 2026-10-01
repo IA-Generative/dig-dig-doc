@@ -6,13 +6,14 @@
  * apporter une valeur, restaurer une version antérieure et traiter les
  * propositions en attente. Interne : jamais montré aux usagers.
  */
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import ElementHistoryModal from "@/components/analysis/ElementHistoryModal.vue";
 import NotesPanel from "@/components/analysis/NotesPanel.vue";
 import ProposalCard from "@/components/analysis/ProposalCard.vue";
 import MarkdownText from "@/components/MarkdownText.vue";
+import { useAnalysisLive, type PresenceEntry } from "@/composables/useAnalysisLive";
 import { useDossierAnalysis } from "@/composables/useDossierAnalysis";
 import { useDossiers } from "@/composables/useDossiers";
 import {
@@ -55,6 +56,28 @@ const {
 onMounted(async () => {
   await Promise.all([load(), fetchDossier(dossierId).catch(() => undefined)]);
 });
+
+// Travail à plusieurs (#118) : présence des autres instructeurs et verrou court par
+// élément, seulement sur l'analyse courante et modifiable.
+const liveAnalysisId = computed(() => (analysis.value && canEdit.value ? analysis.value.id : undefined));
+const {
+  others: otherInstructors,
+  othersByElement,
+  lockedByOthers,
+  sync: syncLive,
+  setFocus,
+  acquireLock,
+  releaseLock,
+  touchActivity,
+} = useAnalysisLive(dossierId, liveAnalysisId);
+watch(liveAnalysisId, (id) => syncLive(id), { immediate: true });
+
+const presenceLabel = (entry: PresenceEntry) =>
+  `${entry.displayName} ${entry.mode === "editing" ? "modifie" : "consulte"}`;
+const lockLabel = (elementId: string) => {
+  const lock = lockedByOthers.value.get(elementId);
+  return lock ? `Verrouillé par ${lock.lockedByName ?? lock.lockedBy}` : "";
+};
 
 const KIND_ORDER: AnalysisElementKind[] = ["classification", "entity", "relation", "synthesis", "field"];
 
@@ -132,17 +155,33 @@ const editReason = ref("");
 
 const isEditable = (element: AnalysisElement) => textToValue(element.kind, "") !== null;
 
-function startEdit(element: AnalysisElement) {
+async function startEdit(element: AnalysisElement) {
+  actionError.value = undefined;
+  // On prend le verrou avant d'ouvrir le formulaire : si un autre instructeur modifie
+  // déjà cet élément, le message dit qui, et on n'ouvre rien.
+  const lock = await acquireLock(element.id);
+  if (!lock.ok) {
+    actionError.value = lock.message;
+    return;
+  }
   editingId.value = element.id;
   editText.value = elementText(element);
   editReason.value = "";
 }
 
+async function cancelEdit() {
+  editingId.value = null;
+  await releaseLock();
+}
+
 async function submitEdit(element: AnalysisElement) {
   const value = textToValue(element.kind, editText.value.trim());
   if (!value || !editText.value.trim() || !editReason.value.trim()) return;
-  await run(() => addVersion(element.id, value, editReason.value.trim()));
-  if (!actionError.value) editingId.value = null;
+  await run(() => addVersion(element.id, value, editReason.value.trim(), element.retainedVersion?.id));
+  if (!actionError.value) {
+    editingId.value = null;
+    await releaseLock(); // déjà libéré par le serveur après l'enregistrement
+  }
 }
 
 // --- Historique ---
@@ -153,6 +192,7 @@ const historyLoading = ref(false);
 
 async function openHistory(element: AnalysisElement) {
   historyElement.value = element;
+  setFocus(element.id, "viewing");
   historyVersions.value = [];
   historyLoading.value = true;
   try {
@@ -204,6 +244,10 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
         <span>Exécution n° {{ analysis.sequence }}</span>
         <span v-if="analysis.analyseVersion">· analyse {{ analysis.analyseVersion }}</span>
         <span v-if="analysis.startedAt">· lancée le {{ formatDate(analysis.startedAt) }}</span>
+        <span v-if="otherInstructors.length > 0" class="analysis-page__others" role="status">
+          <VIcon name="ri-group-line" />
+          Aussi sur cette analyse : {{ otherInstructors.map((entry) => entry.displayName).join(", ") }}
+        </span>
         <label v-if="analyses.length > 1" class="analysis-page__select">
           <span class="fr-sr-only">Exécution à consulter</span>
           <select class="fr-select" :value="analysis.id" @change="select(($event.target as HTMLSelectElement).value)">
@@ -215,7 +259,7 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
       </div>
     </header>
 
-    <DsfrAlert v-if="error" type="error" :title="error" small />
+    <DsfrAlert v-if="error" type="error" :title="error" />
     <p v-else-if="isLoading">Chargement de l'analyse…</p>
 
     <DsfrAlert
@@ -241,7 +285,7 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
         description="Cette analyse ne peut plus être modifiée."
         small
       />
-      <DsfrAlert v-if="actionError" type="error" :title="actionError" small />
+      <DsfrAlert v-if="actionError" type="error" :title="actionError" />
 
       <section v-if="proposals.length > 0" class="analysis-page__section" aria-labelledby="proposals-title">
         <h2 id="proposals-title" class="fr-h5">Propositions en attente ({{ proposals.length }})</h2>
@@ -292,6 +336,16 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
                 title="Repris de l'exécution précédente"
               />
               <DsfrBadge v-if="element.needsReview" label="À revoir" type="warning" small />
+              <DsfrBadge v-if="lockedByOthers.get(element.id)" :label="lockLabel(element.id)" type="warning" small />
+              <span
+                v-for="entry in othersByElement.get(element.id) ?? []"
+                :key="entry.userId"
+                class="element__presence"
+                :class="{ 'element__presence--editing': entry.mode === 'editing' }"
+              >
+                <VIcon :name="entry.mode === 'editing' ? 'ri-edit-line' : 'ri-eye-line'" />
+                {{ presenceLabel(entry) }}
+              </span>
               <span v-if="element.firstPageNumber" class="element__meta">page {{ element.firstPageNumber }}</span>
               <span v-if="element.retainedVersion?.confidence != null" class="element__meta">
                 confiance {{ Math.round(element.retainedVersion.confidence * 100) }} %
@@ -304,7 +358,8 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
                 icon="ri-edit-line"
                 small
                 secondary
-                :disabled="busy"
+                :disabled="busy || !!lockedByOthers.get(element.id)"
+                :title="lockedByOthers.get(element.id) ? lockLabel(element.id) : 'Modifier cet élément'"
                 @click="startEdit(element)"
               />
             </div>
@@ -324,12 +379,26 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
 
             <form v-if="editingId === element.id" class="element__form" @submit.prevent="submitEdit(element)">
               <label class="element__label" :for="`edit-${element.id}`">Nouvelle valeur</label>
-              <textarea :id="`edit-${element.id}`" v-model="editText" class="fr-input" rows="3" required />
+              <textarea
+                :id="`edit-${element.id}`"
+                v-model="editText"
+                class="fr-input"
+                rows="3"
+                required
+                @input="touchActivity"
+              />
               <label class="element__label" :for="`reason-${element.id}`">Motif (obligatoire)</label>
-              <input :id="`reason-${element.id}`" v-model="editReason" class="fr-input" type="text" required />
+              <input
+                :id="`reason-${element.id}`"
+                v-model="editReason"
+                class="fr-input"
+                type="text"
+                required
+                @input="touchActivity"
+              />
               <div class="element__actions">
                 <DsfrButton label="Enregistrer" small type="submit" :disabled="busy" />
-                <DsfrButton label="Annuler" small secondary type="button" @click="editingId = null" />
+                <DsfrButton label="Annuler" small secondary type="button" @click="cancelEdit" />
               </div>
             </form>
           </li>
@@ -387,6 +456,29 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
   gap: 0.5rem;
   flex-wrap: wrap;
   font-size: 0.875rem;
+}
+
+.analysis-page__others {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-mention-grey);
+}
+
+.element__presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border-radius: 1rem;
+  background: var(--background-alt-blue-france);
+  color: var(--text-action-high-blue-france);
+  font-size: 0.75rem;
+}
+
+.element__presence--editing {
+  background: var(--background-contrast-warning, #fff4e0);
+  color: var(--text-default-warning, #8d533e);
 }
 
 .analysis-page__select {
