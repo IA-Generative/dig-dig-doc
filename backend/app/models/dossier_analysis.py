@@ -37,9 +37,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.document_page import BoundingBox
 
 
 class DossierAnalysisStatus(enum.StrEnum):
@@ -195,6 +196,17 @@ class AnalysisElement(UUIDMixin, TimestampMixin, Base):
     locked_by: Mapped[str | None] = mapped_column(String, nullable=True)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Lecture seule : toutes les versions de l'élément, de la plus ancienne à la
+    # plus récente. primaryjoin explicite car l'élément pointe aussi vers deux
+    # de ses versions (retenue, dernière du modèle).
+    versions: Mapped[list["AnalysisElementVersion"]] = relationship(
+        "AnalysisElementVersion",
+        primaryjoin="AnalysisElement.id == AnalysisElementVersion.element_id",
+        foreign_keys="AnalysisElementVersion.element_id",
+        order_by="AnalysisElementVersion.version_number",
+        viewonly=True,
+    )
+
 
 class AnalysisElementVersion(UUIDMixin, TimestampMixin, Base):
     """Version d'un élément. Jamais modifiée après coup : restaurer une
@@ -231,6 +243,17 @@ class AnalysisElementVersion(UUIDMixin, TimestampMixin, Base):
     origin_version_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("analysis_element_versions.id", ondelete="SET NULL"), nullable=True
     )
+    # Issue #120 : ce que l'ancienne validation de prédiction (PredictionValidation)
+    # exprimait. ``validation_status`` vaut « validé », « corrigé » ou « rejeté »
+    # quand la version vient d'une validation de prédiction (route
+    # .../predictions/{id}/validations ou migration de l'historique existant) ;
+    # ``bounding_box_id`` est la zone corrigée, quand l'instructeur en a tracé une.
+    validation_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    bounding_box_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("bounding_boxes.id", ondelete="SET NULL"), nullable=True
+    )
+
+    bounding_box: Mapped["BoundingBox | None"] = relationship("BoundingBox", foreign_keys=[bounding_box_id])
 
 
 class AnalysisRevision(UUIDMixin, TimestampMixin, Base):

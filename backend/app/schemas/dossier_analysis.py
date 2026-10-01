@@ -90,6 +90,10 @@ class ElementVersionOut(BaseModel):
     source_id: uuid.UUID | None
     restored_from_version_id: uuid.UUID | None
     origin_version_id: uuid.UUID | None
+    # Issue #120 : « validé », « corrigé » ou « rejeté » quand la version vient
+    # d'une validation de prédiction ; zone corrigée éventuelle.
+    validation_status: str | None
+    bounding_box_id: uuid.UUID | None
     created_at: datetime
 
 

@@ -53,6 +53,7 @@ from app.schemas.dossier import (
     PredictionValidationOut,
 )
 from app.schemas.pagination import Page
+from app.services.prediction_validation import AnalysisFrozenError
 
 router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
 
@@ -479,13 +480,17 @@ async def validate_prediction(
     prediction = await repository.get_prediction(page_id, prediction_id) if page else None
     if page is None or prediction is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prédiction introuvable")
-    updated = await repository.add_prediction_validation(
-        prediction,
-        validator_user_id=user.user_id,
-        status=body.status,
-        corrected_value=body.corrected_value,
-        bounding_box=body.bounding_box.model_dump() if body.bounding_box else None,
-    )
+    try:
+        updated = await repository.add_prediction_validation(
+            prediction,
+            page,
+            validator_user_id=user.user_id,
+            status=body.status,
+            corrected_value=body.corrected_value,
+            bounding_box=body.bounding_box.model_dump() if body.bounding_box else None,
+        )
+    except AnalysisFrozenError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cette analyse est figée") from error
     return updated.validations[-1]
 
 

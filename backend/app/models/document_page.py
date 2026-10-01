@@ -1,5 +1,7 @@
 import enum
 import uuid
+from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Enum, Float, ForeignKey, Integer, String, Table, Text
@@ -11,6 +13,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.analyse import EntityDefinition, LabelDefinition
     from app.models.dossier import DossierDocument
+    from app.models.dossier_analysis import AnalysisElement
 
 
 class PredictionKind(enum.StrEnum):
@@ -146,9 +149,24 @@ class DocumentPrediction(UUIDMixin, TimestampMixin, Base):
     bounding_boxes: Mapped[list["BoundingBox"]] = relationship(
         secondary=prediction_bounding_boxes, order_by="BoundingBox.created_at"
     )
-    validations: Mapped[list["PredictionValidation"]] = relationship(
-        back_populates="prediction", cascade="all, delete-orphan", order_by="PredictionValidation.created_at"
-    )
+    # Éléments de l'analyse de dossier produits par cette prédiction (#112) :
+    # leurs versions portent l'historique de validation humaine (#120).
+    analysis_elements: Mapped[list["AnalysisElement"]] = relationship("AnalysisElement", viewonly=True)
+
+    @property
+    def validations(self) -> list["PredictionValidationView"]:
+        """Historique de validation humaine de la prédiction, au format de
+        l'ancienne table ``prediction_validations`` (issue #120) : calculé à
+        partir des versions d'instructeur des éléments d'analyse. Les
+        chargements (selectinload) doivent inclure analysis_elements ->
+        versions -> bounding_box."""
+        views = [
+            PredictionValidationView.from_version(self.id, element, version)
+            for element in self.analysis_elements
+            for version in element.versions
+            if version.validation_status
+        ]
+        return sorted(views, key=lambda view: (view.created_at, view.version_number))
 
 
 class PredictionValidation(UUIDMixin, TimestampMixin, Base):
@@ -172,5 +190,38 @@ class PredictionValidation(UUIDMixin, TimestampMixin, Base):
     )
     corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    prediction: Mapped["DocumentPrediction"] = relationship(back_populates="validations")
     bounding_box: Mapped["BoundingBox | None"] = relationship(foreign_keys=[bounding_box_id])
+
+
+@dataclass
+class PredictionValidationView:
+    """Une validation de prédiction vue à travers une version d'élément
+    d'analyse : mêmes champs que PredictionValidation (le contrat de l'API ne
+    change pas)."""
+
+    id: uuid.UUID
+    prediction_id: uuid.UUID
+    validator_user_id: str
+    status: PredictionValidationStatus
+    corrected_value: str | None
+    bounding_box: "BoundingBox | None"
+    created_at: datetime
+    version_number: int
+
+    @classmethod
+    def from_version(cls, prediction_id: uuid.UUID, element: "AnalysisElement", version) -> "PredictionValidationView":
+        status = PredictionValidationStatus(version.validation_status)
+        corrected = None
+        if status == PredictionValidationStatus.CORRECTED:
+            # Valeur texte : « label » d'une classification, « value » d'une entité.
+            corrected = str(version.value.get("label", version.value.get("value", "")))
+        return cls(
+            id=version.id,
+            prediction_id=prediction_id,
+            validator_user_id=version.author_id or "",
+            status=status,
+            corrected_value=corrected,
+            bounding_box=version.bounding_box,
+            created_at=version.created_at,
+            version_number=version.version_number,
+        )
