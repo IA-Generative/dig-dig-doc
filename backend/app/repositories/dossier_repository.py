@@ -735,8 +735,15 @@ class DossierRepository:
         await self.db.commit()
         # Analyse de dossier (#125) : une par exécution (le worker tolère un
         # dossier sans analyse : exécutions déjà en cours avant ce changement).
-        await DossierAnalysisRepository(self.db).create_analysis(
-            dossier.id, analyse_version=dossier.analyse_version, started_at=now
+        analyses = DossierAnalysisRepository(self.db)
+        previous = await analyses.get_current(dossier.id)
+        await analyses.create_analysis(
+            dossier.id,
+            analyse_version=dossier.analyse_version,
+            started_at=now,
+            # Relance incrémentale (#119) : l'analyse précédente sert de référence
+            # pour reprendre les unités dont les entrées n'ont pas changé.
+            previous_analysis_id=previous.id if previous else None,
         )
         # Pas de refresh(dossier) ici : ça re-déclencherait un lazy-load des
         # nouvelles execution_steps (et de leur relation `logs`, vide mais

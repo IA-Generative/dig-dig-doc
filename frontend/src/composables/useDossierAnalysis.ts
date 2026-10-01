@@ -38,6 +38,7 @@ function mapElement(api: any): AnalysisElement {
     definitionName: api.definition_name,
     documentId: api.document_id,
     firstPageNumber: api.first_page_number,
+    originElementId: api.origin_element_id,
     needsReview: api.needs_review,
     reviewReason: api.review_reason,
     retainedVersion: api.retained_version ? mapVersion(api.retained_version) : null,

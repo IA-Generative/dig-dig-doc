@@ -232,3 +232,94 @@ def test_run_agents_agent_failure_completes_with_echec(monkeypatch) -> None:
     assert len(complete_bodies) == 1
     assert complete_bodies[0]["status"] == "échec"
     assert "LLM error" in complete_bodies[0]["output"]
+
+
+# --- Relance incrémentale : la synthèse d'un agent inchangé est reprise (issue #119) ---
+
+
+def _agent_run(monkeypatch, *, reuse_output: str | None):
+    """Lance run_agents avec un backend qui reprend (ou non) la synthèse de l'agent."""
+    complete_bodies: list[dict] = []
+    logs: list[str] = []
+    asked: list[dict] = []
+    ran: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/dossiers/dossier-1"):
+            return httpx.Response(200, json=_make_dossier_response())
+        if path.endswith("/analyses/analyse-1"):
+            return httpx.Response(200, json=_make_analyse_response())
+        if path.endswith("/agent-units/reuse"):
+            asked.append(json.loads(request.content))
+            if reuse_output is None:
+                return httpx.Response(200, json={"reused": False, "output": None})
+            return httpx.Response(200, json={"reused": True, "output": reuse_output})
+        if path.endswith("/logs"):
+            logs.append(json.loads(request.content)["message"])
+            return httpx.Response(200, json=_log_response())
+        if path.endswith("/complete"):
+            complete_bodies.append(json.loads(request.content))
+            return httpx.Response(200, json=_step_complete_response("step-agent-1"))
+        return httpx.Response(404)
+
+    monkeypatch.setattr(
+        api_client,
+        "get_client",
+        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(
+        agent_mod, "run_agent", lambda agent_prompt, tools, model=None: ran.append("llm") or "Nouvelle synthèse"
+    )
+    monkeypatch.setattr(agent_mod, "_wait_for_steps", lambda client, dossier, kinds: {})
+    monkeypatch.setattr(agent_mod.celery_app, "send_task", lambda name, args=None, queue=None: None)
+    run_agents.run("dossier-1")
+    return complete_bodies, logs, asked, ran
+
+
+def test_an_unchanged_agent_is_not_run_and_its_previous_synthesis_is_reused(monkeypatch) -> None:
+    complete_bodies, logs, asked, ran = _agent_run(monkeypatch, reuse_output="Synthèse de l'exécution précédente")
+
+    assert ran == []  # aucun appel au LLM
+    assert asked == [{"step_id": "step-agent-1"}]
+    assert complete_bodies == [{"status": "terminé", "output": "Synthèse de l'exécution précédente"}]
+    assert any("reprise" in message for message in logs)
+
+
+def test_a_changed_agent_runs_normally(monkeypatch) -> None:
+    complete_bodies, _, asked, ran = _agent_run(monkeypatch, reuse_output=None)
+
+    assert ran == ["llm"]
+    assert asked == [{"step_id": "step-agent-1"}]
+    assert complete_bodies == [{"status": "terminé", "output": "Nouvelle synthèse"}]
+
+
+def test_agent_runs_when_the_reuse_check_fails(monkeypatch) -> None:
+    """Un backend sans cette route (ou en erreur) ne doit jamais empêcher l'agent de tourner."""
+    complete_bodies: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/dossiers/dossier-1"):
+            return httpx.Response(200, json=_make_dossier_response())
+        if path.endswith("/analyses/analyse-1"):
+            return httpx.Response(200, json=_make_analyse_response())
+        if path.endswith("/logs"):
+            return httpx.Response(200, json=_log_response())
+        if path.endswith("/complete"):
+            complete_bodies.append(json.loads(request.content))
+            return httpx.Response(200, json=_step_complete_response("step-agent-1"))
+        return httpx.Response(500)  # y compris /agent-units/reuse
+
+    monkeypatch.setattr(
+        api_client,
+        "get_client",
+        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(agent_mod, "run_agent", lambda agent_prompt, tools, model=None: "Synthèse")
+    monkeypatch.setattr(agent_mod, "_wait_for_steps", lambda client, dossier, kinds: {})
+    monkeypatch.setattr(agent_mod.celery_app, "send_task", lambda name, args=None, queue=None: None)
+
+    run_agents.run("dossier-1")
+
+    assert complete_bodies == [{"status": "terminé", "output": "Synthèse"}]
