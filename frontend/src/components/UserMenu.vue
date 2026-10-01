@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
 import HelperAgentModal from "@/components/HelperAgentModal.vue";
+import { useHelperAgent } from "@/composables/useHelperAgent";
 import InfoModal from "@/components/InfoModal.vue";
 import ReportFormModal from "@/components/ReportFormModal.vue";
 import TaskDrawer from "@/components/TaskDrawer.vue";
@@ -18,6 +19,7 @@ const APP_VERSION = __APP_VERSION__;
 const router = useRouter();
 const { isAuthenticated, userName, isAdmin, profile, loading, login, logout } = useAuth();
 const { fetchActive } = useCgu();
+const { isOpen: showHelperAgent, openHelper, closeHelper } = useHelperAgent();
 
 const showUserMenu = ref(false);
 const userWrapper = ref<HTMLElement>();
@@ -26,7 +28,6 @@ const userWrapper = ref<HTMLElement>();
 const showChangelog = ref(false);
 const showCgu = ref(false);
 const showReport = ref(false);
-const showHelperAgent = ref(false);
 const showTutorials = ref(false);
 const showTaskDrawer = ref(false);
 
@@ -107,7 +108,7 @@ function openReport() {
 
 function openHelperAgent() {
   closeMenu();
-  showHelperAgent.value = true;
+  openHelper();
 }
 
 function openTutorials() {
@@ -131,10 +132,10 @@ function handleKeydown(event: KeyboardEvent) {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     showUserMenu.value = false;
-    showHelperAgent.value = true;
+    openHelper();
   }
   if (event.key === "Escape" && showHelperAgent.value) {
-    showHelperAgent.value = false;
+    closeHelper();
   }
 }
 
@@ -261,7 +262,7 @@ onBeforeUnmount(() => {
 
   <ReportFormModal :open="showReport" @close="showReport = false" />
 
-  <HelperAgentModal :open="showHelperAgent" @close="showHelperAgent = false" />
+  <HelperAgentModal :open="showHelperAgent" @close="closeHelper" />
 
   <TutorialModal :open="showTutorials" @close="showTutorials = false" />
 
