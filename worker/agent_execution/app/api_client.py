@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -104,12 +105,24 @@ def add_prediction(
 # (exécution démarrée avant #125) répond 404 : le worker continue sans unité.
 
 
+@dataclass
+class DeclaredUnit:
+    """Unité déclarée au backend. ``reused`` : elle a été reprise de l'analyse
+    précédente (même empreinte, relance incrémentale #119) : ses éléments sont déjà
+    copiés, il ne faut **pas** la calculer. ``entities`` : entités reprises (nom de la
+    définition, valeur du modèle), pour amorcer la fusion des doublons entre lots."""
+
+    id: str
+    reused: bool = False
+    entities: list[tuple[str, str]] = field(default_factory=list)
+
+
 def declare_unit(
     client: httpx.Client, dossier_id: str, kind: str, description: dict, fingerprint: str | None = None
-) -> str | None:
+) -> DeclaredUnit | None:
     """Déclare une unité de calcul (page, lot de pages...) avec l'empreinte de ses
-    entrées (voir app.fingerprint) et renvoie son identifiant, ou None si elle
-    n'a pas pu l'être."""
+    entrées (voir app.fingerprint). Renvoie l'unité (éventuellement reprise de
+    l'analyse précédente), ou None si elle n'a pas pu être déclarée."""
     try:
         body = {"kind": kind, "description": description}
         if fingerprint is not None:
@@ -118,9 +131,28 @@ def declare_unit(
         if response.status_code == 404:
             return None
         response.raise_for_status()
-        return response.json()["id"]
+        data = response.json()
+        return DeclaredUnit(
+            id=data["id"],
+            reused=bool(data.get("reused", False)),
+            entities=[(e["name"], e["value"]) for e in data.get("reused_entities", [])],
+        )
     except Exception:
         logger.warning("Could not declare %s unit for dossier %s", kind, dossier_id, exc_info=True)
+        return None
+
+
+def reuse_agent_unit(client: httpx.Client, dossier_id: str, step_id: str) -> str | None:
+    """Relance incrémentale (#119) : renvoie la synthèse de l'analyse précédente si
+    l'agent de cette étape est inchangé (même configuration, mêmes entrées), sinon
+    None (l'agent doit tourner). Tolérant : en cas d'erreur, l'agent tourne."""
+    try:
+        response = client.post(f"/dossiers/{dossier_id}/agent-units/reuse", json={"step_id": step_id})
+        response.raise_for_status()
+        data = response.json()
+        return (data.get("output") or "") if data.get("reused") else None
+    except Exception:
+        logger.warning("Could not check agent reuse for step %s", step_id, exc_info=True)
         return None
 
 

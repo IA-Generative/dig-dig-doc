@@ -57,6 +57,8 @@ export interface AnalysisElement {
   definitionName: string | null;
   documentId: string | null;
   firstPageNumber: number | null;
+  /** Élément de l'exécution précédente dont celui-ci est la reprise (relance incrémentale). */
+  originElementId: string | null;
   needsReview: boolean;
   reviewReason: string | null;
   /** Version retenue : celle qui fait foi. */

@@ -32,7 +32,7 @@ Chaque unité est déclarée au backend avec l'**empreinte de ses entrées** (`i
 
 Toutes incluent une **version du pipeline** (`PIPELINE_VERSION` côté worker, `AGENT_PIPELINE_VERSION` côté backend) à incrémenter quand la logique d'une étape change de façon à modifier ses résultats.
 
-Une empreinte ne dépend **ni de la valeur du résultat, ni des identifiants** de page ou d'exécution : deux exécutions aux entrées identiques donnent les mêmes empreintes. Rien n'est encore **repris** à la relance : c'est #119.
+Une empreinte ne dépend **ni de la valeur du résultat, ni des identifiants** de page ou d'exécution : deux exécutions aux entrées identiques donnent les mêmes empreintes. Elles servent à la **relance incrémentale** (#119) : une unité dont l'empreinte est inchangée est reprise de l'analyse précédente au lieu d'être recalculée (voir `relance-incrementale.md`).
 
 ## Réglages (worker)
 

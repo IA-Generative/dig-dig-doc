@@ -286,6 +286,9 @@ class _UnitBackend:
         self, *, with_analysis: bool = True, units_unavailable: bool = False, dossier: dict | None = None
     ) -> None:
         self.dossier = dossier
+        # Relance incrémentale (#119) : empreintes que le backend « reprend » de
+        # l'analyse précédente, avec les entités reprises.
+        self.reuse: dict[str, list[dict]] = {}
         self.with_analysis = with_analysis
         self.units_unavailable = units_unavailable
         self.declared: list[dict] = []
@@ -304,7 +307,11 @@ class _UnitBackend:
             if not self.with_analysis:
                 return httpx.Response(404)
             self.declared.append(json.loads(request.content))
-            return httpx.Response(201, json={"id": f"unit-{len(self.declared)}", "analysis_id": "analysis-1"})
+            fingerprint = self.declared[-1].get("input_fingerprint")
+            payload = {"id": f"unit-{len(self.declared)}", "analysis_id": "analysis-1"}
+            if fingerprint in self.reuse:
+                payload |= {"reused": True, "reused_entities": self.reuse[fingerprint]}
+            return httpx.Response(201, json=payload)
         if "/analysis-units/" in path and path.endswith("/complete"):
             self.completed.append((path.split("/")[-2], json.loads(request.content)["status"]))
             return httpx.Response(200, json={"id": path.split("/")[-2], "analysis_id": "analysis-1"})
@@ -699,3 +706,101 @@ def test_classification_units_carry_a_fingerprint(monkeypatch) -> None:
 
     fingerprints = [u["input_fingerprint"] for u in backend.declared]
     assert len(fingerprints) == 2 and fingerprints[0] != fingerprints[1]
+
+
+# --- Relance incrémentale : les unités reprises ne sont pas recalculées (issue #119) ---
+
+
+def test_reused_classification_units_call_neither_vlm_nor_llm(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    # Première passe pour connaître les empreintes des deux pages.
+    _stub_classification(monkeypatch)
+    classify_dossier.run("dossier-1")
+    fingerprints = [u["input_fingerprint"] for u in backend.declared]
+
+    again = _UnitBackend()
+    again.reuse = {fp: [] for fp in fingerprints}
+    again.install(monkeypatch)
+    calls = {"vlm": 0, "llm": 0}
+    monkeypatch.setattr(classification_mod.llm, "describe_page_image", lambda image_bytes: calls.__setitem__("vlm", 1))
+    monkeypatch.setattr(classification_mod.llm, "classify_page", lambda **kwargs: calls.__setitem__("llm", 1))
+
+    classify_dossier.run("dossier-1")
+
+    assert calls == {"vlm": 0, "llm": 0}  # aucun appel : tout est repris
+    assert len(again.declared) == 2  # les unités sont tout de même déclarées (c'est ce qui les fait reprendre)
+    assert again.predictions == []
+    assert again.completed == []  # une unité reprise est déjà terminée côté backend
+
+
+def test_only_the_changed_classification_unit_is_computed(monkeypatch) -> None:
+    first = _UnitBackend()
+    first.install(monkeypatch)
+    _stub_classification(monkeypatch)
+    classify_dossier.run("dossier-1")
+    fingerprints = [u["input_fingerprint"] for u in first.declared]
+
+    again = _UnitBackend()
+    again.reuse = {fingerprints[0]: []}  # la page 1 est inchangée, la page 2 non
+    again.install(monkeypatch)
+    _stub_classification(monkeypatch)
+
+    classify_dossier.run("dossier-1")
+
+    assert [p["name"] for p in again.predictions] == ["CNI"]  # une seule page recalculée
+    assert [p["unit_id"] for p in again.predictions] == ["unit-2"]
+    assert again.completed == [("unit-2", "terminé")]
+
+
+def test_reused_extraction_units_are_not_sent_to_the_llm(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    llm = _setup_extraction(monkeypatch, backend, _entity_defs(1))
+    extract_dossier_entities.run("dossier-1")
+    fingerprints = [u["input_fingerprint"] for u in backend.declared]
+    assert len(llm.calls) == 2
+
+    again = _UnitBackend(dossier=_two_documents_dossier())
+    again.reuse = {fingerprints[0]: [{"name": "e0", "value": "e0@1"}]}  # le document 1 est inchangé
+    llm_again = _setup_extraction(monkeypatch, again, _entity_defs(1))
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert len(llm_again.calls) == 1  # seul le document 2 est recalculé
+    assert [p["unit_id"] for p in again.predictions] == ["unit-2"]
+    assert again.completed == [("unit-2", "terminé")]
+
+
+def test_nothing_is_recomputed_when_every_extraction_unit_is_reused(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    _setup_extraction(monkeypatch, backend, _entity_defs(1))
+    extract_dossier_entities.run("dossier-1")
+    again = _UnitBackend(dossier=_two_documents_dossier())
+    again.reuse = {u["input_fingerprint"]: [] for u in backend.declared}
+    llm = _setup_extraction(monkeypatch, again, _entity_defs(1))
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert llm.calls == [] and again.predictions == []
+
+
+def test_reused_entities_seed_the_duplicate_merging_of_later_lots(monkeypatch) -> None:
+    """Le premier lot d'un document est repris (pas d'appel) ; le LLM ne doit pas
+    redéposer, dans le lot suivant (recouvrement), une entité que le lot repris contient déjà."""
+    dossier = _two_documents_dossier(pages_per_document=4, content="m" * 800)
+    dossier["documents"] = dossier["documents"][:1]
+    settings = {"EXTRACTION_MAX_TOKENS": 2000, "EXTRACTION_RESERVED_OUTPUT_TOKENS": 1300, "EXTRACTION_OVERLAP_PAGES": 1}
+    first = _UnitBackend(dossier=dossier)
+    _setup_extraction(monkeypatch, first, _entity_defs(1), same_value=True, **settings)
+    extract_dossier_entities.run("dossier-1")
+    first_fingerprint = first.declared[0]["input_fingerprint"]
+    assert len(first.predictions) == 1
+
+    again = _UnitBackend(dossier=dossier)
+    again.reuse = {first_fingerprint: [{"name": "e0", "value": "valeur"}]}
+    llm = _setup_extraction(monkeypatch, again, _entity_defs(1), same_value=True, **settings)
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert len(llm.calls) == len(first.declared) - 1  # le premier lot est repris
+    assert again.predictions == []  # les lots suivants ne redéposent pas « valeur » : déjà dans le lot repris

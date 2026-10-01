@@ -23,7 +23,7 @@ from functools import partial
 from app import api_client, llm
 from app.celery_app import celery_app
 from app.config import settings
-from app.extraction_planner import group_definitions, new_entities, plan_lots, text_budget
+from app.extraction_planner import group_definitions, new_entities, normalize_value, plan_lots, text_budget
 from app.fingerprint import extraction_fingerprint
 from app.tasks.classification import _STATUS_ECHEC, _STATUS_TERMINE, _find_step_id
 
@@ -148,10 +148,17 @@ def _run_unit(
     description: dict,
     fingerprint: str,
     work,
+    on_reused=None,
 ) -> int:
     """Déclare une unité, exécute le travail, la marque terminée ou en échec
-    (l'erreur remonte comme avant)."""
-    unit_id = api_client.declare_unit(client, dossier_id, "extraction", description, fingerprint=fingerprint)
+    (l'erreur remonte comme avant). Une unité **reprise** de l'analyse précédente
+    (même empreinte, #119) n'est pas calculée : ses éléments sont déjà copiés."""
+    unit = api_client.declare_unit(client, dossier_id, "extraction", description, fingerprint=fingerprint)
+    if unit is not None and unit.reused:
+        if on_reused is not None:
+            on_reused(unit.entities)
+        return 0
+    unit_id = unit.id if unit else None
     try:
         count = work(unit_id)
     except Exception:
@@ -159,6 +166,12 @@ def _run_unit(
         raise
     api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
     return count
+
+
+def _seed_seen(seen: set[tuple[str, str]], entities: list[tuple[str, str]]) -> None:
+    """Une unité reprise n'est pas recalculée : ses entités amorcent la fusion des
+    doublons pour les lots suivants du même document et du même groupe."""
+    seen.update((name, normalize_value(value)) for name, value in entities)
 
 
 def _extract_legacy(
@@ -233,6 +246,7 @@ def _extract_by_document(
                         page_id_by_number,
                         seen=seen,
                     ),
+                    on_reused=partial(_seed_seen, seen),
                 )
     return total
 

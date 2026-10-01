@@ -35,6 +35,7 @@ from app.models.dossier_analysis import (
     ElementVersionOrigin,
 )
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
+from app.services import analysis_carryover
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,12 @@ async def _record_step_result(repository: DossierAnalysisRepository, step: Execu
         await _record_agent_step(repository, analysis, step)
     elif step.status == ExecutionStepStatus.ECHEC:
         await repository.close_open_units(analysis.id, unit_kind, AnalysisUnitStatus.ECHEC)
+    elif step.status == ExecutionStepStatus.TERMINE:
+        # Relance incrémentale (#119) : valeurs validées des unités recalculées,
+        # puis éléments ajoutés à la main et relations quand les deux étapes ont fini.
+        await analysis_carryover.carry_over_apports(repository, analysis, unit_kind)
+        if await analysis_carryover.classification_and_extraction_done(repository, step.dossier_id):
+            await analysis_carryover.carry_over_manual_elements(repository, analysis)
 
 
 async def _record_agent_step(
@@ -153,7 +160,7 @@ async def _record_agent_step(
             analysis.id,
             kind=AnalysisUnitKind.AGENT,
             description={"step_id": str(step.id), "label": step.label},
-            input_fingerprint=await _agent_fingerprint(repository, analysis, step),
+            input_fingerprint=await agent_fingerprint(repository, analysis, step),
             status=AnalysisUnitStatus.TERMINE if succeeded else AnalysisUnitStatus.ECHEC,
         )
     if succeeded and step.output:
@@ -173,7 +180,7 @@ async def _record_agent_step(
             )
 
 
-async def _agent_fingerprint(
+async def agent_fingerprint(
     repository: DossierAnalysisRepository, analysis: DossierAnalysis, step: ExecutionStep
 ) -> str | None:
     """Empreinte des entrées d'un agent : sa configuration (prompt, outils,

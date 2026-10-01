@@ -100,6 +100,16 @@ def run_agents(self, dossier_id: str) -> None:
 
             for agent in agents:
                 step_id = _find_step_by_label(dossier, agent["name"])
+                # Relance incrémentale (#119) : agent et entrées inchangés, la synthèse
+                # de l'exécution précédente est reprise sans appeler le LLM.
+                reused_output = api_client.reuse_agent_unit(client, dossier_id, step_id) if step_id else None
+                if reused_output is not None:
+                    api_client.add_execution_log(
+                        client, step_id, message="Synthèse reprise de l'exécution précédente (entrées inchangées)"
+                    )
+                    api_client.complete_execution_step(client, step_id, status=_STATUS_TERMINE, output=reused_output)
+                    logger.info("Agent '%s' reused for dossier %s", agent["name"], dossier_id)
+                    continue
                 try:
                     _run_single_agent(client, dossier, agent, step_id)
                 except Exception as agent_error:

@@ -284,6 +284,13 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
                 :type="originBadgeType(element.retainedVersion)"
                 small
               />
+              <DsfrBadge
+                v-if="element.originElementId && element.retainedVersion?.origin !== 'carried_over'"
+                label="Reprise"
+                type="new"
+                small
+                title="Repris de l'exécution précédente"
+              />
               <DsfrBadge v-if="element.needsReview" label="À revoir" type="warning" small />
               <span v-if="element.firstPageNumber" class="element__meta">page {{ element.firstPageNumber }}</span>
               <span v-if="element.retainedVersion?.confidence != null" class="element__meta">

@@ -217,9 +217,30 @@ class AnalysisUnitCreateIn(BaseModel):
     input_fingerprint: str | None = Field(default=None, min_length=64, max_length=64, pattern="^[0-9a-f]{64}$")
 
 
+class ReusedEntity(BaseModel):
+    name: str
+    value: str
+
+
 class AnalysisUnitRefOut(BaseModel):
     id: uuid.UUID
     analysis_id: uuid.UUID
+    # Relance incrémentale (#119) : l'unité a été reprise de l'analyse précédente
+    # (même empreinte), ses éléments sont déjà copiés, le worker ne la calcule pas.
+    reused: bool = False
+    # Entités reprises (valeurs produites par le modèle) : le worker en amorce la
+    # fusion des doublons entre lots.
+    reused_entities: list[ReusedEntity] = Field(default_factory=list)
+
+
+class AgentReuseIn(BaseModel):
+    step_id: uuid.UUID
+
+
+class AgentReuseOut(BaseModel):
+    reused: bool
+    # Synthèse reprise, à déposer comme sortie de l'étape sans appeler le LLM.
+    output: str | None = None
 
 
 class AnalysisUnitCompleteIn(BaseModel):
