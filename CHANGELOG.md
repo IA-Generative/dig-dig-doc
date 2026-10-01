@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.7.0...v0.8.0-rc) (2026-10-01)
+
+
+### Features
+
+* **frontend:** accès à l'assistant depuis le chat d'un dossier ([#104](https://github.com/IA-Generative/dig-dig-doc/issues/104)) ([ab6cfdf](https://github.com/IA-Generative/dig-dig-doc/commit/ab6cfdf670a841142599f395f6dff3cd46e51942))
+* proposer l'assistant depuis le chat du dossier avec la question pré-remplie ([#104](https://github.com/IA-Generative/dig-dig-doc/issues/104)) ([ea6ddc0](https://github.com/IA-Generative/dig-dig-doc/commit/ea6ddc050c8b5e004a6475e9627cc1fda81ed3ef))
+
 ## [0.7.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.6.0...v0.7.0) (2026-10-01)
 
 
