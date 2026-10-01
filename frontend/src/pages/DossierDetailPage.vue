@@ -24,7 +24,6 @@ const route = useRoute();
 const dossierId = String(route.params.id);
 const {
   list: dossiers,
-  addDocuments,
   fetchDossier,
   streamDossier,
   regenerateDocumentSummary,
@@ -66,8 +65,6 @@ const { isRunning: isChatRunning, start: startChatStream, stop: stopChatStream }
   },
 });
 
-// Fichiers en attente d'envoi (attachés au message).
-const pendingFiles = ref<File[]>([]);
 const isDetailsModalOpened = ref(false);
 
 function formatDateTime(iso?: string) {
@@ -165,30 +162,9 @@ const isUnassigned = computed(() => !dossier.value?.analyseId);
 // rester visibles sans avoir à remonter la conversation.
 const messages = computed(() => conversation.value?.messages ?? []);
 
-function onAttachFiles(files: File[]) {
-  pendingFiles.value.push(...files);
-}
-
-function removePendingFile(index: number) {
-  pendingFiles.value.splice(index, 1);
-}
-
 async function onChatSubmit(content: string) {
   if (!dossier.value) return;
   if (isChatRunning.value) return;
-
-  if (pendingFiles.value.length > 0) {
-    await addDocuments(dossier.value.id, pendingFiles.value);
-  }
-
-  const parts = [
-    ...(pendingFiles.value.length > 0
-      ? [`Document(s) ajouté(s) à l'analyse : ${pendingFiles.value.map((f) => f.name).join(", ")}`]
-      : []),
-    ...(content ? [content] : []),
-  ];
-
-  pendingFiles.value = [];
 
   const current = await ensureConversation();
   chatEvents.value = [];
@@ -196,7 +172,7 @@ async function onChatSubmit(content: string) {
   // du tour précédent. Ouvert avant, le flux rejouerait l'ancien `done`,
   // se fermerait aussitôt et rechargerait la conversation sans la réponse.
   // Rien n'est manqué : les événements sont en base et rejoués depuis le début.
-  await sendMessage(parts.join("\n"));
+  await sendMessage(content);
   startChatStream(`/api/dossiers/${dossierId}/conversations/${current.id}/stream`);
 }
 
@@ -338,11 +314,9 @@ async function onDeleteConversation() {
       :stream-events="chatEvents"
       :is-running="isChatRunning"
       intro-title="Alimenter l'analyse"
-      intro-text="Ajoutez un document, une image ou une note pour compléter ce dossier. Les résultats de l'analyse s'affichent ci-dessus."
-      placeholder="Alimentez l'analyse avec un message ou un document..."
-      show-file-attach
+      intro-text="Posez une question ou ajoutez une note pour compléter ce dossier. Les résultats de l'analyse s'affichent ci-dessus."
+      placeholder="Alimentez l'analyse avec un message..."
       @submit="onChatSubmit"
-      @attach-files="onAttachFiles"
     >
       <template #message-actions="{ message }">
         <button
@@ -365,18 +339,6 @@ async function onDeleteConversation() {
         >
           <VIcon name="ri-thumb-down-line" />
         </button>
-      </template>
-
-      <template #composer-extra>
-        <ul v-if="pendingFiles.length > 0" class="chat-window__chips">
-          <li v-for="(file, index) in pendingFiles" :key="`${file.name}-${index}`" class="chat-window__chip">
-            <VIcon name="ri-file-line" />
-            <span>{{ file.name }}</span>
-            <button type="button" aria-label="Retirer ce fichier" @click="removePendingFile(index)">
-              <VIcon name="ri-close-line" />
-            </button>
-          </li>
-        </ul>
       </template>
     </ChatWindow>
 
@@ -501,39 +463,6 @@ async function onDeleteConversation() {
 
 .dossier-detail__icon-button:hover {
   background: var(--background-alt-grey-hover);
-}
-
-/* Chips de fichiers en attente (rendues dans le slot composer-extra de
-   ChatWindow — les autres styles chat-* sont dans ChatWindow.vue). */
-.chat-window__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  list-style: none;
-  margin: 0 0 0.5rem;
-  padding: 0;
-}
-
-.chat-window__chip {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 1rem;
-  border: 1px solid var(--border-action-high-blue-france);
-  background: var(--background-alt-blue-france);
-  color: var(--text-action-high-blue-france);
-  font-size: 0.75rem;
-}
-
-.chat-window__chip button {
-  display: flex;
-  align-items: center;
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  padding: 0;
 }
 
 .dossier-details-modal__info {
