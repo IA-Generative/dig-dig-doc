@@ -16,6 +16,7 @@ import { useRouter } from "vue-router";
 import ChatWindow, { type ChatWindowMessage, type ChatWindowSource } from "@/components/ChatWindow.vue";
 import InfoModal from "@/components/InfoModal.vue";
 import { useAgentConversations } from "@/composables/useAgentConversations";
+import { useHelperAgent } from "@/composables/useHelperAgent";
 import ModelPicker from "@/components/ModelPicker.vue";
 import type { AgentChatEvent } from "@/types/agentConversation";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
@@ -26,6 +27,7 @@ const emit = defineEmits<{ close: [] }>();
 const selectedModel = ref<string>("");
 
 const router = useRouter();
+const { dossierContext, consumeContext } = useHelperAgent();
 const {
   summaries,
   activeConversation,
@@ -162,7 +164,14 @@ async function onChatSubmit(content: string) {
       closeChatStream = undefined;
     },
   );
-  await sendMessage(content, selectedModel.value);
+  // Premier message depuis un dossier : on lui joint la référence du dossier
+  // (visible dans la bulle) pour que l'assistant sache de quoi on parle.
+  const context = dossierContext.value;
+  consumeContext();
+  const text = context
+    ? `À propos du dossier « ${context.name} » (id : ${context.dossierId}) : ${content}`
+    : content;
+  await sendMessage(text, selectedModel.value);
 }
 
 function goToDossier(dossierId: string) {
@@ -264,6 +273,11 @@ function formatRelativeTime(iso: string): string {
           <span>Chargement…</span>
         </div>
         <div v-else class="helper-agent__chat-inner">
+          <p v-if="dossierContext" class="helper-agent__context">
+            <VIcon name="ri-folder-line" />
+            Ouvert depuis le dossier « {{ dossierContext.name }} ». Votre conversation du dossier reste
+            intacte, fermez cette fenêtre pour y revenir.
+          </p>
           <div class="helper-agent__model-bar">
             <ModelPicker v-model="selectedModel" :disabled="isChatRunning" />
           </div>
@@ -291,6 +305,18 @@ function formatRelativeTime(iso: string): string {
 </template>
 
 <style scoped>
+.helper-agent__context {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--background-alt-blue-france);
+  color: var(--text-action-high-blue-france);
+  font-size: 0.875rem;
+}
+
 .helper-agent {
   display: flex;
   gap: 1rem;

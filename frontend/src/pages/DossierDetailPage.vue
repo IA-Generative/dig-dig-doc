@@ -12,6 +12,7 @@ import { useAnalyses } from "@/composables/useAnalyses";
 import { useChatStream } from "@/composables/useChatStream";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
+import { useHelperAgent } from "@/composables/useHelperAgent";
 import { useMyConversations } from "@/composables/useMyConversations";
 import type { FeedbackReasonCode } from "@/types/conversation";
 import {
@@ -23,6 +24,7 @@ import {
 
 const route = useRoute();
 const dossierId = String(route.params.id);
+const { openHelper } = useHelperAgent();
 const {
   list: dossiers,
   fetchDossier,
@@ -230,6 +232,15 @@ async function onDeleteConversation() {
           align="right"
           @update:model-value="onModelChange"
         />
+        <button
+          type="button"
+          class="dossier-detail__icon-button"
+          aria-label="Ouvrir l'assistant de l'application"
+          title="Assistant de l'application : créer ou lancer une analyse, piloter l'application"
+          @click="openHelper({ dossierId: dossier.id, name: dossier.name })"
+        >
+          <VIcon name="ri-robot-2-line" />
+        </button>
         <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
         <button
           type="button"
