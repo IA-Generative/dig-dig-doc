@@ -26,7 +26,6 @@ const {
   list: dossiers,
   fetchDossier,
   streamDossier,
-  regenerateDocumentSummary,
   regenerateDossierSummary,
   suggestAnalyse,
   assignAnalyse,
@@ -242,12 +241,6 @@ async function onDeleteConversation() {
         </button>
       </div>
     </div>
-
-    <DossierDocuments
-      :documents="dossier.documents"
-      show-summary-actions
-      @regenerate-summary="regenerateDocumentSummary(dossierId, $event)"
-    />
 
     <!-- Suggestions d'analyse pour les dossiers « à ranger » (issue #54) -->
     <div v-if="isUnassigned" class="dossier-detail__suggestions">
