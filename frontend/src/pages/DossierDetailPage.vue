@@ -235,6 +235,13 @@ async function onDeleteConversation() {
         </p>
       </div>
       <div class="dossier-detail__header-actions">
+        <ModelPicker
+          :model-value="conversation?.model ?? ''"
+          :options="modelOptions"
+          label="Modèle"
+          align="right"
+          @update:model-value="onModelChange"
+        />
         <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
         <button
           type="button"
@@ -320,15 +327,6 @@ async function onDeleteConversation() {
       placeholder="Alimentez l'analyse avec un message..."
       @submit="onChatSubmit"
     >
-      <template #header>
-        <ModelPicker
-          :model-value="conversation?.model ?? ''"
-          :options="modelOptions"
-          label="Modèle"
-          @update:model-value="onModelChange"
-        />
-      </template>
-
       <template #source="{ source }">
         <button
           type="button"
