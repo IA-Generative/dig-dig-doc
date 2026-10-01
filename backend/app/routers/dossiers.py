@@ -39,6 +39,7 @@ from app.schemas.dossier import (
     ChatEventOut,
     ConversationModelUpdate,
     ConversationOut,
+    DocumentPageViewOut,
     DossierAssignIn,
     DossierCreate,
     DossierDocumentLabelIn,
@@ -138,6 +139,35 @@ async def set_document_label(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
     await repository.set_document_label(document, body.label)
     return document
+
+
+@router.get("/{dossier_id}/documents/{document_id}/pages/{page_id}", response_model=DocumentPageViewOut)
+async def get_document_page(
+    dossier_id: uuid.UUID,
+    document_id: uuid.UUID,
+    page_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DocumentPageViewOut:
+    """Page d'un document (texte extrait, zones, présence d'une capture) :
+    alimente la modale « source » ouverte depuis une réponse du chat."""
+    repository = DossierRepository(db)
+    document = await repository.get_document(dossier_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document introuvable")
+    page = await repository.get_page(document_id, page_id)
+    if page is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
+    return DocumentPageViewOut(
+        id=page.id,
+        page_number=page.page_number,
+        width=page.width,
+        height=page.height,
+        content=page.content,
+        has_screenshot=page.has_screenshot,
+        bounding_boxes=page.bounding_boxes,
+        document_id=document.id,
+        document_name=document.name,
+    )
 
 
 @router.get("/{dossier_id}/documents/{document_id}/pages/{page_id}/screenshot")

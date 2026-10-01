@@ -29,6 +29,9 @@ class BoundingBoxOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    # Page portant la zone : une source de message référence des bbox sans
+    # connaître leur page, le frontend en a besoin pour les surligner.
+    document_page_id: uuid.UUID
     x_min: float
     y_min: float
     x_max: float
@@ -145,6 +148,24 @@ class DocumentPageOut(BaseModel):
     has_screenshot: bool
     bounding_boxes: list[BoundingBoxOut]
     predictions: list[DocumentPredictionSummaryOut]
+
+
+class DocumentPageViewOut(BaseModel):
+    """Une page avec de quoi l'afficher (texte, zones normalisées, présence
+    d'une capture) et le nom de son document : lecture d'une source citée
+    dans le chat."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    page_number: int
+    width: int | None
+    height: int | None
+    content: str | None
+    has_screenshot: bool
+    bounding_boxes: list[BoundingBoxOut]
+    document_id: uuid.UUID
+    document_name: str
 
 
 class DossierDocumentIn(BaseModel):
