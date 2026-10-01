@@ -8,7 +8,9 @@ from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.conversation import MessageRole
 from app.models.dossier import DossierStatus
+from app.models.dossier_analysis import AnalysisUnitStatus
 from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
 from app.schemas.dossier import (
@@ -42,7 +44,9 @@ from app.schemas.dossier import (
     SummaryStatusIn,
     TextExtractionStatusIn,
 )
+from app.schemas.dossier_analysis import AnalysisUnitCompleteIn, AnalysisUnitCreateIn, AnalysisUnitRefOut
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
+from app.services import analysis_builder
 from app.services.ephemeral_run_service import finalize_run
 from app.services.user_task_service import update_task
 
@@ -76,6 +80,8 @@ async def complete_execution_step(
     if step is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Étape introuvable")
     completed = await repository.complete_execution_step(step, body.status, body.output)
+    # Analyse de dossier (#125) : n'empêche jamais l'étape de se terminer.
+    await analysis_builder.record_step_result(step_id)
     # Pose du TTL dès que le Dossier vient de passer à un état terminal (cf.
     # docs/ephemeral-api.md) - no-op immédiat si ce n'est pas encore le cas
     # (mark_dossier_terminal vérifie ended_at) ou si le dossier n'est pas
@@ -288,7 +294,13 @@ async def add_document_prediction(
     page = await repository.get_page_by_id(page_id)
     if page is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page introuvable")
-    return await repository.add_prediction(
+    analyses = DossierAnalysisRepository(db)
+    unit = None
+    if body.unit_id is not None:
+        unit = await analyses.get_unit(body.unit_id)
+        if unit is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unité introuvable")
+    prediction = await repository.add_prediction(
         page,
         kind=body.kind,
         name=body.name,
@@ -299,6 +311,43 @@ async def add_document_prediction(
         page_ids=body.page_ids,
         bounding_box_ids=body.bounding_box_ids,
     )
+    if unit is not None:
+        # Analyse de dossier (#125) : un élément par prédiction.
+        await analysis_builder.record_prediction(unit.id, prediction.id, page.id)
+    return prediction
+
+
+@router.post(
+    "/dossiers/{dossier_id}/analysis-units",
+    response_model=AnalysisUnitRefOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_analysis_unit(
+    dossier_id: uuid.UUID,
+    body: AnalysisUnitCreateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Déclare une unité de calcul dans l'analyse courante du dossier. 404 si
+    le dossier n'a pas d'analyse : le worker continue alors sans unité."""
+    analyses = DossierAnalysisRepository(db)
+    analysis = await analyses.get_current(dossier_id)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
+    return await analyses.create_unit(analysis.id, kind=body.kind, description=body.description)
+
+
+@router.post("/analysis-units/{unit_id}/complete", response_model=AnalysisUnitRefOut)
+async def complete_analysis_unit(
+    unit_id: uuid.UUID,
+    body: AnalysisUnitCompleteIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    analyses = DossierAnalysisRepository(db)
+    unit = await analyses.get_unit(unit_id)
+    if unit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unité introuvable")
+    status_value = AnalysisUnitStatus.TERMINE if body.status == "terminé" else AnalysisUnitStatus.ECHEC
+    return await analyses.set_unit_status(unit, status_value)
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut)

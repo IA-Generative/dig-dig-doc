@@ -273,3 +273,171 @@ def test_extract_dossier_entities_handles_no_entities(monkeypatch) -> None:
 
     extract_dossier_entities.run("dossier-1")
     # No predictions deposited when no entities defined
+
+
+# --- Analyse de dossier : unités de calcul (issue #125) ---
+
+
+class _UnitBackend:
+    """Backend simulé qui accepte les unités de calcul et enregistre ce que le
+    worker lui envoie."""
+
+    def __init__(self, *, with_analysis: bool = True, units_unavailable: bool = False) -> None:
+        self.with_analysis = with_analysis
+        self.units_unavailable = units_unavailable
+        self.declared: list[dict] = []
+        self.completed: list[tuple[str, str]] = []
+        self.predictions: list[dict] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/dossiers/dossier-1"):
+            return httpx.Response(200, json=_make_dossier_response())
+        if path.endswith("/analyses/analyse-1"):
+            return httpx.Response(200, json=_make_analyse_response())
+        if path.endswith("/analysis-units"):
+            if self.units_unavailable:
+                return httpx.Response(500)
+            if not self.with_analysis:
+                return httpx.Response(404)
+            self.declared.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": f"unit-{len(self.declared)}", "analysis_id": "analysis-1"})
+        if "/analysis-units/" in path and path.endswith("/complete"):
+            self.completed.append((path.split("/")[-2], json.loads(request.content)["status"]))
+            return httpx.Response(200, json={"id": path.split("/")[-2], "analysis_id": "analysis-1"})
+        if path.endswith("/logs"):
+            return httpx.Response(200, json=_log_response())
+        if path.endswith("/complete"):
+            return httpx.Response(200, json=_step_complete_response("step", "classification"))
+        if path.endswith("/predictions"):
+            self.predictions.append(json.loads(request.content))
+            return httpx.Response(201, json={"id": "pred", **self.predictions[-1]})
+        return httpx.Response(404)
+
+    def install(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            api_client,
+            "get_client",
+            lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(self.handler)),
+        )
+
+
+def _stub_classification(monkeypatch, *, fail_on_page: int | None = None) -> None:
+    monkeypatch.setattr(storage_instance, "get_object", lambda key: b"png")
+    monkeypatch.setattr(classification_mod.llm, "describe_page_image", lambda image_bytes: "desc")
+    seen = {"count": 0}
+
+    def classify(**kwargs):
+        seen["count"] += 1
+        if fail_on_page is not None and seen["count"] == fail_on_page:
+            raise RuntimeError("LLM indisponible")
+        return ClassificationResult(prediction=LabelPrediction(label_name="CNI", confidence=0.9, reasoning="r"))
+
+    monkeypatch.setattr(classification_mod.llm, "classify_page", classify)
+
+
+def test_classification_declares_one_unit_per_page_and_attaches_predictions(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    _stub_classification(monkeypatch)
+
+    classify_dossier.run("dossier-1")
+
+    assert [u["kind"] for u in backend.declared] == ["classification", "classification"]
+    assert [u["description"]["page_number"] for u in backend.declared] == [1, 2]
+    assert backend.declared[0]["description"]["page_id"] == "page-1"
+    assert backend.declared[0]["description"]["document_id"] == "doc-1"
+    assert [p["unit_id"] for p in backend.predictions] == ["unit-1", "unit-2"]
+    assert backend.completed == [("unit-1", "terminé"), ("unit-2", "terminé")]
+
+
+def test_classification_marks_the_unit_failed_when_the_page_fails(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    _stub_classification(monkeypatch, fail_on_page=2)
+
+    try:
+        classify_dossier.run("dossier-1")
+    except RuntimeError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("L'erreur de classification doit remonter comme avant")
+
+    assert backend.completed == [("unit-1", "terminé"), ("unit-2", "échec")]
+
+
+def test_classification_works_without_analysis(monkeypatch) -> None:
+    """Dossier sans analyse (exécution démarrée avant #125) : le backend répond
+    404 aux unités, le worker dépose les prédictions comme avant."""
+    backend = _UnitBackend(with_analysis=False)
+    backend.install(monkeypatch)
+    _stub_classification(monkeypatch)
+
+    classify_dossier.run("dossier-1")
+
+    assert len(backend.predictions) == 2
+    assert all("unit_id" not in p for p in backend.predictions)
+    assert backend.completed == []
+
+
+def test_classification_survives_a_broken_unit_api(monkeypatch) -> None:
+    backend = _UnitBackend(units_unavailable=True)
+    backend.install(monkeypatch)
+    _stub_classification(monkeypatch)
+
+    classify_dossier.run("dossier-1")
+
+    assert len(backend.predictions) == 2
+    assert all("unit_id" not in p for p in backend.predictions)
+
+
+def _stub_extraction(monkeypatch, *, fail: bool = False) -> None:
+    def extract(**kwargs):
+        if fail:
+            raise RuntimeError("LLM indisponible")
+        return ExtractionResult(
+            entities=[EntityValue(entity_name="nom", value="Dupont", confidence=0.9, page_numbers=[1])]
+        )
+
+    monkeypatch.setattr(extraction_mod.llm, "extract_entities_batch", extract)
+
+
+def test_extraction_declares_one_unit_per_batch_and_attaches_predictions(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    _stub_extraction(monkeypatch)
+
+    extract_dossier_entities.run("dossier-1")
+
+    # Le découpage en lots n'a pas changé : 2 pages, un seul lot (taille 5).
+    assert len(backend.declared) == 1
+    assert backend.declared[0]["kind"] == "extraction"
+    assert backend.declared[0]["description"] == {"page_numbers": [1, 2], "page_ids": ["page-1", "page-2"]}
+    assert [p["unit_id"] for p in backend.predictions] == ["unit-1"]
+    assert backend.completed == [("unit-1", "terminé")]
+
+
+def test_extraction_marks_the_unit_failed_and_still_raises(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    _stub_extraction(monkeypatch, fail=True)
+
+    try:
+        extract_dossier_entities.run("dossier-1")
+    except RuntimeError:
+        pass
+    else:  # pragma: no cover
+        raise AssertionError("L'erreur d'extraction doit remonter comme avant")
+
+    assert backend.completed == [("unit-1", "échec")]
+
+
+def test_extraction_works_without_analysis(monkeypatch) -> None:
+    backend = _UnitBackend(with_analysis=False)
+    backend.install(monkeypatch)
+    _stub_extraction(monkeypatch)
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert len(backend.predictions) == 1
+    assert "unit_id" not in backend.predictions[0]
