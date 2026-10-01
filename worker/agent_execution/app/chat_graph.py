@@ -21,6 +21,7 @@ import json
 import logging
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import quote
 
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
@@ -49,6 +50,15 @@ class ChatState(TypedDict, total=False):
     on_event: EventCallback | None
 
 
+def assistant_suggestion_marker(question: str) -> str:
+    """Marqueur ajouté à la fin de la réponse (commentaire HTML invisible) que
+    le frontend transforme en bouton « Ouvrir l'assistant » avec la question
+    pré-remplie. Ajouté par le worker, pas par le LLM, pour rester fiable."""
+    # "-" encodé aussi : pas de "--" dans le commentaire HTML.
+    encoded = quote(question, safe="").replace("-", "%2D")
+    return f"\n\n<!--assistant-suggestion:{encoded}-->"
+
+
 def _build_system_prompt(
     conversation_history: list[dict],
     syntheses: list[dict],
@@ -68,6 +78,12 @@ def _build_system_prompt(
         "Quand tu cites une information, indique sa source (page, document). "
         "Sois précis et concis. Si tu ne trouves pas l'information, dis-le "
         "clairement plutôt que d'inventer.",
+        "",
+        "Tu ne peux pas agir sur l'application (créer ou configurer une analyse, "
+        "créer ou lancer un dossier, retrouver des analyses). Si la demande porte "
+        "là-dessus plutôt que sur le contenu du dossier, appelle l'outil "
+        "suggest_assistant et explique brièvement que l'assistant de "
+        "l'application peut s'en charger.",
     ]
 
     if analyse_description:
@@ -230,6 +246,9 @@ def run_chat(
     if not answer:
         last_msg = final_state.get("messages", [{}])[-1]
         answer = last_msg.get("content", "Aucune réponse produite.")
+    assistant_question = tools.assistant_question()
+    if assistant_question:
+        answer += assistant_suggestion_marker(assistant_question)
     sources = tools.consulted_sources()
     logger.info(
         "Chat completed in %d iterations, answer length: %d, sources: %d",

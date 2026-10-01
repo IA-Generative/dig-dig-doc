@@ -285,6 +285,7 @@ function formatRelativeTime(iso: string): string {
             :messages="messages"
           :stream-events="chatEvents"
           :is-running="isChatRunning"
+          :prefill="dossierContext?.question ?? ''"
           intro-title="Assistant dig-dig-doc"
           intro-text="Posez une question, demandez la création d'un dossier, la recherche d'analyses, et plus encore."
           placeholder="Écrivez votre message à l'assistant..."
