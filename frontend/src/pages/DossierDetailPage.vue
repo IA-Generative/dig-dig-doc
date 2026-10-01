@@ -191,11 +191,13 @@ async function onChatSubmit(content: string) {
   pendingFiles.value = [];
 
   const current = await ensureConversation();
-  // Démarre le streaming AVANT d'envoyer le message pour ne pas manquer
-  // les premiers événements (le worker peut être très rapide).
   chatEvents.value = [];
-  startChatStream(`/api/dossiers/${dossierId}/conversations/${current.id}/stream`);
+  // Le streaming démarre APRÈS l'envoi : POST /messages purge les événements
+  // du tour précédent. Ouvert avant, le flux rejouerait l'ancien `done`,
+  // se fermerait aussitôt et rechargerait la conversation sans la réponse.
+  // Rien n'est manqué : les événements sont en base et rejoués depuis le début.
   await sendMessage(parts.join("\n"));
+  startChatStream(`/api/dossiers/${dossierId}/conversations/${current.id}/stream`);
 }
 
 async function onDeleteConversation() {
