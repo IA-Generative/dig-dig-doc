@@ -24,6 +24,15 @@ from .cgu import Cgu
 from .cgu_acceptance import CguAcceptance
 from .chat_event import ChatEvent, ChatEventKind
 from .conversation import Conversation, Message, MessageRole, MessageSource
+from .document_draft import (
+    DocumentDraft,
+    DocumentFieldEvent,
+    DocumentFieldVersion,
+    DraftStatus,
+    FieldEventKind,
+    FieldOrigin,
+    FieldStatus,
+)
 from .document_page import (
     BoundingBox,
     DocumentPage,
@@ -67,7 +76,14 @@ from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
+    "DocumentDraft",
+    "DocumentFieldEvent",
+    "DocumentFieldVersion",
     "DocumentTemplate",
+    "DraftStatus",
+    "FieldEventKind",
+    "FieldOrigin",
+    "FieldStatus",
     "DocumentTemplateVersion",
     "DossierNote",
     "DossierNoteVersion",
