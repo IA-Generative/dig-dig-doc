@@ -52,6 +52,14 @@ def dispatch_chat_response(conversation_id: str, dossier_id: str) -> str:
     ).id
 
 
+def dispatch_note_proposals(note_id: str) -> str:
+    """Dépose l'analyse d'une note sur la file agent_execution (issue #117) : le
+    worker lit la note et l'analyse de dossier, demande au LLM les mises à jour
+    que la note justifie, et dépose des **propositions en attente** (rien n'est
+    appliqué). Le suivi est porté par la note (analysis_status)."""
+    return celery_client.send_task("app.tasks.propose_from_note", args=[note_id], queue="agent_execution").id
+
+
 def dispatch_helper_chat_response(conversation_id: str, model: str | None = None) -> str:
     """Dépose la tâche de réponse de l'agent helper sur la file
     agent_execution (issue #50). Contrairement à dispatch_chat_response, pas

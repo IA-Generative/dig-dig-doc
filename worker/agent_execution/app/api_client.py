@@ -154,6 +154,39 @@ def create_proposal(client: httpx.Client, dossier_id: str, body: dict) -> dict:
     return response.json()
 
 
+# --- Notes internes du dossier (issue #117) ---
+
+
+def get_note(client: httpx.Client, note_id: str) -> dict:
+    response = client.get(f"/notes/{note_id}")
+    response.raise_for_status()
+    return response.json()
+
+
+def list_dossier_notes(client: httpx.Client, dossier_id: str) -> list[dict]:
+    """Notes internes (non archivées) du dossier, la plus récente d'abord :
+    contexte du chat. Tolérant : sans notes, le chat répond comme avant."""
+    try:
+        response = client.get(f"/dossiers/{dossier_id}/notes")
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        logger.warning("Could not load the notes of dossier %s", dossier_id, exc_info=True)
+        return []
+
+
+def finish_note_analysis(
+    client: httpx.Client, note_id: str, *, status: str, proposal_count: int | None = None, error: str | None = None
+) -> None:
+    """Signale la fin de l'analyse d'une note (terminée ou en échec)."""
+    body: dict = {"status": status}
+    if proposal_count is not None:
+        body["proposal_count"] = proposal_count
+    if error is not None:
+        body["error"] = error[:2000]
+    client.post(f"/notes/{note_id}/analysis", json=body).raise_for_status()
+
+
 # --- Conversations & chat events ---
 
 

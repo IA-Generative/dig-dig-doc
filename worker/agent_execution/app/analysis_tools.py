@@ -46,6 +46,13 @@ class AnalysisProposer:
     user_id: str
     model: str | None
     source_message_id: str | None
+    # D'où viennent les propositions : le chat (message source) ou l'analyse
+    # d'une note (#117). ``actor`` préfixe l'auteur enregistré, ``prompt_version``
+    # sert aux métriques d'acceptation, ``max_proposals`` borne le bruit.
+    source_type: str = "chat_message"
+    actor: str = "chat-agent"
+    prompt_version: str = PROMPT_VERSION
+    max_proposals: int = MAX_PROPOSALS_PER_ANSWER
     _analysis: dict | None = field(default=None, init=False, repr=False)
     _loaded: bool = field(default=False, init=False, repr=False)
     analysis_id: str | None = field(default=None, init=False)
@@ -94,8 +101,8 @@ class AnalysisProposer:
         analysis = self._analysis_data()
         if analysis is None:
             return "Impossible de proposer : ce dossier n'a pas encore d'analyse."
-        if len(self.proposal_ids) >= MAX_PROPOSALS_PER_ANSWER:
-            return f"Limite atteinte : {MAX_PROPOSALS_PER_ANSWER} propositions au maximum par réponse."
+        if len(self.proposal_ids) >= self.max_proposals:
+            return f"Limite atteinte : {self.max_proposals} propositions au maximum."
         if not value.strip() or not reason.strip():
             return "La valeur et le motif sont obligatoires."
 
@@ -112,13 +119,13 @@ class AnalysisProposer:
             )
 
         body = {
-            "proposed_by": f"chat-agent:{self.user_id}",
+            "proposed_by": f"{self.actor}:{self.user_id}",
             "value": {_VALUE_KEY[kind]: value.strip()},
             "reason": reason.strip(),
-            "source_type": "chat_message" if self.source_message_id else None,
+            "source_type": self.source_type if self.source_message_id else None,
             "source_id": self.source_message_id,
             "model": self.model,
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": self.prompt_version,
         }
         if element_id:
             body["element_id"] = element_id

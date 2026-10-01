@@ -485,3 +485,39 @@ def test_internal_conversation_exposes_its_user(client: TestClient) -> None:
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     internal = client.get(f"/api/internal/conversations/{conversation['id']}", headers=INTERNAL).json()
     assert internal["user_id"] == conversation["user_id"]
+
+
+# --- Une proposition en attente identique n'est pas dupliquée (issue #117) ---
+
+
+def test_an_identical_pending_proposal_is_returned_instead_of_duplicated(client: TestClient) -> None:
+    dossier_id, analysis, element = _setup(client)
+    first = _propose(client, dossier_id, analysis.id, element.id, value="Dupont").json()
+    again = _propose(client, dossier_id, analysis.id, element.id, value="Dupont")
+
+    assert again.status_code == 201
+    assert again.json()["id"] == first["id"]
+    assert len(client.get(f"{_base(dossier_id, analysis.id)}/proposals").json()) == 1
+    # Une autre valeur reste une autre proposition.
+    other = _propose(client, dossier_id, analysis.id, element.id, value="Durand").json()
+    assert other["id"] != first["id"]
+
+
+def test_a_decided_proposal_does_not_block_a_new_identical_one(client: TestClient) -> None:
+    dossier_id, analysis, element = _setup(client)
+    first = _propose(client, dossier_id, analysis.id, element.id, value="Dupont").json()
+    client.post(f"{_base(dossier_id, analysis.id)}/proposals/{first['id']}/reject", json={})
+    second = _propose(client, dossier_id, analysis.id, element.id, value="Dupont").json()
+    assert second["id"] != first["id"]
+    assert second["status"] == "pending"
+
+
+def test_identical_new_element_proposals_are_not_duplicated(client: TestClient) -> None:
+    dossier_id, analysis, _ = _setup(client)
+    url = f"{_base(dossier_id, analysis.id)}/proposals"
+    body = {"kind": "entity", "definition_name": "téléphone", "value": {"value": "06"}, "reason": "r"}
+    first = client.post(url, json=body).json()
+    again = client.post(url, json=body).json()
+    other_name = client.post(url, json={**body, "definition_name": "fax"}).json()
+    assert again["id"] == first["id"]
+    assert other_name["id"] != first["id"]

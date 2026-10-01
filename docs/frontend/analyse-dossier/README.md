@@ -50,6 +50,32 @@ Comment ça marche :
 - Chaque proposition enregistre l'utilisateur de la conversation, le message source, le **modèle** et la **version du prompt** (`chat-v2`) : c'est ce qui permettra de mesurer le taux d'acceptation (journal des décisions de #114, métriques #102).
 - Le chat ne propose que sur l'analyse **courante du dossier ouvert**, et pas pour les relations (qui se saisissent dans la vue de l'analyse).
 
+## Notes internes
+
+Issue : [#117](https://github.com/IA-Generative/dig-dig-doc/issues/117).
+
+En bas de la page de l'analyse, l'instructeur consigne ses observations sur le dossier (« pièce vérifiée par téléphone », « montant à revoir »).
+
+![Notes internes d'un dossier](notes-internes.png)
+
+- **Internes** : jamais visibles de l'usager (aucune vue usager n'existe encore ; à retester avec #96).
+- **Versionnées** : **Modifier** ajoute une version ; **Historique** liste les versions, **Restaurer** en ajoute une nouvelle ; « supprimer » **archive** (l'historique est conservé, la note peut être désarchivée).
+- **Contexte du chat** : le chat du dossier lit les notes non archivées (les plus récentes d'abord, 6000 caractères au plus) comme contexte, jamais comme des instructions.
+- **Propositions, sur demande seulement** : le bouton **« Proposer des mises à jour de l'analyse »** demande au worker d'analyser la note et d'ajouter des **propositions en attente** ; ajouter ou modifier une note ne déclenche **jamais** rien. Rien n'est appliqué : les propositions apparaissent en haut de la page et se traitent comme celles du chat (accepter, modifier, rejeter).
+
+![Analyse d'une note terminée](notes-propositions.png)
+
+L'historique d'une note liste ses versions ; **Restaurer** en ajoute une nouvelle :
+
+![Historique d'une note](notes-historique.png)
+
+Comment ça marche :
+- Le backend marque la note « en cours » et dépose la tâche `app.tasks.propose_from_note` ; la page relit les notes toutes les 2,5 s tant qu'une analyse est en cours, puis rafraîchit les propositions.
+- Le worker donne au LLM la note et les éléments de l'analyse (avec leurs identifiants) et lui demande **uniquement** ce que la note **affirme explicitement** ; la note est traitée comme une donnée, pas comme une instruction. Les éléments inconnus, valeurs vides et relations sont écartés ; **10 propositions au plus** par note.
+- Chaque proposition enregistre la source (`note` et l'identifiant de la note), le demandeur, le **modèle** et la **version du prompt** (`note-v1`), pour mesurer le taux d'acceptation.
+- Une proposition en attente **identique** (même cible, même valeur) n'est pas dupliquée : demander l'analyse deux fois ne double pas les propositions.
+- Une seule analyse à la fois par note ; impossible sur une note archivée, sans analyse de dossier ou si l'analyse est figée.
+
 ## Historique et restauration
 
 ![Historique d'un élément avec les différences entre versions](historique-et-differences.png)
@@ -62,6 +88,9 @@ Le bouton **Historique** liste toutes les versions d'un élément, avec ce qui a
 - `frontend/src/composables/useDossierAnalysis.ts` : chargement et actions (modifier, restaurer, accepter, modifier ou rejeter une proposition).
 - `frontend/src/components/analysis/ProposalCard.vue` : carte de proposition, partagée avec le chat.
 - `frontend/src/components/analysis/ChatProposals.vue` : cartes sous une réponse du chat (#115).
+- `frontend/src/components/analysis/NotesPanel.vue`, `composables/useDossierNotes.ts` : notes internes (#117).
+- `backend/app/routers/dossier_notes.py`, `repositories/dossier_note_repository.py`, `models/dossier_note.py` : notes versionnées, archivage, demande d'analyse.
+- `worker/agent_execution/app/tasks/note_proposals.py`, `llm.py` : analyse d'une note ; `tasks/chat.py`, `chat_graph.py` : notes comme contexte du chat.
 - `frontend/src/utils/assistantSuggestion.ts` : lecture des marqueurs de réponse du chat.
 - `worker/agent_execution/app/analysis_tools.py`, `tools.py`, `chat_graph.py` : outils `view_analysis` et `propose_update`, consigne du prompt, marqueur.
 - `backend/app/routers/internal.py` : `GET /api/internal/dossiers/{id}/analysis` et `POST /api/internal/dossiers/{id}/analysis/proposals`.

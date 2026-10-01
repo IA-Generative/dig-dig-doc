@@ -12,6 +12,7 @@ from app.models.dossier_analysis import AnalysisUnitStatus, DossierAnalysisStatu
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_proposal_repository import AnalysisProposalRepository, ProposalTargetError
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
+from app.repositories.dossier_note_repository import DossierNoteRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
 from app.schemas.analysis_proposal import InternalProposalCreateIn, ProposalOut
@@ -53,6 +54,7 @@ from app.schemas.dossier_analysis import (
     DossierAnalysisOut,
     InvalidElementValueError,
 )
+from app.schemas.dossier_note import InternalNoteAnalysisIn, InternalNoteOut
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
 from app.services import analysis_builder
 from app.services.ephemeral_run_service import finalize_run
@@ -393,6 +395,46 @@ async def create_analysis_proposal(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     except InvalidElementValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+
+
+def _internal_note(note) -> InternalNoteOut:
+    return InternalNoteOut(
+        id=note.id,
+        dossier_id=note.dossier_id,
+        content=note.current.content,
+        version_number=note.current.version_number,
+        archived=note.archived,
+        analysis_requested_by=note.analysis_requested_by,
+    )
+
+
+@router.get("/dossiers/{dossier_id}/notes", response_model=list[InternalNoteOut])
+async def list_dossier_notes(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Notes internes (non archivées) d'un dossier : contexte du chat (issue #117)."""
+    notes = await DossierNoteRepository(db).list(dossier_id)
+    return [_internal_note(note) for note in notes]
+
+
+@router.get("/notes/{note_id}", response_model=InternalNoteOut)
+async def get_dossier_note(note_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    note = await DossierNoteRepository(db).get_by_id(note_id)
+    if note is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note introuvable")
+    return _internal_note(note)
+
+
+@router.post("/notes/{note_id}/analysis", response_model=InternalNoteOut)
+async def finish_note_analysis(
+    note_id: uuid.UUID, body: InternalNoteAnalysisIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """Le worker signale la fin de l'analyse d'une note (terminée ou en échec)."""
+    repository = DossierNoteRepository(db)
+    note = await repository.get_by_id(note_id)
+    if note is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note introuvable")
+    return _internal_note(
+        await repository.finish_analysis(note, status=body.status, proposal_count=body.proposal_count, error=body.error)
+    )
 
 
 @router.post("/analysis-units/{unit_id}/complete", response_model=AnalysisUnitRefOut)
