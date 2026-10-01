@@ -18,6 +18,7 @@ from app.models.dossier_analysis import (
     AnalysisUnitKind,
     AnalysisUnitStatus,
     DossierAnalysis,
+    DossierAnalysisStatus,
     ElementVersionOrigin,
 )
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
@@ -405,3 +406,176 @@ def _create_prediction(client: TestClient, dossier_id: str) -> uuid.UUID:
         headers={"X-App-Token": "dev-only-worker-token-not-for-prod"},
     ).json()
     return uuid.UUID(prediction["id"])
+
+
+# --- Création par un instructeur (routes) ---
+
+
+def _elements_url(dossier_id: str, analysis_id: Any, suffix: str = "") -> str:
+    return _url(dossier_id, analysis_id, f"/elements{suffix}")
+
+
+def test_instructor_creates_an_element_by_hand(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+
+    response = client.post(
+        _elements_url(dossier_id, analysis.id),
+        json={
+            "kind": "entity",
+            "value": {"value": "12 rue des Lilas"},
+            "definition_name": "adresse",
+            "reason": "Relevé sur le justificatif papier",
+            "source_type": "note",
+        },
+    )
+    assert response.status_code == 201
+    element = response.json()
+    assert element["kind"] == "entity"
+    assert element["definition_name"] == "adresse"
+    assert element["unit_id"] is None
+    assert element["latest_model_version"] is None
+    version = element["retained_version"]
+    assert version["origin"] == "instructor"
+    assert version["author_id"]
+    assert version["reason"] == "Relevé sur le justificatif papier"
+    assert version["source_type"] == "note"
+
+    # L'élément apparaît dans l'analyse courante.
+    elements = client.get(_url(dossier_id)).json()["elements"]
+    assert [e["id"] for e in elements] == [element["id"]]
+
+
+def test_instructor_creates_a_relation_between_existing_elements(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    nom = _new_entity(client, analysis, "Dupont")
+    adresse = _new_entity(client, analysis, "1 rue X")
+
+    response = client.post(
+        _elements_url(dossier_id, analysis.id),
+        json={
+            "kind": "relation",
+            "value": {"type": "habite_à", "source_element_id": str(nom.id), "target_element_id": str(adresse.id)},
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["retained_version"]["value"]["type"] == "habite_à"
+
+
+def test_relation_to_unknown_element_is_422(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    nom = _new_entity(client, analysis, "Dupont")
+    response = client.post(
+        _elements_url(dossier_id, analysis.id),
+        json={
+            "kind": "relation",
+            "value": {"type": "x", "source_element_id": str(nom.id), "target_element_id": str(uuid.uuid4())},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_element_value_must_match_its_kind(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    response = client.post(
+        _elements_url(dossier_id, analysis.id), json={"kind": "classification", "value": {"value": "pas un label"}}
+    )
+    assert response.status_code == 422
+
+
+def test_instructor_adds_a_version_with_author_and_reason(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    element = _new_entity(client, analysis, "Dupond")
+    message_id = str(uuid.uuid4())
+
+    response = client.post(
+        _elements_url(dossier_id, analysis.id, f"/{element.id}/versions"),
+        json={
+            "value": {"value": "Dupont"},
+            "reason": "Corrigé après vérification téléphonique",
+            "source_type": "chat_message",
+            "source_id": message_id,
+        },
+    )
+    assert response.status_code == 201
+    version = response.json()
+    assert version["version_number"] == 2
+    assert version["origin"] == "instructor"
+    assert version["author_id"]
+    assert version["reason"] == "Corrigé après vérification téléphonique"
+    assert version["source_type"] == "chat_message"
+    assert version["source_id"] == message_id
+
+    [out] = client.get(_url(dossier_id)).json()["elements"]
+    assert out["retained_version"]["id"] == version["id"]
+    # La prédiction du modèle reste accessible.
+    assert out["latest_model_version"]["value"] == {"value": "Dupond"}
+
+
+def test_version_requires_a_reason(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    element = _new_entity(client, analysis)
+    url = _elements_url(dossier_id, analysis.id, f"/{element.id}/versions")
+    assert client.post(url, json={"value": {"value": "X"}}).status_code == 422
+    assert client.post(url, json={"value": {"value": "X"}, "reason": ""}).status_code == 422
+
+
+def test_version_value_must_match_the_element_kind(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    element = _new_entity(client, analysis)
+    response = client.post(
+        _elements_url(dossier_id, analysis.id, f"/{element.id}/versions"),
+        json={"value": {"label": "pas une entité"}, "reason": "test"},
+    )
+    assert response.status_code == 422
+
+
+def test_add_version_to_unknown_element_is_404(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    response = client.post(
+        _elements_url(dossier_id, analysis.id, f"/{uuid.uuid4()}/versions"),
+        json={"value": {"value": "X"}, "reason": "test"},
+    )
+    assert response.status_code == 404
+
+
+def test_frozen_analysis_rejects_every_modification(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    analysis = _new_analysis(client, dossier_id)
+    element = _new_entity(client, analysis, "A")
+    version_id = client.get(_url(dossier_id)).json()["elements"][0]["retained_version"]["id"]
+
+    async def freeze(repo: DossierAnalysisRepository) -> None:
+        row = await repo.db.get(DossierAnalysis, analysis.id)
+        row.status = DossierAnalysisStatus.FIGEE
+        await repo.db.commit()
+
+    _run(client, freeze)
+
+    create = client.post(_elements_url(dossier_id, analysis.id), json={"kind": "entity", "value": {"value": "B"}})
+    add = client.post(
+        _elements_url(dossier_id, analysis.id, f"/{element.id}/versions"),
+        json={"value": {"value": "B"}, "reason": "test"},
+    )
+    restore = client.post(
+        _elements_url(dossier_id, analysis.id, f"/{element.id}/restore"), json={"version_id": version_id}
+    )
+    assert (create.status_code, add.status_code, restore.status_code) == (409, 409, 409)
+    # La lecture reste possible, et rien n'a changé.
+    assert len(client.get(_url(dossier_id)).json()["elements"]) == 1
+    versions = client.get(_elements_url(dossier_id, analysis.id, f"/{element.id}/versions")).json()
+    assert len(versions) == 1
+
+
+def test_creation_in_analysis_of_another_dossier_is_404(client: TestClient) -> None:
+    analysis = _new_analysis(client, _create_dossier(client, "A"))
+    other = _create_dossier(client, "B")
+    response = client.post(_elements_url(other, analysis.id), json={"kind": "entity", "value": {"value": "X"}})
+    assert response.status_code == 404

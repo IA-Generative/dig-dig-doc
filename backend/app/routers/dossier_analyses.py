@@ -13,15 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
-from app.models.dossier_analysis import DossierAnalysis
+from app.models.dossier_analysis import DossierAnalysis, DossierAnalysisStatus, ElementVersionOrigin
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier_analysis import (
+    AnalysisElementOut,
     AnalysisRevisionOut,
     AnalysisRevisionSummaryOut,
     AnalysisUnitOut,
     DossierAnalysisOut,
     DossierAnalysisSummaryOut,
+    ElementCreateIn,
+    ElementVersionCreateIn,
     ElementVersionOut,
     InvalidElementValueError,
     RestoreVersionIn,
@@ -44,6 +47,12 @@ async def _analysis_or_404(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse de dossier introuvable")
     return analysis
+
+
+def _ensure_editable(analysis: DossierAnalysis) -> None:
+    """Une analyse figée ne reçoit plus aucune modification."""
+    if analysis.status == DossierAnalysisStatus.FIGEE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cette analyse est figée")
 
 
 @router.get("/{dossier_id}/analyses-dossier", response_model=list[DossierAnalysisSummaryOut])
@@ -112,7 +121,7 @@ async def restore_element_version(
     """Restaure une version antérieure : ajoute une nouvelle version qui en
     reprend la valeur et devient la version retenue. Rien n'est supprimé."""
     repository = DossierAnalysisRepository(db)
-    await _analysis_or_404(repository, dossier_id, analysis_id)
+    _ensure_editable(await _analysis_or_404(repository, dossier_id, analysis_id))
     element = await repository.get_element(analysis_id, element_id)
     if element is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément introuvable")
@@ -122,6 +131,74 @@ async def restore_element_version(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable pour cet élément")
     try:
         return await repository.restore_version(element, version, author_id=user.user_id, reason=body.reason)
+    except InvalidElementValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+
+
+@router.post(
+    "/{dossier_id}/analyses-dossier/{analysis_id}/elements",
+    response_model=AnalysisElementOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_element(
+    dossier_id: uuid.UUID,
+    analysis_id: uuid.UUID,
+    body: ElementCreateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    """Ajoute à la main un élément (entité, classification, relation,
+    synthèse ou champ) : sa première version est celle de l'instructeur."""
+    repository = DossierAnalysisRepository(db)
+    analysis = await _analysis_or_404(repository, dossier_id, analysis_id)
+    _ensure_editable(analysis)
+    try:
+        element = await repository.create_element(
+            analysis,
+            kind=body.kind,
+            value=body.value,
+            origin=ElementVersionOrigin.INSTRUCTOR,
+            definition_name=body.definition_name,
+            author_id=user.user_id,
+            reason=body.reason,
+            source_type=body.source_type,
+            source_id=body.source_id,
+        )
+    except InvalidElementValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+    return await repository.element_out(element)
+
+
+@router.post(
+    "/{dossier_id}/analyses-dossier/{analysis_id}/elements/{element_id}/versions",
+    response_model=ElementVersionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_element_version(
+    dossier_id: uuid.UUID,
+    analysis_id: uuid.UUID,
+    element_id: uuid.UUID,
+    body: ElementVersionCreateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    """Apporte une nouvelle valeur à un élément, avec auteur et motif. Elle
+    devient la version retenue ; la prédiction du modèle reste conservée."""
+    repository = DossierAnalysisRepository(db)
+    _ensure_editable(await _analysis_or_404(repository, dossier_id, analysis_id))
+    element = await repository.get_element(analysis_id, element_id)
+    if element is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Élément introuvable")
+    try:
+        return await repository.add_version(
+            element,
+            value=body.value,
+            origin=ElementVersionOrigin.INSTRUCTOR,
+            author_id=user.user_id,
+            reason=body.reason,
+            source_type=body.source_type,
+            source_id=body.source_id,
+        )
     except InvalidElementValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
 
