@@ -37,6 +37,7 @@ jobs:
       worker_document_process: ${{ steps.filter.outputs.worker_document_process }}
       worker_agent_execution: ${{ steps.filter.outputs.worker_agent_execution }}
       worker_async_api: ${{ steps.filter.outputs.worker_async_api }}
+      worker_document_render: ${{ steps.filter.outputs.worker_document_render }}
       ci: ${{ steps.filter.outputs.ci }}
       helm: ${{ steps.filter.outputs.helm }}
       services: ${{ steps.services.outputs.services }}
@@ -57,6 +58,8 @@ jobs:
               - 'worker/document_process/**'
             worker_agent_execution:
               - 'worker/agent_execution/**'
+            worker_document_render:
+              - 'worker/document_render/**'
             worker_async_api:
               - 'worker/async_api/**'
               - 'sdks/python/**'
@@ -152,7 +155,7 @@ jobs:
     uses: ./.github/workflows/lint.yml
     needs:
       - path-filter
-    if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.worker_document_render == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     secrets:
@@ -162,7 +165,7 @@ jobs:
     uses: ./.github/workflows/unit-tests.yml
     needs:
       - path-filter
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker_document_process == 'true' || needs.path-filter.outputs.worker_agent_execution == 'true' || needs.path-filter.outputs.worker_async_api == 'true' || needs.path-filter.outputs.worker_document_render == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     secrets:
