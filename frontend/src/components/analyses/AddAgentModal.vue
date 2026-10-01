@@ -4,7 +4,7 @@ import { computed, ref, watch } from "vue";
 import LlmAssistButton from "@/components/analyses/LlmAssistButton.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestAgentPrompt } from "@/composables/useLlmAssist";
-import { useModels } from "@/composables/useModels";
+import ModelPicker from "@/components/ModelPicker.vue";
 import { AGENT_TOOL_LABELS, type AgentTool } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string }>();
@@ -12,20 +12,12 @@ const opened = defineModel<boolean>("opened", { default: false });
 const emit = defineEmits<{ created: [] }>();
 
 const { addAgent } = useAnalyses();
-const { models, fetchModels } = useModels();
 
 const toolOptions = (Object.keys(AGENT_TOOL_LABELS) as AgentTool[]).map((tool) => ({
   name: tool,
   value: tool,
   label: AGENT_TOOL_LABELS[tool],
 }));
-
-// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
-// pas de valeur null pour une option.
-const modelOptions = computed(() => [
-  { value: "", text: "Modèle par défaut du hub" },
-  ...models.value.map((id) => ({ value: id, text: id })),
-]);
 
 const name = ref("");
 const prompt = ref("");
@@ -41,7 +33,6 @@ watch(opened, (isOpened) => {
     tools.value = [];
     output.value = true;
     model.value = "";
-    fetchModels();
   }
 });
 
@@ -116,6 +107,6 @@ async function submit() {
       label="Présenter le résultat de cet agent dans la page de résultat du dossier"
       class="fr-mt-2w"
     />
-    <DsfrSelect v-model="model" label="Modèle" :options="modelOptions" class="fr-mt-2w" />
+    <ModelPicker v-model="model" show-label block class="fr-mt-2w" />
   </DsfrModal>
 </template>

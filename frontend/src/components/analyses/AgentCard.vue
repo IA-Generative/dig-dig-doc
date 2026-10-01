@@ -6,7 +6,7 @@ import PromptEditor from "@/components/analyses/PromptEditor.vue";
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { suggestAgentPrompt } from "@/composables/useLlmAssist";
-import { useModels } from "@/composables/useModels";
+import ModelPicker from "@/components/ModelPicker.vue";
 import type { Agent } from "@/types/analyse";
 
 const props = defineProps<{ analyseId: string; agent: Agent }>();
@@ -19,17 +19,6 @@ const {
   updateAgentModel,
   restoreAgentModelVersion,
 } = useAnalyses();
-const { models, fetchModels } = useModels();
-
-onMounted(fetchModels);
-
-// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
-// pas de valeur null pour une option.
-const modelOptions = computed(() => [
-  { value: "", text: "Modèle par défaut du hub" },
-  ...models.value.map((id) => ({ value: id, text: id })),
-]);
-
 function setModel(value: string) {
   updateAgentModel(props.analyseId, props.agent.id, value || null);
 }
@@ -98,12 +87,7 @@ function formatOutputVersionContent(output: boolean) {
 
     <hr class="agent-card__divider" />
     <div class="agent-card__model">
-      <DsfrSelect
-        :model-value="agent.model ?? ''"
-        label="Modèle"
-        :options="modelOptions"
-        @update:model-value="setModel"
-      />
+      <ModelPicker :model-value="agent.model ?? ''" show-label @update:model-value="setModel" />
       <VersionHistory
         v-if="agent.modelVersions.length > 0"
         :versions="agent.modelVersions"
