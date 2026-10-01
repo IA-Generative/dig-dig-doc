@@ -142,28 +142,64 @@ class DossierRepository:
         # Pas de refresh(document) : réexpirerait `pages` (déjà chargée par
         # get_document) et redéclencherait un lazy-load hors contexte async.
 
-    def _conversation_query(self):
+    def _conversation_query(self, *, with_messages: bool = True):
         # populate_existing: without it, re-querying a Conversation already in
         # the identity map (e.g. right after adding a message to it) would
         # keep the stale, already-loaded `messages` collection instead of
         # picking up the row just committed.
-        sources_load = selectinload(Conversation.messages).selectinload(Message.sources)
-        feedback_load = (
-            selectinload(Conversation.messages).selectinload(Message.feedbacks).selectinload(Feedback.reason_rows)
-        )
-        return (
-            select(Conversation)
-            .options(
+        # with_messages=False : les listes de conversations n'ont pas besoin
+        # de l'historique (les messages se lisent par page via list_messages_page).
+        options = []
+        if with_messages:
+            sources_load = selectinload(Conversation.messages).selectinload(Message.sources)
+            feedback_load = (
+                selectinload(Conversation.messages).selectinload(Message.feedbacks).selectinload(Feedback.reason_rows)
+            )
+            options = [
                 sources_load.selectinload(MessageSource.pages),
                 sources_load.selectinload(MessageSource.bounding_boxes),
                 feedback_load,
+            ]
+        return select(Conversation).options(*options).execution_options(populate_existing=True)
+
+    async def list_messages_page(
+        self, conversation_id: uuid.UUID, *, limit: int, before_id: uuid.UUID | None = None
+    ) -> tuple[list[Message], bool]:
+        """Page de messages par curseur, du plus récent vers l'ancien : les
+        `limit` messages précédant `before_id` (ou les plus récents si absent).
+        Renvoyés en ordre chronologique, avec `has_more` si des messages plus
+        anciens existent."""
+        stmt = (
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .options(
+                selectinload(Message.sources).selectinload(MessageSource.pages),
+                selectinload(Message.sources).selectinload(MessageSource.bounding_boxes),
+                selectinload(Message.feedbacks).selectinload(Feedback.reason_rows),
             )
-            .execution_options(populate_existing=True)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(limit + 1)
         )
+        if before_id is not None:
+            cursor = (
+                await self.db.execute(
+                    select(Message.created_at, Message.id).where(
+                        Message.id == before_id, Message.conversation_id == conversation_id
+                    )
+                )
+            ).one_or_none()
+            if cursor is not None:
+                stmt = stmt.where(
+                    (Message.created_at < cursor.created_at)
+                    | ((Message.created_at == cursor.created_at) & (Message.id < cursor.id))
+                )
+        rows = list((await self.db.execute(stmt)).scalars().all())
+        has_more = len(rows) > limit
+        return list(reversed(rows[:limit])), has_more
 
     async def list_conversations(self, dossier_id: uuid.UUID, user_id: str) -> Sequence[Conversation]:
         result = await self.db.execute(
-            self._conversation_query()
+            self._conversation_query(with_messages=False)
             .where(Conversation.dossier_id == dossier_id, Conversation.user_id == user_id)
             .order_by(Conversation.created_at)
         )
@@ -172,7 +208,9 @@ class DossierRepository:
     async def list_conversations_paginated(
         self, *, dossier_id: uuid.UUID, user_id: str, page: int, page_size: int
     ) -> tuple[Sequence[Conversation], int]:
-        base = self._conversation_query().where(Conversation.dossier_id == dossier_id, Conversation.user_id == user_id)
+        base = self._conversation_query(with_messages=False).where(
+            Conversation.dossier_id == dossier_id, Conversation.user_id == user_id
+        )
         count_query = (
             select(func.count())
             .select_from(Conversation)

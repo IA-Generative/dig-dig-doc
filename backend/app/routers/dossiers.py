@@ -31,7 +31,7 @@ from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.analyse import Analyse
-from app.models.conversation import Conversation, MessageRole
+from app.models.conversation import Message, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_repository import DossierRepository
@@ -46,6 +46,8 @@ from app.schemas.dossier import (
     DossierOut,
     FeedbackIn,
     MessageIn,
+    MessageOut,
+    MessagePage,
     PredictionValidationIn,
     PredictionValidationOut,
 )
@@ -265,8 +267,7 @@ async def list_conversations(
     conversations, total = await repository.list_conversations_paginated(
         dossier_id=dossier_id, user_id=user.user_id, page=page, page_size=page_size
     )
-    items = [_attach_feedbacks(c, user.user_id) for c in conversations]
-    return Page.of(items, total=total, page=page, page_size=page_size)
+    return Page.of(list(conversations), total=total, page=page, page_size=page_size)
 
 
 @router.post(
@@ -281,8 +282,7 @@ async def create_conversation(
 ):
     repository = DossierRepository(db)
     await _get_or_404(repository, dossier_id)
-    conversation = await repository.create_conversation(dossier_id, user.user_id)
-    return _attach_feedbacks(conversation, user.user_id)
+    return await repository.create_conversation(dossier_id, user.user_id)
 
 
 @router.delete(
@@ -319,13 +319,36 @@ async def update_conversation_model(
     conversation = await repository.get_conversation(conversation_id)
     if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
-    conversation = await repository.update_conversation_model(conversation, body.model)
-    return _attach_feedbacks(conversation, user.user_id)
+    return await repository.update_conversation_model(conversation, body.model)
+
+
+@router.get(
+    "/{dossier_id}/conversations/{conversation_id}/messages",
+    response_model=MessagePage,
+)
+async def list_messages(
+    dossier_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    before: Annotated[uuid.UUID | None, Query(description="Id du message le plus ancien déjà chargé")] = None,
+) -> MessagePage:
+    """Messages d'une conversation par page (curseur), du plus récent au plus
+    ancien : sans `before`, les `limit` derniers messages ; avec `before`,
+    les `limit` messages qui le précèdent. `items` est en ordre chronologique."""
+    repository = DossierRepository(db)
+    await _get_or_404(repository, dossier_id)
+    conversation = await repository.get_conversation(conversation_id)
+    if conversation is None or conversation.dossier_id != dossier_id or conversation.user_id != user.user_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
+    messages, has_more = await repository.list_messages_page(conversation_id, limit=limit, before_id=before)
+    return MessagePage(items=[_with_feedback(m, user.user_id) for m in messages], has_more=has_more)
 
 
 @router.post(
     "/{dossier_id}/conversations/{conversation_id}/messages",
-    response_model=ConversationOut,
+    response_model=MessageOut,
 )
 async def add_message(
     dossier_id: uuid.UUID,
@@ -349,20 +372,18 @@ async def add_message(
     # les événements intermédiaires (chat_events) et le message assistant
     # final (avec sources) via l'API interne.
     dispatch_chat_response(str(conversation_id), str(dossier_id))
-    return _attach_feedbacks(conversation, user.user_id)
+    return _with_feedback(conversation.messages[-1], user.user_id)
 
 
-def _attach_feedbacks(conversation: Conversation, user_id: str) -> Conversation:
-    """Filtre les feedbacks de chaque message pour ne garder que celui de
-    l'utilisateur courant (MessageOut.feedback)."""
-    for message in conversation.messages:
-        message.feedback = next((f for f in message.feedbacks if f.user_id == user_id), None)
-    return conversation
+def _with_feedback(message: Message, user_id: str) -> Message:
+    """Ne garde que le feedback de l'utilisateur courant (MessageOut.feedback)."""
+    message.feedback = next((f for f in message.feedbacks if f.user_id == user_id), None)
+    return message
 
 
 @router.put(
     "/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
-    response_model=ConversationOut,
+    response_model=MessageOut,
 )
 async def set_message_feedback(
     dossier_id: uuid.UUID,
@@ -381,12 +402,12 @@ async def set_message_feedback(
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message introuvable")
     conversation = await repository.set_feedback(message, user.user_id, body.value, body.reasons, body.comment)
-    return _attach_feedbacks(conversation, user.user_id)
+    return _with_feedback(next(m for m in conversation.messages if m.id == message_id), user.user_id)
 
 
 @router.delete(
     "/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
-    response_model=ConversationOut,
+    response_model=MessageOut,
 )
 async def delete_message_feedback(
     dossier_id: uuid.UUID,
@@ -404,7 +425,7 @@ async def delete_message_feedback(
     if message is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message introuvable")
     conversation = await repository.delete_feedback(message, user.user_id)
-    return _attach_feedbacks(conversation, user.user_id)
+    return _with_feedback(next(m for m in conversation.messages if m.id == message_id), user.user_id)
 
 
 @router.put(
