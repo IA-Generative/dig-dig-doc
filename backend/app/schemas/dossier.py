@@ -495,6 +495,9 @@ class InternalConversationOut(BaseModel):
 
     id: uuid.UUID
     dossier_id: uuid.UUID
+    # Utilisateur propriétaire de la conversation : le chat propose des
+    # modifications de l'analyse pour son compte.
+    user_id: str
     model: str | None
     messages: list[InternalMessageOut]
 

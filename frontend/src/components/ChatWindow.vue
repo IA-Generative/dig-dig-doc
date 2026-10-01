@@ -19,6 +19,7 @@
  * - `showFileAttach` : affiche le bouton d'attachement de fichiers (dossier).
  *
  * Slots :
+ * - `message-extra` : contenu sous la bulle d'un message de l'assistant (ex : cartes de proposition).
  * - `message-actions` : actions par message (ex: feedback), reçoit
  *   `{ message }` en slot props.
  * - `source` : rendu personnalisé d'une source, reçoit `{ source }`.
@@ -262,6 +263,10 @@ defineExpose({ resizeTextarea });
                 </li>
               </ul>
             </details>
+          </div>
+          <!-- Contenu supplémentaire sous la bulle (ex : propositions de modification de l'analyse). -->
+          <div v-if="message.role === 'assistant' && $slots['message-extra']" class="chat-message__extra">
+            <slot name="message-extra" :message="message" />
           </div>
           <div v-if="message.role === 'assistant'" class="chat-message__feedback">
             <slot name="message-actions" :message="message" />
@@ -732,5 +737,12 @@ defineExpose({ resizeTextarea });
   .chat-window__intro {
     padding: 0 0.5rem;
   }
+}
+.chat-message__extra {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  max-width: 100%;
 }
 </style>

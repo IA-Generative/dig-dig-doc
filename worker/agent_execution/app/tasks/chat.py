@@ -19,8 +19,10 @@ reconstruit le contexte à partir de l'historique de la conversation.
 import logging
 
 from app import api_client
+from app.analysis_tools import AnalysisProposer
 from app.celery_app import celery_app
 from app.chat_graph import run_chat as run_chat_graph
+from app.config import settings
 from app.tools import AgentTools
 
 logger = logging.getLogger(__name__)
@@ -34,6 +36,15 @@ def _build_conversation_history(conversation: dict) -> list[dict]:
     for msg in conversation.get("messages", []):
         history.append({"role": msg["role"], "content": msg["content"]})
     return history
+
+
+def _last_user_message_id(conversation: dict) -> str | None:
+    """Identifiant du message de l'utilisateur qui a déclenché cette réponse
+    (source des propositions déposées)."""
+    for msg in reversed(conversation.get("messages", [])):
+        if msg.get("role") == "user":
+            return msg.get("id")
+    return None
 
 
 def _extract_syntheses(dossier: dict) -> list[dict]:
@@ -72,7 +83,14 @@ def run_chat(self, conversation_id: str, dossier_id: str) -> None:
 
             # 2. Charge le dossier complet (pages, prédictions, synthèses).
             dossier = api_client.get_dossier(client, dossier_id)
-            tools = AgentTools(dossier)
+            proposer = AnalysisProposer(
+                client=client,
+                dossier_id=dossier_id,
+                user_id=conversation.get("user_id", ""),
+                model=model or settings.LLM_MODEL,
+                source_message_id=_last_user_message_id(conversation),
+            )
+            tools = AgentTools(dossier, analysis=proposer)
 
             # 3. Récupère les synthèses existantes.
             syntheses = _extract_syntheses(dossier)
