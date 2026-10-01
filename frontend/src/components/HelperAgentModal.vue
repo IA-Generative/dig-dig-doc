@@ -16,14 +16,13 @@ import { useRouter } from "vue-router";
 import ChatWindow, { type ChatWindowMessage, type ChatWindowSource } from "@/components/ChatWindow.vue";
 import InfoModal from "@/components/InfoModal.vue";
 import { useAgentConversations } from "@/composables/useAgentConversations";
-import { useModels } from "@/composables/useModels";
+import ModelPicker from "@/components/ModelPicker.vue";
 import type { AgentChatEvent } from "@/types/agentConversation";
 import { DOSSIER_STATUS_LABELS, type DossierStatus } from "@/types/dossier";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
-const { models: availableModels, fetchModels } = useModels();
 const selectedModel = ref<string>("");
 
 const router = useRouter();
@@ -66,7 +65,6 @@ const messages = computed<ChatWindowMessage[]>(() => {
 onMounted(() => {
   if (props.open) {
     fetchList();
-    fetchModels();
   }
 });
 
@@ -106,7 +104,6 @@ watch(
   (isOpen) => {
     if (isOpen) {
       fetchList();
-      fetchModels();
     } else {
       stopStream();
     }
@@ -268,19 +265,7 @@ function formatRelativeTime(iso: string): string {
         </div>
         <div v-else class="helper-agent__chat-inner">
           <div class="helper-agent__model-bar">
-            <label class="helper-agent__model-label" for="helper-model-select">
-              <VIcon name="ri-cpu-line" />
-              <span>Modèle</span>
-            </label>
-            <select
-              id="helper-model-select"
-              v-model="selectedModel"
-              class="helper-agent__model-select"
-              :disabled="isChatRunning"
-            >
-              <option value="">Modèle par défaut</option>
-              <option v-for="id in availableModels" :key="id" :value="id">{{ id }}</option>
-            </select>
+            <ModelPicker v-model="selectedModel" :disabled="isChatRunning" />
           </div>
           <ChatWindow
             :messages="messages"
@@ -457,33 +442,8 @@ function formatRelativeTime(iso: string): string {
 .helper-agent__model-bar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
   padding: 0.25rem 0;
   margin-bottom: 0.25rem;
-}
-
-.helper-agent__model-label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  color: var(--text-mention-grey);
-  white-space: nowrap;
-}
-
-.helper-agent__model-select {
-  font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--border-default-grey);
-  border-radius: 0.25rem;
-  background: var(--background-default-grey);
-  color: var(--text-default-grey);
-  cursor: pointer;
-}
-
-.helper-agent__model-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .helper-agent__loading {

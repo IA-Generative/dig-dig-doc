@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 
+import ModelPicker from "@/components/ModelPicker.vue";
 import { useModels } from "@/composables/useModels";
 
 withDefaults(defineProps<{ label?: string; compact?: boolean; loading?: boolean }>(), {
@@ -13,13 +14,7 @@ const emit = defineEmits<{ click: [model: string | null] }>();
 // Préférence de modèle partagée par toute l'application (voir useModels.ts) :
 // un bouton compact (aide inline sur un champ) réutilise la dernière valeur
 // choisie ailleurs plutôt que d'afficher son propre sélecteur.
-const { models, fetchModels, assistModel } = useModels();
-onMounted(fetchModels);
-
-const modelOptions = computed(() => [
-  { value: "", text: "Modèle par défaut du hub" },
-  ...models.value.map((id) => ({ value: id, text: id })),
-]);
+const { assistModel } = useModels();
 
 function onClick() {
   emit("click", assistModel.value || null);
@@ -28,15 +23,7 @@ function onClick() {
 
 <template>
   <div class="llm-assist" :class="{ 'llm-assist--compact': compact }">
-    <DsfrSelect
-      v-if="!compact"
-      v-model="assistModel"
-      label="Modèle"
-      hide-label
-      :options="modelOptions"
-      :disabled="loading"
-      class="llm-assist__model"
-    />
+    <ModelPicker v-if="!compact" v-model="assistModel" :disabled="loading" />
     <button
       type="button"
       class="llm-assist-button"
@@ -61,14 +48,6 @@ function onClick() {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.llm-assist__model {
-  min-width: 10rem;
-}
-
-.llm-assist__model :deep(.fr-select-group) {
-  margin: 0;
 }
 
 .llm-assist-button {

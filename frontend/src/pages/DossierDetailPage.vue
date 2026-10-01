@@ -12,7 +12,6 @@ import { useAnalyses } from "@/composables/useAnalyses";
 import { useChatStream } from "@/composables/useChatStream";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
-import { useModels } from "@/composables/useModels";
 import { useMyConversations } from "@/composables/useMyConversations";
 import type { FeedbackReasonCode } from "@/types/conversation";
 import {
@@ -48,7 +47,6 @@ const {
   removeFeedback,
 } = useConversations(dossierId);
 const { fetchList: refreshSidebarConversations } = useMyConversations();
-const { models, fetchModels } = useModels();
 
 // Pouce haut : bascule directement. Pouce bas : ouvre une modale pour
 // recueillir la/les raison(s) avant d'envoyer (comme Muffin).
@@ -107,13 +105,6 @@ function submitDownFeedback(reasons: FeedbackReasonCode[], comment: string | nul
   pendingDownMessageId.value = null;
 }
 
-// "" représente "pas de préférence" (null côté API) : DsfrSelect n'accepte
-// pas de valeur null pour une option.
-const modelOptions = computed(() => [
-  { value: "", text: "Modèle par défaut du hub" },
-  ...models.value.map((id) => ({ value: id, text: id })),
-]);
-
 function onModelChange(value: string) {
   setModel(value || null);
 }
@@ -134,7 +125,6 @@ onMounted(async () => {
   // dans la sidebar (voir App.vue, qui rafraîchit aussi sur la navigation).
   await ensureConversation();
   refreshSidebarConversations();
-  fetchModels();
   // Le dossier n'est pas forcément dans la page actuellement chargée par
   // DossiersPage (pagination côté serveur) : on le charge directement.
   const loaded = await fetchDossier(dossierId);
@@ -237,8 +227,6 @@ async function onDeleteConversation() {
       <div class="dossier-detail__header-actions">
         <ModelPicker
           :model-value="conversation?.model ?? ''"
-          :options="modelOptions"
-          label="Modèle"
           align="right"
           @update:model-value="onModelChange"
         />
