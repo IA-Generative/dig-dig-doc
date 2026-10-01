@@ -194,6 +194,12 @@ defineExpose({ resizeTextarea });
 
 <template>
   <section class="chat-window">
+    <header v-if="$slots.header" class="chat-window__header">
+      <div class="chat-window__inner">
+        <slot name="header" />
+      </div>
+    </header>
+
     <div v-if="messages.length === 0" class="chat-window__intro">
       <h2>{{ introTitle }}</h2>
       <p v-if="introText" class="fr-text--sm">{{ introText }}</p>
@@ -378,8 +384,8 @@ defineExpose({ resizeTextarea });
   max-width: min(75%, 40rem);
   min-width: 0;
   padding: 0.75rem 1.125rem;
-  border-radius: 1.25rem;
-  background: var(--background-alt-grey);
+  border-radius: 1.5rem;
+  background: var(--background-contrast-grey);
   /* Mots/URL longs : on coupe plutôt que de déborder de la bulle. */
   overflow-wrap: anywhere;
 }
@@ -539,8 +545,18 @@ defineExpose({ resizeTextarea });
   }
 }
 
+.chat-window__header {
+  flex-shrink: 0;
+  padding: 0 0 0.25rem;
+}
+
+/* Composer collé en bas de l'écran pendant que la discussion défile. */
 .chat-window__form {
-  padding: 0.5rem 0 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: 0.5rem 0 1rem;
+  background: var(--background-default-grey);
   flex-shrink: 0;
 }
 
@@ -579,11 +595,11 @@ defineExpose({ resizeTextarea });
   display: flex;
   align-items: flex-end;
   gap: 0.5rem;
-  padding: 0.625rem 0.625rem 0.625rem 1.125rem;
-  border-radius: 1.5rem;
-  border: 1px solid var(--border-default-grey);
-  background: var(--background-default-grey);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  align-items: center;
+  padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+  border-radius: 1.75rem;
+  border: none;
+  background: var(--background-contrast-grey);
 }
 
 .chat-window__textarea {
@@ -629,9 +645,10 @@ defineExpose({ resizeTextarea });
   color: var(--text-default-grey);
 }
 
+/* Bouton d'envoi rond et sombre, comme ChatGPT (jetons DSFR neutres). */
 .chat-window__send {
-  background: var(--background-action-high-blue-france);
-  color: var(--text-inverted-blue-france);
+  background: var(--text-title-grey);
+  color: var(--background-default-grey);
 }
 
 .chat-window__send:disabled {

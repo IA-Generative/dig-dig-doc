@@ -257,6 +257,9 @@ function scrollCarousel(direction: 1 | -1) {
   scroll-snap-align: start;
   flex: 0 0 auto;
   width: 12rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   background: var(--background-default-grey);
   border: 1px solid var(--border-default-grey);
   border-radius: 0.75rem;
@@ -303,8 +306,21 @@ function scrollCarousel(direction: 1 | -1) {
   background: linear-gradient(135deg, #5b4fd11a 0%, #d1477a1a 100%);
 }
 
+.dossier-results__card-title,
+.dossier-results__card-preview {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .dossier-results__card-title {
   font-weight: bold;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .dossier-results__card-preview {
@@ -312,7 +328,8 @@ function scrollCarousel(direction: 1 | -1) {
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
 }
 
