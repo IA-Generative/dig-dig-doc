@@ -34,6 +34,12 @@ import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import MarkdownText from "@/components/MarkdownText.vue";
 import type { StreamEvent } from "@/composables/useChatStream";
 
+// Ajout de l'util et du component pour le tool_call / tool_result
+import { computed } from "vue";
+import ToolSteps from "@/components/ToolSteps.vue";
+import { groupToolEvents } from "@/utils/groupToolEvents";
+
+
 export interface ChatWindowMessage {
   id: string;
   role: "user" | "assistant";
@@ -76,6 +82,8 @@ const props = withDefaults(
     loadingMore: false,
   },
 );
+
+const toolSteps = computed(() => groupToolEvents(props.streamEvents));
 
 const emit = defineEmits<{
   submit: [content: string];
@@ -244,7 +252,7 @@ defineExpose({ resizeTextarea });
 
         <!-- Streaming en cours : événements du graphe LangGraph -->
         <div v-if="isRunning" class="chat-message chat-message--assistant chat-message--streaming">
-          <div class="chat-message__bubble">
+          <!-- <div class="chat-message__bubble">
             <div v-for="event in streamEvents" :key="event.kind + JSON.stringify(event.data)" class="chat-message__event">
               <VIcon
                 :name="
@@ -260,6 +268,13 @@ defineExpose({ resizeTextarea });
               <span>{{ event.data?.label || event.data?.tool || event.kind }}</span>
             </div>
             <div v-if="streamEvents.length === 0" class="chat-message__event chat-message__event--pending">
+              <VIcon name="ri-loader-4-line" class="spin" />
+              <span>Réflexion en cours…</span>
+            </div>
+          </div> -->
+          <div class="chat-message__bubble">
+            <ToolSteps :steps="toolSteps" />
+            <div v-if="toolSteps.length === 0" class="chat-message__event chat-message__event--pending">
               <VIcon name="ri-loader-4-line" class="spin" />
               <span>Réflexion en cours…</span>
             </div>
