@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.7.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.6.0...v0.7.0-rc) (2026-10-01)
+
+
+### Features
+
+* **backend:** endpoint de lecture d'une page de document (texte, zones, capture) ([e82ab53](https://github.com/IA-Generative/dig-dig-doc/commit/e82ab53318167838845c7026115906b18b7bc732))
+* **backend:** pagination par curseur des messages d'une conversation ([db04026](https://github.com/IA-Generative/dig-dig-doc/commit/db0402600272a7cb0e5d317c6241c7dad13eaf0e)), closes [#88](https://github.com/IA-Generative/dig-dig-doc/issues/88)
+* **frontend:** afficher les étapes d'outils dans ChatWindow ([936acc9](https://github.com/IA-Generative/dig-dig-doc/commit/936acc951ce03f6f9e5b77a7f80facf4168714bb))
+* **frontend:** charger les messages du chat par pages au défilement vers le haut ([a90abe5](https://github.com/IA-Generative/dig-dig-doc/commit/a90abe5fab857c0d4bc98049a0872572d1d179e7)), closes [#88](https://github.com/IA-Generative/dig-dig-doc/issues/88)
+* **frontend:** chat façon ChatGPT, sélecteur de modèle moderne, cartes sans débordement ([88d6b0e](https://github.com/IA-Generative/dig-dig-doc/commit/88d6b0e5c02912c8e354c8753a4f69223b6abedb)), closes [#88](https://github.com/IA-Generative/dig-dig-doc/issues/88)
+* **frontend:** ouvrir une source du chat dans une modale avec la page et le passage surligné ([0e8aefe](https://github.com/IA-Generative/dig-dig-doc/commit/0e8aefe4b11ce3dd58bcf03b275005f76252e6c8))
+* **frontend:** sources du chat en pastilles compactes, extrait dans la modale ([971d191](https://github.com/IA-Generative/dig-dig-doc/commit/971d191a205bae70b76f8351ae518cfe4f7cf4dd))
+* **frontend:** util groupToolEvents et composant ToolStep ([382a986](https://github.com/IA-Generative/dig-dig-doc/commit/382a986e8d68ff358ef89b036330d24f2daca425))
+
+
+### Bug Fixes
+
+* **frontend:** aide LLM des prompts classification/extraction, modèle et brouillon pris en compte ([54eef98](https://github.com/IA-Generative/dig-dig-doc/commit/54eef980e0f2275f5b9b915ac5425a9bdd02ba30))
+* **frontend:** ancrer la liste du ModelPicker directement sous le bouton ([f9749b6](https://github.com/IA-Generative/dig-dig-doc/commit/f9749b6ea77cf58fe67aa280ec41e68231514c75))
+* **frontend:** chat responsive et réponses de l'assistant sans bulle façon ChatGPT ([60b677b](https://github.com/IA-Generative/dig-dig-doc/commit/60b677b72c982962294cfedea3e0d4fd2e4379ba)), closes [#88](https://github.com/IA-Generative/dig-dig-doc/issues/88)
+* **frontend:** lire la liste paginée des conversations d'un dossier (items) ([7388393](https://github.com/IA-Generative/dig-dig-doc/commit/738839321f414b4ee400148f4c2afbe7e7418e12))
+* **frontend:** lire la liste paginée des conversations de la barre latérale (items) ([5986ea4](https://github.com/IA-Generative/dig-dig-doc/commit/5986ea49f2eeaabde74dfc08260c5c3c6b4adbcb)), closes [#88](https://github.com/IA-Generative/dig-dig-doc/issues/88)
+* **frontend:** ouvrir le flux SSE du chat après l'envoi du message pour afficher la réponse ([33984f5](https://github.com/IA-Generative/dig-dig-doc/commit/33984f570803a08634c535e66afc779b6b230624)), closes [#87](https://github.com/IA-Generative/dig-dig-doc/issues/87)
+* **frontend:** remettre le sélecteur de modèle dans l'en-tête du dossier ([fdbc77e](https://github.com/IA-Generative/dig-dig-doc/commit/fdbc77e102b7858dcd42ba0229d40b0b5a94db48))
+* **frontend:** remplacer findLast par une boucle dans groupToolEvents ([ab08611](https://github.com/IA-Generative/dig-dig-doc/commit/ab08611235ea6b53395dfb60404439aa48205c07))
+
+
+### Code Refactoring
+
+* **frontend:** retirer l'ajout de documents du chat du dossier ([369045f](https://github.com/IA-Generative/dig-dig-doc/commit/369045f00c33b3062191c99780cac9e4964da720))
+* **frontend:** retirer la section Documents de la page détail du dossier ([4e20941](https://github.com/IA-Generative/dig-dig-doc/commit/4e2094149463ec4df14abb84340e0f88a933d083))
+* **frontend:** un seul composant ModelPicker pour tous les choix de modèle ([25df717](https://github.com/IA-Generative/dig-dig-doc/commit/25df7171781fe3c132e3fd04949275e9385626ab))
+
 ## [0.6.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.5.5...v0.6.0) (2026-09-30)
 
 
