@@ -122,6 +122,8 @@ onBeforeUnmount(releaseImage);
       />
     </div>
 
+    <p v-if="source?.excerpt" class="fr-text--sm source-viewer__excerpt">« {{ source.excerpt }} »</p>
+
     <p v-if="isLoading" class="fr-text--sm source-viewer__state">Chargement de la page…</p>
     <p v-else-if="error" class="fr-text--sm source-viewer__state" role="alert">{{ error }}</p>
 
@@ -165,6 +167,15 @@ onBeforeUnmount(releaseImage);
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 1rem;
+}
+
+.source-viewer__excerpt {
+  margin: 0 0 1rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--border-plain-yellow-tournesol, #c8aa39);
+  font-style: italic;
+  color: var(--text-mention-grey);
+  overflow-wrap: anywhere;
 }
 
 .source-viewer__state {
