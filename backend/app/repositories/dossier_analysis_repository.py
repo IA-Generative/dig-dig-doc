@@ -231,6 +231,7 @@ class DossierAnalysisRepository:
         reason: str | None = None,
         source_type: str | None = None,
         source_id: uuid.UUID | None = None,
+        commit: bool = True,
     ) -> AnalysisElement:
         """Crée un élément et sa première version. Lève
         InvalidElementValueError si la valeur ne correspond pas au type."""
@@ -274,7 +275,7 @@ class DossierAnalysisRepository:
                 .where(AnalysisUnit.id == unit.id)
                 .values(element_count=AnalysisUnit.element_count + 1)
             )
-        await self.db.commit()
+        await self._finish(commit)
         return element
 
     async def add_version(
@@ -291,6 +292,7 @@ class DossierAnalysisRepository:
         source_id: uuid.UUID | None = None,
         restored_from_version_id: uuid.UUID | None = None,
         origin_version_id: uuid.UUID | None = None,
+        commit: bool = True,
     ) -> AnalysisElementVersion:
         """Ajoute une version à un élément et met à jour ses pointeurs.
 
@@ -339,7 +341,7 @@ class DossierAnalysisRepository:
             if origin == ElementVersionOrigin.INSTRUCTOR:
                 element.needs_review = False
                 element.review_reason = None
-        await self.db.commit()
+        await self._finish(commit)
         return version
 
     async def restore_version(
@@ -361,6 +363,14 @@ class DossierAnalysisRepository:
             reason=reason,
             restored_from_version_id=version.id,
         )
+
+    async def _finish(self, commit: bool) -> None:
+        """Valide la transaction, ou seulement l'envoie en base quand l'appelant
+        regroupe plusieurs écritures dans une même transaction (propositions)."""
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
     async def _check_relation_endpoints(self, analysis_id: uuid.UUID, value: RelationValue) -> None:
         ids = {value.source_element_id, value.target_element_id}

@@ -12,6 +12,12 @@ from .analyse import (
 )
 from .analyse_ephemere import AnalyseEphemere
 from .analyse_share import AnalyseShare, AnalyseShareKind
+from .analysis_proposal import (
+    AnalysisProposal,
+    AnalysisProposalEvent,
+    ProposalEventKind,
+    ProposalStatus,
+)
 from .app_token import AppToken
 from .base import Base
 from .cgu import Cgu
@@ -58,6 +64,10 @@ from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
+    "AnalysisProposal",
+    "AnalysisProposalEvent",
+    "ProposalEventKind",
+    "ProposalStatus",
     "AnalysisElement",
     "AnalysisElementKind",
     "AnalysisElementVersion",
