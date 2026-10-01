@@ -8,7 +8,9 @@ _redis_settings = RedisSettings()
 # contente d'en déposer sur la même file Redis que celle où
 # worker/document_process et worker/agent_execution écoutent (voir leurs
 # celery_app.py - même nom de tâche, aucune queue dédiée des deux côtés).
-celery_client = Celery("dig-dig-doc-backend", broker=_redis_settings.REDIS_URL)
+# Le backend ne lit un résultat que pour l'extraction des champs d'un modèle (#138), avec un
+# délai court ; les autres tâches sont lancées sans attendre.
+celery_client = Celery("dig-dig-doc-backend", broker=_redis_settings.REDIS_URL, backend=_redis_settings.REDIS_URL)
 
 
 def dispatch_text_extraction(document_id: str) -> str:
@@ -110,3 +112,25 @@ def dispatch_analyse_suggestion(dossier_id: str) -> str:
         args=[dossier_id],
         queue="agent_execution",
     ).id
+
+
+class TemplateExtractionError(Exception):
+    """Le worker n'a pas pu lire le modèle (fichier invalide) : le message est destiné à l'administrateur."""
+
+
+class RenderWorkerUnavailableError(Exception):
+    """Le worker de rendu n'a pas répondu dans le délai."""
+
+
+def extract_template_fields(template_key: str, timeout: int = 30) -> list[str]:
+    """Demande au worker ``document_render`` la liste des champs d'un modèle ODT déposé dans S3
+    (issue #138). Bloquant : à appeler hors de la boucle d'événements."""
+    from celery.exceptions import TimeoutError as CeleryTimeoutError
+
+    result = celery_client.send_task("app.tasks.extract_template_fields", args=[template_key], queue="document_render")
+    try:
+        return list(result.get(timeout=timeout))
+    except CeleryTimeoutError as error:
+        raise RenderWorkerUnavailableError() from error
+    except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique
+        raise TemplateExtractionError(str(error)) from error
