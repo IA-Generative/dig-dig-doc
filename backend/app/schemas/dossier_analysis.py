@@ -203,6 +203,9 @@ class ElementVersionCreateIn(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
     source_type: VersionSource | None = None
     source_id: uuid.UUID | None = None
+    # Version retenue que l'instructeur avait sous les yeux : si l'élément a changé
+    # depuis, l'écriture est refusée (409) au lieu d'écraser le travail d'un autre.
+    base_version_id: uuid.UUID | None = None
 
 
 # --- API interne (worker) : unités de calcul ---

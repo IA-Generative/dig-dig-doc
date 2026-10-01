@@ -29,6 +29,11 @@ from app.models.dossier_analysis import (
     DossierAnalysis,
     ElementVersionOrigin,
 )
+from app.repositories.analysis_collaboration_repository import (
+    ElementLockedError,
+    ensure_not_locked_by_other,
+    release_if_holder,
+)
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.schemas.dossier_analysis import validate_element_value
 
@@ -216,7 +221,7 @@ class AnalysisProposalRepository:
             status = ProposalStatus.MODIFIED if modified else ProposalStatus.ACCEPTED
             try:
                 await self._apply(analysis, proposal, final_value, user_id=user_id)
-            except StaleProposalError:
+            except (StaleProposalError, ElementLockedError):
                 await self.db.rollback()
                 raise
 
@@ -251,6 +256,8 @@ class AnalysisProposalRepository:
         element = await self.db.get(AnalysisElement, proposal.element_id, with_for_update=True)
         if element is None:
             raise ProposalTargetError("Élément introuvable dans cette analyse")
+        # Un autre instructeur est en train de modifier cet élément (#118).
+        ensure_not_locked_by_other(element, user_id)
         if element.retained_version_id != proposal.base_version_id:
             raise StaleProposalError()
         version = await self.analyses.add_version(
@@ -265,6 +272,7 @@ class AnalysisProposalRepository:
         )
         proposal.resulting_version_id = version.id
         proposal.resulting_element_id = element.id
+        await release_if_holder(self.db, element, user_id)
 
     def _log(
         self,

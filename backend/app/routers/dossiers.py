@@ -34,6 +34,7 @@ from app.models.analyse import Analyse
 from app.models.conversation import Message, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.analysis_collaboration_repository import ElementLockedError
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
     ChatEventOut,
@@ -491,6 +492,8 @@ async def validate_prediction(
         )
     except AnalysisFrozenError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cette analyse est figée") from error
+    except ElementLockedError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=error.message) from error
     return updated.validations[-1]
 
 
