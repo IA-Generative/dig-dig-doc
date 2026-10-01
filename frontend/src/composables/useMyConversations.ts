@@ -18,8 +18,9 @@ function mapSummary(api: any): ConversationSummary {
 const conversations = reactive<ConversationSummary[]>([]);
 
 async function fetchList() {
-  const data = await apiFetch<any[]>("/api/conversations");
-  conversations.splice(0, conversations.length, ...data.map(mapSummary));
+  // GET /api/conversations est paginé ({ items, total, ... }) : on lit `items`.
+  const data = await apiFetch<{ items: any[] }>("/api/conversations?page_size=100");
+  conversations.splice(0, conversations.length, ...data.items.map(mapSummary));
 }
 
 // Supprime uniquement la conversation (et ses messages) : le dossier, ses
