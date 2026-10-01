@@ -77,6 +77,28 @@ class AnalysisProposalRepository:
         )
         return list(result.scalars().all())
 
+    async def _find_pending_duplicate(
+        self,
+        analysis_id: uuid.UUID,
+        element_id: uuid.UUID | None,
+        kind: AnalysisElementKind,
+        definition_name: str | None,
+        value: dict[str, Any],
+    ) -> AnalysisProposal | None:
+        query = select(AnalysisProposal).where(
+            AnalysisProposal.analysis_id == analysis_id,
+            AnalysisProposal.status == ProposalStatus.PENDING,
+            AnalysisProposal.kind == kind,
+            AnalysisProposal.proposed_value == value,
+        )
+        if element_id is not None:
+            query = query.where(AnalysisProposal.element_id == element_id)
+        else:
+            query = query.where(
+                AnalysisProposal.element_id.is_(None), AnalysisProposal.definition_name == definition_name
+            )
+        return (await self.db.execute(query.limit(1))).scalars().first()
+
     # --- Création ---
 
     async def create(
@@ -107,6 +129,12 @@ class AnalysisProposalRepository:
             base_version_id = element.retained_version_id
         assert kind is not None  # garanti par le schéma d'entrée
         clean_value = validate_element_value(kind, value)
+        # Idempotent : une proposition en attente identique (même cible, même
+        # valeur) est renvoyée au lieu d'être dupliquée (clic répété, note
+        # analysée deux fois).
+        duplicate = await self._find_pending_duplicate(analysis.id, element_id, kind, definition_name, clean_value)
+        if duplicate is not None:
+            return duplicate
         proposal = AnalysisProposal(
             analysis_id=analysis.id,
             element_id=element_id,
