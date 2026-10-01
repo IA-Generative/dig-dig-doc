@@ -5,9 +5,14 @@
 import { completeChat, parseJsonFromCompletion } from "@/composables/useLlmComplete";
 import type { EntityDefinition, EntityType, LabelDefinition } from "@/types/analyse";
 
-export async function suggestClassificationPrompt(model: string | null = null): Promise<string> {
+export async function suggestClassificationPrompt(draft: string = "", model: string | null = null): Promise<string> {
+  const context = draft.trim()
+    ? `L'utilisateur a déjà commencé à rédiger ce prompt ou décrit son besoin : "${draft.trim()}". Prends-le en ` +
+      "compte pour l'améliorer ou le compléter. "
+    : "";
   return completeChat(
-    "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé de classifier des " +
+    context +
+      "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé de classifier des " +
       "documents administratifs. Le prompt doit lui demander de choisir un label parmi une liste fournie et de " +
       "retourner sa décision avec un score de confiance. Réponds uniquement avec le texte du prompt, sans " +
       "balises ni explication.",
@@ -15,9 +20,14 @@ export async function suggestClassificationPrompt(model: string | null = null): 
   );
 }
 
-export async function suggestExtractionPrompt(model: string | null = null): Promise<string> {
+export async function suggestExtractionPrompt(draft: string = "", model: string | null = null): Promise<string> {
+  const context = draft.trim()
+    ? `L'utilisateur a déjà commencé à rédiger ce prompt ou décrit son besoin : "${draft.trim()}". Prends-le en ` +
+      "compte pour l'améliorer ou le compléter. "
+    : "";
   return completeChat(
-    "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé d'extraire des entités " +
+    context +
+      "Rédige, en français, un prompt d'instruction destiné à un modèle de langage chargé d'extraire des entités " +
       "nommées d'un document administratif, au format JSON strict, sans inventer de champ absent du document. " +
       "Réponds uniquement avec le texte du prompt, sans balises ni explication.",
     model,
