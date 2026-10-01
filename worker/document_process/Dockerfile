@@ -22,5 +22,5 @@ USER worker
 ENV PATH="/app/.venv/bin:$PATH"
 ENV TESSDATA_PATH="/usr/share/tesseract-ocr/5/tessdata"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD celery -A app.celery_app inspect ping -d celery@$$HOSTNAME || exit 1
+  CMD celery -A app.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 CMD ["celery", "-A", "app.celery_app", "worker", "--loglevel=info"]
