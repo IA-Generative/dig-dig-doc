@@ -17,6 +17,8 @@ const props = defineProps<{
   options: ModelOption[];
   label?: string;
   disabled?: boolean;
+  /** Côté d'ancrage de la liste : "right" quand le bouton est près du bord droit. */
+  align?: "left" | "right";
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 
@@ -65,7 +67,12 @@ onBeforeUnmount(() => document.removeEventListener("click", onDocumentClick));
       <VIcon name="ri-arrow-down-s-line" class="model-picker__chevron" :class="{ 'model-picker__chevron--open': isOpen }" />
     </button>
 
-    <ul v-if="isOpen" :id="listId" class="model-picker__menu" role="listbox" :aria-label="label ?? 'Modèle'">
+    <ul
+      v-if="isOpen"
+      :id="listId"
+      class="model-picker__menu"
+      :class="{ 'model-picker__menu--right': align === 'right' }"
+      role="listbox" :aria-label="label ?? 'Modèle'">
       <li
         v-for="option in options"
         :key="option.value"
@@ -131,6 +138,11 @@ onBeforeUnmount(() => document.removeEventListener("click", onDocumentClick));
   border: 1px solid var(--border-default-grey);
   border-radius: 0.75rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.model-picker__menu--right {
+  left: auto;
+  right: 0;
 }
 
 .model-picker__option {
