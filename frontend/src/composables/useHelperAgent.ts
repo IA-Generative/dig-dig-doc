@@ -9,6 +9,8 @@ import { ref } from "vue";
 export interface HelperDossierContext {
   dossierId: string;
   name: string;
+  /** Question à pré-remplir dans la zone de saisie de l'assistant. */
+  question?: string;
 }
 
 const isOpen = ref(false);

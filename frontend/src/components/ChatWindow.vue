@@ -29,7 +29,7 @@
  * - `submit` : émis avec le texte saisi quand l'utilisateur envoie.
  * - `attach-files` : émis avec les fichiers sélectionnés (si showFileAttach).
  */
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import MarkdownText from "@/components/MarkdownText.vue";
 import type { StreamEvent } from "@/composables/useChatStream";
@@ -37,6 +37,7 @@ import type { StreamEvent } from "@/composables/useChatStream";
 // Ajout de l'util et du component pour le tool_call / tool_result
 import { computed } from "vue";
 import ToolSteps from "@/components/ToolSteps.vue";
+import { parseAssistantSuggestion } from "@/utils/assistantSuggestion";
 import { groupToolEvents } from "@/utils/groupToolEvents";
 
 
@@ -70,6 +71,8 @@ const props = withDefaults(
     hasMore?: boolean;
     /** Une page de messages plus anciens est en cours de chargement. */
     loadingMore?: boolean;
+    /** Texte à placer dans la zone de saisie (ex : question reprise d'un autre chat). */
+    prefill?: string;
   }>(),
   {
     streamEvents: () => [],
@@ -80,6 +83,7 @@ const props = withDefaults(
     showFileAttach: false,
     hasMore: false,
     loadingMore: false,
+    prefill: "",
   },
 );
 
@@ -92,7 +96,16 @@ const emit = defineEmits<{
   "load-more": [];
 }>();
 
-const draft = ref("");
+const draft = ref(props.prefill);
+watch(
+  () => props.prefill,
+  (value) => {
+    if (value) {
+      draft.value = value;
+      nextTick(resizeTextarea);
+    }
+  },
+);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const messagesEndRef = ref<HTMLElement | null>(null);
@@ -199,6 +212,11 @@ function submit() {
   nextTick(resizeTextarea);
 }
 
+// Un texte pré-rempli à l'ouverture doit aussi redimensionner la zone de saisie.
+onMounted(() => {
+  if (draft.value) nextTick(resizeTextarea);
+});
+
 defineExpose({ resizeTextarea });
 </script>
 
@@ -227,7 +245,7 @@ defineExpose({ resizeTextarea });
           :class="{ 'chat-message--assistant': message.role === 'assistant' }"
         >
           <div class="chat-message__bubble">
-            <MarkdownText :content="message.content" class="chat-message__text" />
+            <MarkdownText :content="parseAssistantSuggestion(message.content).text" class="chat-message__text" />
             <!-- Sources citées par l'assistant (repliées par défaut) -->
             <details v-if="message.sources && message.sources.length > 0" class="chat-message__sources">
               <summary class="chat-message__sources-title">

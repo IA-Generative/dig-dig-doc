@@ -174,3 +174,23 @@ def test_tools_tool_definitions() -> None:
     assert "read_page" in names
     assert "view_classifications" in names
     assert "view_entities" in names
+
+
+# --- Passage de relais vers l'assistant ---
+
+
+def test_tools_suggest_assistant_memorizes_question() -> None:
+    tools = AgentTools(_make_dossier())
+    assert tools.assistant_question() is None
+    result = tools.dispatch_tool("suggest_assistant", {"question": " Crée une analyse CNI "})
+    assert "assistant" in result
+    assert tools.assistant_question() == "Crée une analyse CNI"
+
+
+def test_assistant_suggestion_marker_encodes_question() -> None:
+    from app.chat_graph import assistant_suggestion_marker
+
+    marker = assistant_suggestion_marker("Crée une analyse -- CNI ?")
+    assert marker.startswith("\n\n<!--assistant-suggestion:")
+    assert marker.endswith("-->")
+    assert "--" not in marker[len("\n\n<!--") : -len("-->")]

@@ -10,6 +10,7 @@ import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useChatStream } from "@/composables/useChatStream";
+import { parseAssistantSuggestion } from "@/utils/assistantSuggestion";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { useHelperAgent } from "@/composables/useHelperAgent";
@@ -340,6 +341,21 @@ async function onDeleteConversation() {
 
       <template #message-actions="{ message }">
         <button
+          v-if="parseAssistantSuggestion(message.content).question && dossier"
+          type="button"
+          class="dossier-detail__assistant-suggestion"
+          @click="
+            openHelper({
+              dossierId: dossier.id,
+              name: dossier.name,
+              question: parseAssistantSuggestion(message.content).question ?? undefined,
+            })
+          "
+        >
+          <VIcon name="ri-robot-2-line" />
+          <span>Ouvrir l'assistant</span>
+        </button>
+        <button
           type="button"
           class="chat-message__feedback-button"
           :class="{ 'chat-message__feedback-button--active': message.feedback?.value === 'up' }"
@@ -484,6 +500,21 @@ async function onDeleteConversation() {
 
 .chat-source-chip:hover {
   background: var(--background-default-grey-hover);
+}
+
+.dossier-detail__assistant-suggestion {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-right: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--border-action-high-blue-france);
+  border-radius: 1rem;
+  background: var(--background-alt-blue-france);
+  color: var(--text-action-high-blue-france);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 .dossier-detail__icon-button {
