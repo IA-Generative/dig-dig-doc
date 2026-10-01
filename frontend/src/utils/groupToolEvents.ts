@@ -23,16 +23,23 @@ export function groupToolEvents(events: StreamEvent[]): ToolStep[] {
         status: "running",
       });
     } else if (event.kind === "tool_result") {
-      const step = steps.findLast((s) => s.status === "running");
+      const step = findRunning(steps);
       if (step) {
         step.result = String(event.data.preview ?? "");
         step.status = "done";
       }
     } else if (event.kind === "error") {
-      const step = steps.findLast((s) => s.status === "running");
+      const step = findRunning(steps);
       if (step) step.status = "error";
     }
   }
 
   return steps;
+}
+
+function findRunning(steps: ToolStep[]): ToolStep | undefined {
+  for (let i = steps.length - 1; i >= 0; i--) {
+    if (steps[i].status === "running") return steps[i];
+  }
+  return undefined;
 }
