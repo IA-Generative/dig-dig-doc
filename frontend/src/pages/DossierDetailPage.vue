@@ -10,7 +10,8 @@ import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useChatStream } from "@/composables/useChatStream";
-import { parseAssistantSuggestion } from "@/utils/assistantSuggestion";
+import ChatProposals from "@/components/analysis/ChatProposals.vue";
+import { parseAssistantSuggestion, parseMessageMarkers } from "@/utils/assistantSuggestion";
 import { useConversations } from "@/composables/useConversations";
 import { useDossiers } from "@/composables/useDossiers";
 import { useHelperAgent } from "@/composables/useHelperAgent";
@@ -345,6 +346,15 @@ async function onDeleteConversation() {
           <VIcon name="ri-file-text-line" />
           <span>{{ source.pages && source.pages.length > 0 ? source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") : "Document" }}</span>
         </button>
+      </template>
+
+      <template #message-extra="{ message }">
+        <ChatProposals
+          v-if="parseMessageMarkers(message.content).proposals"
+          :dossier-id="dossierId"
+          :analysis-id="parseMessageMarkers(message.content).proposals!.analysisId"
+          :proposal-ids="parseMessageMarkers(message.content).proposals!.proposalIds"
+        />
       </template>
 
       <template #message-actions="{ message }">

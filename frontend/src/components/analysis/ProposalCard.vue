@@ -8,6 +8,7 @@
 import { computed, ref } from "vue";
 
 import {
+  PROPOSAL_STATUS_LABELS,
   VERSION_SOURCE_LABELS,
   textToValue,
   valueToText,
@@ -23,6 +24,8 @@ const props = defineProps<{
   /** Nom de l'élément visé, quand la proposition n'en porte pas. */
   elementName?: string | null;
   disabled?: boolean;
+  /** Message d'erreur de la dernière action (ex : élément modifié entre-temps). */
+  error?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -104,7 +107,17 @@ const sourceLabel = computed(() =>
       <span v-if="sourceLabel" class="proposal-card__source">(source : {{ sourceLabel }})</span>
     </p>
 
-    <div v-if="mode === 'modify'" class="proposal-card__form">
+    <p v-if="error" class="proposal-card__error" role="alert">{{ error }}</p>
+
+    <div v-if="proposal.status !== 'pending'" class="proposal-card__decided">
+      <DsfrBadge
+        :label="PROPOSAL_STATUS_LABELS[proposal.status]"
+        :type="proposal.status === 'rejected' ? 'warning' : 'success'"
+        small
+      />
+    </div>
+
+    <div v-else-if="mode === 'modify'" class="proposal-card__form">
       <label class="proposal-card__label" :for="`modify-${proposal.id}`">Valeur à appliquer</label>
       <textarea :id="`modify-${proposal.id}`" v-model="draft" class="fr-input" rows="3" />
       <label class="proposal-card__label" :for="`modify-note-${proposal.id}`">Commentaire (facultatif)</label>
@@ -197,6 +210,12 @@ const sourceLabel = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
+}
+
+.proposal-card__error {
+  margin: 0;
+  color: var(--text-default-error);
+  font-size: 0.875rem;
 }
 
 .proposal-card__actions {

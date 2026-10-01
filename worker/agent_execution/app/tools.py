@@ -19,9 +19,12 @@ assistant final via MessageSource.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.bm25 import BM25Index, build_index_from_dossier
+
+if TYPE_CHECKING:
+    from app.analysis_tools import AnalysisProposer
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +47,10 @@ class AgentTools:
     consultés pendant l'exécution. Le graphe de chat les récupère via
     consulted_sources() pour les déposer sur le message assistant final."""
 
-    def __init__(self, dossier: dict) -> None:
+    def __init__(self, dossier: dict, analysis: "AnalysisProposer | None" = None) -> None:
         self._dossier = dossier
+        # Propositions de modification de l'analyse (chat du dossier seulement).
+        self._analysis = analysis
         self._index: BM25Index = build_index_from_dossier(dossier)
         self._pages_by_id: dict[str, dict] = {}
         self._pages_by_number: dict[int, dict] = {}
@@ -59,6 +64,35 @@ class AgentTools:
                 self._pages_by_number[page["page_number"]] = page
         self._consulted_sources: list[ConsultedSource] = []
         self._assistant_question: str | None = None
+
+    # --- Analyse de dossier : propositions (#115) ---
+
+    @property
+    def has_analysis(self) -> bool:
+        """Le chat peut-il proposer de modifier l'analyse de ce dossier ?"""
+        return self._analysis is not None and self._analysis.available
+
+    def view_analysis(self) -> str:
+        return self._analysis.list_elements() if self._analysis else "Analyse indisponible."
+
+    def propose_update(
+        self,
+        value: str,
+        reason: str,
+        element_id: str | None = None,
+        kind: str | None = None,
+        name: str | None = None,
+    ) -> str:
+        if self._analysis is None:
+            return "Analyse indisponible."
+        return self._analysis.propose(value=value, reason=reason, element_id=element_id, kind=kind, name=name)
+
+    def analysis_proposals(self) -> tuple[str, list[str]] | None:
+        """(identifiant de l'analyse, identifiants des propositions déposées
+        pendant cette réponse), ou None s'il n'y en a pas."""
+        if self._analysis is None or not self._analysis.proposal_ids or not self._analysis.analysis_id:
+            return None
+        return self._analysis.analysis_id, list(self._analysis.proposal_ids)
 
     # --- Passage de relais vers l'assistant de l'application ---
 
@@ -273,6 +307,61 @@ class AgentTools:
                     },
                 },
             },
+        ] + self._analysis_tool_definitions()
+
+    def _analysis_tool_definitions(self) -> list[dict[str, Any]]:
+        """Outils de proposition de modification de l'analyse : seulement quand
+        le chat est branché sur l'analyse du dossier et que celle-ci existe."""
+        if not self.has_analysis:
+            return []
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "view_analysis",
+                    "description": (
+                        "Liste les éléments de l'analyse du dossier (classifications, entités, synthèses...) "
+                        "avec leur identifiant et leur valeur retenue. À appeler avant propose_update pour "
+                        "connaître les identifiants."
+                    ),
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "propose_update",
+                    "description": (
+                        "Propose de modifier l'analyse du dossier quand l'utilisateur apporte une information "
+                        "claire (une correction, une vérification, une valeur manquante). N'APPLIQUE RIEN : "
+                        "l'utilisateur accepte, modifie ou rejette la proposition. Une seule proposition par "
+                        "information exprimée ; n'en fais pas pour une simple question. Pour modifier un "
+                        "élément existant, donne element_id ; pour en ajouter un, donne kind (classification, "
+                        "entity, synthesis ou field) et name."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "value": {"type": "string", "description": "La nouvelle valeur proposée"},
+                            "reason": {
+                                "type": "string",
+                                "description": "Pourquoi : l'information donnée par l'utilisateur, en une phrase",
+                            },
+                            "element_id": {
+                                "type": "string",
+                                "description": "Identifiant de l'élément à modifier (voir view_analysis)",
+                            },
+                            "kind": {
+                                "type": "string",
+                                "enum": ["classification", "entity", "synthesis", "field"],
+                                "description": "Type de l'élément à ajouter (sans element_id)",
+                            },
+                            "name": {"type": "string", "description": "Nom de l'élément à ajouter (ex : adresse)"},
+                        },
+                        "required": ["value", "reason"],
+                    },
+                },
+            },
         ]
 
     def dispatch_tool(self, name: str, arguments: dict[str, Any]) -> str:
@@ -287,4 +376,14 @@ class AgentTools:
             return self.view_entities()
         if name == "suggest_assistant":
             return self.suggest_assistant(arguments.get("question", ""))
+        if name == "view_analysis":
+            return self.view_analysis()
+        if name == "propose_update":
+            return self.propose_update(
+                arguments.get("value", ""),
+                arguments.get("reason", ""),
+                element_id=arguments.get("element_id"),
+                kind=arguments.get("kind"),
+                name=arguments.get("name"),
+            )
         return f"Outil '{name}' inconnu."

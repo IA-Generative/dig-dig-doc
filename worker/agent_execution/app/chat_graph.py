@@ -26,6 +26,7 @@ from urllib.parse import quote
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
+from app.analysis_tools import proposals_marker
 from app.config import settings
 from app.llm import _client
 from app.tools import AgentTools, ConsultedSource
@@ -63,6 +64,7 @@ def _build_system_prompt(
     conversation_history: list[dict],
     syntheses: list[dict],
     analyse_description: str | None = None,
+    can_propose_updates: bool = False,
 ) -> str:
     """Construit le prompt système pour le chat : rôle de l'assistant,
     contexte du dossier (synthèses existantes), et consignes de réponse."""
@@ -85,6 +87,19 @@ def _build_system_prompt(
         "suggest_assistant et explique brièvement que l'assistant de "
         "l'application peut s'en charger.",
     ]
+
+    if can_propose_updates:
+        parts.extend(
+            [
+                "",
+                "Quand l'utilisateur t'apporte une information claire qui corrige ou complète l'analyse du "
+                "dossier (une valeur vérifiée, une correction, une information manquante), appelle view_analysis "
+                "pour repérer l'élément concerné puis propose_update. Une proposition n'applique rien : "
+                "l'utilisateur la confirme. Dis-lui que tu la lui proposes, sans jamais affirmer qu'elle est "
+                "appliquée. Ne propose rien pour une simple question, une supposition ou une information déjà à "
+                "jour.",
+            ]
+        )
 
     if analyse_description:
         parts.extend(["", "--- Objectif de l'analyse ---", analyse_description])
@@ -230,7 +245,9 @@ def run_chat(
     Les événements intermédiaires (tool_call, tool_result) sont émis via
     on_event pour le streaming temps réel vers le frontend.
     """
-    system_prompt = _build_system_prompt(conversation_history, syntheses or [], analyse_description)
+    system_prompt = _build_system_prompt(
+        conversation_history, syntheses or [], analyse_description, can_propose_updates=tools.has_analysis
+    )
 
     graph = build_chat_graph()
     initial_state: ChatState = {
@@ -249,6 +266,9 @@ def run_chat(
     assistant_question = tools.assistant_question()
     if assistant_question:
         answer += assistant_suggestion_marker(assistant_question)
+    proposals = tools.analysis_proposals()
+    if proposals:
+        answer += proposals_marker(*proposals)
     sources = tools.consulted_sources()
     logger.info(
         "Chat completed in %d iterations, answer length: %d, sources: %d",
