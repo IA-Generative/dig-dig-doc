@@ -166,15 +166,14 @@ def test_conversation_and_message_lifecycle(client: TestClient) -> None:
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
     assert conversation["dossier_id"] == dossier_id
     assert conversation["user_id"] == "dev-user"
-    assert conversation["messages"] == []
+    assert "messages" not in conversation
+    messages_url = f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages"
+    assert client.get(messages_url).json() == {"items": [], "has_more": False}
 
-    conversation = client.post(
-        f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages",
-        json={"content": "Quel est le statut du dossier ?"},
-    ).json()
-    assert len(conversation["messages"]) == 1
-    assert conversation["messages"][0]["role"] == "user"
-    assert conversation["messages"][0]["content"] == "Quel est le statut du dossier ?"
+    message = client.post(messages_url, json={"content": "Quel est le statut du dossier ?"}).json()
+    assert message["role"] == "user"
+    assert message["content"] == "Quel est le statut du dossier ?"
+    assert [m["id"] for m in client.get(messages_url).json()["items"]] == [message["id"]]
 
     listed = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(listed) == 1
@@ -240,8 +239,10 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     # Le message de l'autre utilisateur n'a pas fuité dans la conversation du propriétaire.
     owner_view = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"]
     assert len(owner_view) == 1
-    assert len(owner_view[0]["messages"]) == 1
-    assert owner_view[0]["messages"][0]["content"] == "Message du propriétaire"
+    owner_messages = client.get(f"/api/dossiers/{dossier_id}/conversations/{owner_view[0]['id']}/messages").json()[
+        "items"
+    ]
+    assert [m["content"] for m in owner_messages] == ["Message du propriétaire"]
 
 
 def test_conversation_model_can_be_chosen(client: TestClient) -> None:
@@ -538,7 +539,7 @@ def test_assistant_message_with_sources(client: TestClient) -> None:
     bbox = _create_bbox(client, page["id"], x_min=0.1, y_min=0.1, x_max=0.9, y_max=0.5)
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
 
-    conversation = client.post(
+    message = client.post(
         f"/api/internal/conversations/{conversation['id']}/messages",
         json={
             "content": "Le document est une CNI.",
@@ -552,8 +553,6 @@ def test_assistant_message_with_sources(client: TestClient) -> None:
         },
         headers=INTERNAL_HEADERS,
     ).json()
-    assert len(conversation["messages"]) == 1
-    message = conversation["messages"][0]
     assert message["role"] == "assistant"
     assert len(message["sources"]) == 3
     assert message["sources"][0]["dossier_document_id"] == document_id
@@ -588,21 +587,20 @@ def _create_conversation_with_message(client: TestClient, dossier_name: str) -> 
     analyse_id = _create_analyse(client, f"Analyse {dossier_name}")
     dossier_id = client.post("/api/dossiers", json={"name": dossier_name, "analyse_id": analyse_id}).json()["id"]
     conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
-    conversation = client.post(
+    message = client.post(
         f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages",
         json={"content": "Un message"},
     ).json()
-    message_id = conversation["messages"][0]["id"]
-    return dossier_id, conversation["id"], message_id
+    return dossier_id, conversation["id"], message["id"]
 
 
 def test_message_feedback_lifecycle(client: TestClient) -> None:
     dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour")
 
-    conversation = client.get(f"/api/dossiers/{dossier_id}/conversations").json()["items"][0]
-    assert conversation["messages"][0]["feedback"] is None
+    messages_url = f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages"
+    assert client.get(messages_url).json()["items"][0]["feedback"] is None
 
-    conversation = client.put(
+    message = client.put(
         f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
         json={
             "value": "down",
@@ -610,25 +608,51 @@ def test_message_feedback_lifecycle(client: TestClient) -> None:
             "comment": "Pas la bonne réponse",
         },
     ).json()
-    feedback = conversation["messages"][0]["feedback"]
+    feedback = message["feedback"]
     assert feedback["value"] == "down"
     assert sorted(feedback["reasons"]) == ["incorrect_answer", "not_useful"]
     assert feedback["comment"] == "Pas la bonne réponse"
 
     # Re-soumission : mise à jour du même retour, pas de doublon.
-    conversation = client.put(
+    message = client.put(
         f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback",
         json={"value": "up"},
     ).json()
-    feedback = conversation["messages"][0]["feedback"]
+    feedback = message["feedback"]
     assert feedback["value"] == "up"
     assert feedback["reasons"] == []
     assert feedback["comment"] is None
 
-    conversation = client.delete(
+    message = client.delete(
         f"/api/dossiers/{dossier_id}/conversations/{conversation_id}/messages/{message_id}/feedback"
     ).json()
-    assert conversation["messages"][0]["feedback"] is None
+    assert message["feedback"] is None
+    assert client.get(messages_url).json()["items"][0]["feedback"] is None
+
+
+def test_messages_are_paginated_by_cursor(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse pagination messages")
+    dossier_id = client.post("/api/dossiers", json={"name": "Dossier pagination", "analyse_id": analyse_id}).json()[
+        "id"
+    ]
+    conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
+    url = f"/api/dossiers/{dossier_id}/conversations/{conversation['id']}/messages"
+    for index in range(5):
+        client.post(url, json={"content": f"Message {index}"})
+
+    # Sans curseur : les plus récents, en ordre chronologique.
+    latest = client.get(url, params={"limit": 2}).json()
+    assert [m["content"] for m in latest["items"]] == ["Message 3", "Message 4"]
+    assert latest["has_more"] is True
+
+    # Curseur : les messages qui précèdent le plus ancien déjà chargé.
+    older = client.get(url, params={"limit": 2, "before": latest["items"][0]["id"]}).json()
+    assert [m["content"] for m in older["items"]] == ["Message 1", "Message 2"]
+    assert older["has_more"] is True
+
+    oldest = client.get(url, params={"limit": 2, "before": older["items"][0]["id"]}).json()
+    assert [m["content"] for m in oldest["items"]] == ["Message 0"]
+    assert oldest["has_more"] is False
 
 
 def test_feedback_is_private_to_its_user(client: TestClient) -> None:

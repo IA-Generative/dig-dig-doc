@@ -16,7 +16,6 @@ from app.schemas.dossier import (
     BoundingBoxOut,
     ChatEventIn,
     ChatEventOut,
-    ConversationOut,
     DocumentPageIn,
     DocumentPageOut,
     DocumentPredictionIn,
@@ -36,6 +35,7 @@ from app.schemas.dossier import (
     InternalExtractionOut,
     InternalLabelDefinitionOut,
     InternalMessageIn,
+    MessageOut,
     SuggestionDepositIn,
     SuggestionStatusIn,
     SummaryDepositIn,
@@ -301,7 +301,7 @@ async def add_document_prediction(
     )
 
 
-@router.post("/conversations/{conversation_id}/messages", response_model=ConversationOut)
+@router.post("/conversations/{conversation_id}/messages", response_model=MessageOut)
 async def add_assistant_message(
     conversation_id: uuid.UUID,
     body: InternalMessageIn,
@@ -311,12 +311,15 @@ async def add_assistant_message(
     conversation = await repository.get_conversation(conversation_id)
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
-    return await repository.add_message(
+    conversation = await repository.add_message(
         conversation,
         MessageRole.ASSISTANT,
         body.content,
         sources=[s.model_dump() for s in body.sources],
     )
+    message = conversation.messages[-1]
+    message.feedback = None
+    return message
 
 
 @router.get("/conversations/{conversation_id}", response_model=InternalConversationOut)

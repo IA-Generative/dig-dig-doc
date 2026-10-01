@@ -312,7 +312,15 @@ class ConversationOut(BaseModel):
     user_id: str
     created_at: datetime
     model: str | None
-    messages: list[MessageOut]
+
+
+class MessagePage(BaseModel):
+    """Page de messages (curseur) : `items` en ordre chronologique ;
+    `has_more` indique qu'il existe des messages plus anciens à charger avec
+    `before=<id du premier message>`."""
+
+    items: list[MessageOut]
+    has_more: bool
 
 
 class ChatEventOut(BaseModel):
