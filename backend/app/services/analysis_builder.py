@@ -14,14 +14,17 @@ Tout est tolérant : un dossier sans analyse (créé avant #125, exécution déj
 en cours) continue de fonctionner, rien n'est écrit.
 """
 
+import hashlib
+import json
 import logging
 import uuid
 
 from sqlalchemy import select
 
 from app.db import async_session_factory
+from app.models.analyse import Agent
 from app.models.document_page import DocumentPage, DocumentPrediction, PredictionKind
-from app.models.dossier import ExecutionStep, ExecutionStepKind, ExecutionStepStatus
+from app.models.dossier import Dossier, ExecutionStep, ExecutionStepKind, ExecutionStepStatus
 from app.models.dossier_analysis import (
     AnalysisElement,
     AnalysisElementKind,
@@ -34,6 +37,11 @@ from app.models.dossier_analysis import (
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 
 logger = logging.getLogger(__name__)
+
+# Version du pipeline pour les empreintes d'agents : à incrémenter quand la
+# logique d'un agent change de façon à modifier ses résultats (le worker a la
+# sienne pour les empreintes de classification et d'extraction).
+AGENT_PIPELINE_VERSION = "pipeline-1"
 
 _STEP_TO_UNIT_KIND = {
     ExecutionStepKind.CLASSIFICATION: AnalysisUnitKind.CLASSIFICATION,
@@ -145,6 +153,7 @@ async def _record_agent_step(
             analysis.id,
             kind=AnalysisUnitKind.AGENT,
             description={"step_id": str(step.id), "label": step.label},
+            input_fingerprint=await _agent_fingerprint(repository, analysis, step),
             status=AnalysisUnitStatus.TERMINE if succeeded else AnalysisUnitStatus.ECHEC,
         )
     if succeeded and step.output:
@@ -162,3 +171,52 @@ async def _record_agent_step(
                 unit=unit,
                 definition_name=step.label,
             )
+
+
+async def _agent_fingerprint(
+    repository: DossierAnalysisRepository, analysis: DossierAnalysis, step: ExecutionStep
+) -> str | None:
+    """Empreinte des entrées d'un agent : sa configuration (prompt, outils,
+    modèle) et les empreintes des unités de classification et d'extraction de
+    l'analyse, qu'il lit. Une synthèse dépend de ce qu'elle lit : si une de ces
+    unités change, l'empreinte change. None si l'agent n'est pas retrouvé."""
+    dossier = await repository.db.get(Dossier, step.dossier_id)
+    if dossier is None or dossier.analyse_id is None:
+        return None
+    agent = (
+        (
+            await repository.db.execute(
+                select(Agent).where(Agent.analyse_id == dossier.analyse_id, Agent.name == step.label)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if agent is None:
+        return None
+    upstream: list[str] = []
+    for kind in (AnalysisUnitKind.CLASSIFICATION, AnalysisUnitKind.EXTRACTION):
+        upstream.extend(await _unit_fingerprints(repository, analysis.id, kind))
+    upstream.sort()
+    payload = {
+        "unit": "agent",
+        "pipeline": AGENT_PIPELINE_VERSION,
+        "name": agent.name,
+        "prompt": agent.prompt,
+        "tools": sorted(agent.tools or []),
+        "model": agent.model,
+        "upstream": upstream,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def _unit_fingerprints(repository: DossierAnalysisRepository, analysis_id: uuid.UUID, kind: AnalysisUnitKind):
+    result = await repository.db.execute(
+        select(AnalysisUnit.input_fingerprint).where(
+            AnalysisUnit.analysis_id == analysis_id,
+            AnalysisUnit.kind == kind,
+            AnalysisUnit.input_fingerprint.is_not(None),
+        )
+    )
+    return list(result.scalars().all())

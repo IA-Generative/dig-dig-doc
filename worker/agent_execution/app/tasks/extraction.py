@@ -18,10 +18,13 @@ entités multi-pages.
 """
 
 import logging
+from functools import partial
 
 from app import api_client, llm
 from app.celery_app import celery_app
 from app.config import settings
+from app.extraction_planner import group_definitions, new_entities, plan_lots, text_budget
+from app.fingerprint import extraction_fingerprint
 from app.tasks.classification import _STATUS_ECHEC, _STATUS_TERMINE, _find_step_id
 
 logger = logging.getLogger(__name__)
@@ -97,9 +100,12 @@ def _process_batch(
     extraction_prompt: str,
     page_id_by_number: dict,
     unit_id: str | None = None,
+    seen: set[tuple[str, str]] | None = None,
 ) -> int:
     """Traite un batch de pages : extraction LLM + dépôt des entités.
-    Renvoie le nombre d'entités déposées."""
+    Renvoie le nombre d'entités déposées. ``seen`` (mode par document) écarte
+    les entités déjà extraites par un lot précédent du même document et du
+    même groupe de définitions (recouvrement entre lots)."""
     batch_page_numbers = {p["page_number"] for p in batch}
 
     result = llm.extract_entities_batch(
@@ -108,8 +114,12 @@ def _process_batch(
         extraction_prompt=extraction_prompt,
     )
 
+    entities = [e for e in result.entities if e.entity_name in entity_def_by_name]
+    if seen is not None:
+        entities = new_entities(entities, seen)
+
     count = 0
-    for entity_value in result.entities:
+    for entity_value in entities:
         if _deposit_entity(
             client,
             entity_value,
@@ -120,6 +130,111 @@ def _process_batch(
         ):
             count += 1
     return count
+
+
+def _page_dicts(document: dict) -> tuple[list[dict], dict[int, str]]:
+    """Pages d'un document (page_number, content, id) et mapping page_number -> id.
+    Les numéros de page sont propres à chaque document : le mapping aussi."""
+    pages = [
+        {"page_number": page["page_number"], "content": page.get("content") or "", "id": page["id"]}
+        for page in document.get("pages", [])
+    ]
+    return pages, {page["page_number"]: page["id"] for page in pages}
+
+
+def _run_unit(
+    client,
+    dossier_id: str,
+    description: dict,
+    fingerprint: str,
+    work,
+) -> int:
+    """Déclare une unité, exécute le travail, la marque terminée ou en échec
+    (l'erreur remonte comme avant)."""
+    unit_id = api_client.declare_unit(client, dossier_id, "extraction", description, fingerprint=fingerprint)
+    try:
+        count = work(unit_id)
+    except Exception:
+        api_client.complete_unit(client, unit_id, _STATUS_ECHEC)
+        raise
+    api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
+    return count
+
+
+def _extract_legacy(
+    client,
+    dossier_id: str,
+    all_pages: list[dict],
+    page_id_by_number: dict,
+    entity_defs: list[dict],
+    extraction_prompt: str,
+) -> int:
+    """Ancien découpage (EXTRACTION_MODE=legacy) : lots de EXTRACTION_BATCH_SIZE
+    pages sur tout le dossier, toutes les définitions dans un seul appel. Une
+    unité par lot, avec son empreinte."""
+    entity_def_by_name = {entity["name"]: entity for entity in entity_defs}
+    batch_size = settings.EXTRACTION_BATCH_SIZE
+    total = 0
+    for i in range(0, len(all_pages), batch_size):
+        batch = all_pages[i : i + batch_size]
+        total += _run_unit(
+            client,
+            dossier_id,
+            {"page_numbers": [p["page_number"] for p in batch], "page_ids": [p["id"] for p in batch]},
+            extraction_fingerprint(batch, entity_defs, extraction_prompt),
+            lambda unit_id, batch=batch: _process_batch(
+                client, batch, entity_defs, entity_def_by_name, extraction_prompt, page_id_by_number, unit_id
+            ),
+        )
+    return total
+
+
+def _extract_by_document(
+    client, dossier_id: str, dossier: dict, entity_defs: list[dict], extraction_prompt: str
+) -> int:
+    """Découpage par document (issue #126) : pour chaque document, chaque groupe
+    de définitions et chaque lot de pages (défini par un budget de jetons, avec
+    recouvrement), un appel au LLM = une unité de calcul avec son empreinte.
+    Aucun lot ne chevauche deux documents."""
+    groups = group_definitions(entity_defs, settings.EXTRACTION_DEFINITIONS_PER_GROUP)
+    total = 0
+    for document in dossier["documents"]:
+        pages, page_id_by_number = _page_dicts(document)
+        if not pages:
+            continue
+        for group_index, group in enumerate(groups):
+            group_by_name = {entity["name"]: entity for entity in group}
+            budget = text_budget(
+                max_tokens=settings.EXTRACTION_MAX_TOKENS,
+                reserved_output_tokens=settings.EXTRACTION_RESERVED_OUTPUT_TOKENS,
+                prompt=extraction_prompt,
+                definitions=group,
+            )
+            seen: set[tuple[str, str]] = set()
+            for lot in plan_lots(pages, budget=budget, overlap=settings.EXTRACTION_OVERLAP_PAGES):
+                total += _run_unit(
+                    client,
+                    dossier_id,
+                    {
+                        "document_id": document["id"],
+                        "page_numbers": [p["page_number"] for p in lot],
+                        "page_ids": [p["id"] for p in lot],
+                        "group": group_index,
+                        "definition_ids": [entity["id"] for entity in group],
+                    },
+                    extraction_fingerprint(lot, group, extraction_prompt),
+                    partial(
+                        _process_batch,
+                        client,
+                        lot,
+                        group,
+                        group_by_name,
+                        extraction_prompt,
+                        page_id_by_number,
+                        seen=seen,
+                    ),
+                )
+    return total
 
 
 @celery_app.task(name="app.tasks.extract_dossier_entities", bind=True)
@@ -151,7 +266,6 @@ def extract_dossier_entities(self, dossier_id: str) -> None:
                     )
                 return
 
-            entity_def_by_name = {entity["name"]: entity for entity in entity_defs}
             all_pages, page_id_by_number = _collect_pages(dossier)
 
             if not all_pages:
@@ -164,33 +278,12 @@ def extract_dossier_entities(self, dossier_id: str) -> None:
                     )
                 return
 
-            batch_size = settings.EXTRACTION_BATCH_SIZE
-            total_entities = 0
-
-            for i in range(0, len(all_pages), batch_size):
-                batch = all_pages[i : i + batch_size]
-                # Une unité de calcul par lot de pages dans l'analyse de dossier
-                # (le découpage en lots lui-même n'a pas changé).
-                unit_id = api_client.declare_unit(
-                    client,
-                    dossier_id,
-                    "extraction",
-                    {"page_numbers": [p["page_number"] for p in batch], "page_ids": [p["id"] for p in batch]},
+            if settings.EXTRACTION_MODE == "legacy":
+                total_entities = _extract_legacy(
+                    client, dossier_id, all_pages, page_id_by_number, entity_defs, extraction_prompt
                 )
-                try:
-                    total_entities += _process_batch(
-                        client,
-                        batch,
-                        entity_defs,
-                        entity_def_by_name,
-                        extraction_prompt,
-                        page_id_by_number,
-                        unit_id,
-                    )
-                except Exception:
-                    api_client.complete_unit(client, unit_id, _STATUS_ECHEC)
-                    raise
-                api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
+            else:
+                total_entities = _extract_by_document(client, dossier_id, dossier, entity_defs, extraction_prompt)
 
             output = f"{total_entities} entité(s) extraite(s) sur {len(all_pages)} page(s)"
             if step_id:

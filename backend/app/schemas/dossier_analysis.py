@@ -212,6 +212,9 @@ class AnalysisUnitCreateIn(BaseModel):
     kind: AnalysisUnitKind
     # Ce que couvre l'unité (page, lot de pages...) - forme libre.
     description: dict[str, Any] = Field(default_factory=dict)
+    # Hash (sha256 hexadécimal) des entrées de l'unité, calculé par le worker :
+    # sert à la relance incrémentale (#119).
+    input_fingerprint: str | None = Field(default=None, min_length=64, max_length=64, pattern="^[0-9a-f]{64}$")
 
 
 class AnalysisUnitRefOut(BaseModel):

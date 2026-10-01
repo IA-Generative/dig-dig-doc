@@ -16,6 +16,7 @@ import logging
 
 from app import api_client, llm
 from app.celery_app import celery_app
+from app.fingerprint import classification_fingerprint
 from app.storage import storage
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,7 @@ def classify_dossier(self, dossier_id: str) -> None:
                         dossier_id,
                         "classification",
                         {"document_id": document["id"], "page_id": page["id"], "page_number": page["page_number"]},
+                        fingerprint=classification_fingerprint(page, label_defs, classification_prompt),
                     )
                     try:
                         if _classify_page(client, page, label_defs, label_by_name, classification_prompt, unit_id):
