@@ -37,30 +37,13 @@ const options = computed(() => [
 const rootRef = ref<HTMLElement | null>(null);
 const triggerRef = ref<HTMLElement | null>(null);
 const isOpen = ref(false);
-const menuStyle = ref<Record<string, string>>({});
 const listId = `model-picker-${Math.random().toString(36).slice(2, 8)}`;
 
 const selectedText = computed(
   () => options.value.find((option) => option.value === props.modelValue)?.text ?? props.modelValue,
 );
 
-// Liste en position fixe : elle n'est ainsi jamais rognée par le défilement
-// ou l'overflow d'une modale/d'une carte qui contient le sélecteur.
-function placeMenu() {
-  const rect = triggerRef.value?.getBoundingClientRect();
-  if (!rect) return;
-  const width = Math.max(rect.width, 224);
-  const left = props.align === "right" ? Math.max(8, rect.right - width) : Math.min(rect.left, window.innerWidth - width - 8);
-  menuStyle.value = {
-    top: `${rect.bottom + 4}px`,
-    left: `${Math.max(8, left)}px`,
-    minWidth: `${width}px`,
-    maxHeight: `${Math.max(160, window.innerHeight - rect.bottom - 16)}px`,
-  };
-}
-
 function open() {
-  placeMenu();
   isOpen.value = true;
 }
 
@@ -90,16 +73,8 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
-  document.addEventListener("click", onDocumentClick);
-  window.addEventListener("resize", close);
-  window.addEventListener("scroll", close, true);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocumentClick);
-  window.removeEventListener("resize", close);
-  window.removeEventListener("scroll", close, true);
-});
+onMounted(() => document.addEventListener("click", onDocumentClick));
+onBeforeUnmount(() => document.removeEventListener("click", onDocumentClick));
 </script>
 
 <template>
@@ -121,7 +96,14 @@ onBeforeUnmount(() => {
       <VIcon name="ri-arrow-down-s-line" class="model-picker__chevron" :class="{ 'model-picker__chevron--open': isOpen }" />
     </button>
 
-    <ul v-if="isOpen" :id="listId" class="model-picker__menu" :style="menuStyle" role="listbox" :aria-label="label">
+    <ul
+      v-if="isOpen"
+      :id="listId"
+      class="model-picker__menu"
+      :class="{ 'model-picker__menu--right': align === 'right', 'model-picker__menu--block': block }"
+      role="listbox"
+      :aria-label="label"
+    >
       <li
         v-for="option in options"
         :key="option.value"
@@ -186,10 +168,15 @@ onBeforeUnmount(() => {
   transform: rotate(180deg);
 }
 
+/* Ancrée sous le bouton (le wrapper est en position: relative). */
 .model-picker__menu {
-  position: fixed;
+  position: absolute;
   z-index: 2000;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 14rem;
   max-width: min(22rem, 90vw);
+  max-height: 20rem;
   overflow-y: auto;
   margin: 0;
   padding: 0.375rem;
@@ -198,6 +185,16 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-default-grey);
   border-radius: 0.75rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.model-picker__menu--right {
+  left: auto;
+  right: 0;
+}
+
+.model-picker__menu--block {
+  right: 0;
+  max-width: none;
 }
 
 .model-picker__option {
