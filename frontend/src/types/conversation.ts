@@ -32,7 +32,17 @@ export interface MessageSource {
   executionStepId: string | null;
   excerpt: string | null;
   pages: { id: string; pageNumber: number }[];
-  boundingBoxes: { id: string }[];
+  /** Zones normalisées (0-1, origine en haut à gauche) citées, rattachées à leur page. */
+  boundingBoxes: SourceBoundingBox[];
+}
+
+export interface SourceBoundingBox {
+  id: string;
+  pageId: string;
+  xMin: number;
+  yMin: number;
+  xMax: number;
+  yMax: number;
 }
 
 export interface Message {
