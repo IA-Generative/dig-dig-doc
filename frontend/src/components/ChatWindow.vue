@@ -318,6 +318,7 @@ defineExpose({ resizeTextarea });
    composer en pilule arrondie avec textarea auto-agrandissante. */
 .chat-window {
   flex: 1;
+  min-width: 0;
   min-height: 16rem;
   display: flex;
   flex-direction: column;
@@ -374,10 +375,26 @@ defineExpose({ resizeTextarea });
 }
 
 .chat-message__bubble {
-  max-width: 75%;
+  max-width: min(75%, 40rem);
+  min-width: 0;
   padding: 0.75rem 1.125rem;
   border-radius: 1.25rem;
   background: var(--background-alt-grey);
+  /* Mots/URL longs : on coupe plutôt que de déborder de la bulle. */
+  overflow-wrap: anywhere;
+}
+
+/* Tableaux et blocs de code du markdown : défilent dans la bulle. */
+.chat-message__bubble :deep(pre),
+.chat-message__bubble :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.chat-message__bubble :deep(img) {
+  max-width: 100%;
+  height: auto;
 }
 
 .chat-message__feedback {
@@ -411,9 +428,11 @@ defineExpose({ resizeTextarea });
   background: var(--background-action-low-blue-france);
 }
 
+/* Pas de white-space: pre-wrap : le markdown (breaks: true) gère déjà les
+   retours à la ligne, et pre-wrap rendait le "\n" final de marked comme une
+   ligne vide sous chaque bulle. */
 .chat-message__text {
   margin: 0;
-  white-space: pre-wrap;
   line-height: 1.6;
 }
 
@@ -422,9 +441,15 @@ defineExpose({ resizeTextarea });
   align-items: flex-start;
 }
 
+/* Façon ChatGPT : la réponse de l'assistant n'a pas de bulle, le texte
+   occupe toute la largeur de la colonne ; seule la bulle de l'utilisateur
+   (à droite) reste encadrée. */
 .chat-message--assistant .chat-message__bubble {
-  background: var(--background-contrast-grey);
-  border-top-left-radius: 0.25rem;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.25rem 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 /* Sources citées par l'assistant (bloc repliable) */
@@ -613,5 +638,44 @@ defineExpose({ resizeTextarea });
   background: var(--background-disabled-grey);
   color: var(--text-disabled-grey);
   cursor: not-allowed;
+}
+
+/* Tablettes / mobiles : bulles plus larges, composer plus compact. */
+@media (max-width: 768px) {
+  .chat-message__bubble {
+    max-width: 92%;
+    padding: 0.625rem 0.875rem;
+    border-radius: 1rem;
+  }
+
+  .chat-message--assistant .chat-message__bubble {
+    max-width: 100%;
+    padding: 0.25rem 0;
+    border-radius: 0;
+  }
+
+  .chat-window__composer {
+    padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+    border-radius: 1.25rem;
+  }
+
+  .chat-window__textarea {
+    /* 16px minimum : évite le zoom automatique d'iOS au focus. */
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-window__inner {
+    padding: 0;
+  }
+
+  .chat-message__bubble {
+    max-width: 100%;
+  }
+
+  .chat-window__intro {
+    padding: 0 0.5rem;
+  }
 }
 </style>
