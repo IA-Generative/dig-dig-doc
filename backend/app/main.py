@@ -8,6 +8,7 @@ from app.config import KeycloakSettings
 from app.mcp.auth import BearerTokenAuthMiddleware
 from app.mcp.helper_server import mcp_server as helper_mcp_server
 from app.mcp.server import mcp_server
+from app.routers.admin_document_templates import router as admin_document_templates_router
 from app.routers.admin_reports import router as admin_reports_router
 from app.routers.admin_stats import router as admin_stats_router
 from app.routers.admin_tasks import router as admin_tasks_router
@@ -139,6 +140,7 @@ app.include_router(admin_stats_router, prefix="/api")
 app.include_router(admin_tasks_router, prefix="/api")
 app.include_router(cgu_public_router, prefix="/api")
 app.include_router(cgu_admin_router, prefix="/api")
+app.include_router(admin_document_templates_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")

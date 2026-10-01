@@ -32,6 +32,7 @@ from .document_page import (
     PredictionValidation,
     PredictionValidationStatus,
 )
+from .document_template import DocumentTemplate, DocumentTemplateVersion
 from .dossier import (
     Dossier,
     DossierDocument,
@@ -66,6 +67,8 @@ from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
+    "DocumentTemplate",
+    "DocumentTemplateVersion",
     "DossierNote",
     "DossierNoteVersion",
     "AnalysisProposal",
