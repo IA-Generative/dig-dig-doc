@@ -495,6 +495,9 @@ defineExpose({ resizeTextarea });
 }
 
 .chat-message__sources ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
   margin: 0.5rem 0 0;
   padding: 0;
   list-style: none;
@@ -504,7 +507,7 @@ defineExpose({ resizeTextarea });
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
-  padding: 0.25rem 0;
+  padding: 0;
   font-size: 0.8rem;
   color: var(--text-mention-grey);
 }
