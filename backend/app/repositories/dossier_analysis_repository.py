@@ -326,6 +326,8 @@ class DossierAnalysisRepository:
         source_id: uuid.UUID | None = None,
         restored_from_version_id: uuid.UUID | None = None,
         origin_version_id: uuid.UUID | None = None,
+        validation_status: str | None = None,
+        bounding_box_id: uuid.UUID | None = None,
         commit: bool = True,
     ) -> AnalysisElementVersion:
         """Ajoute une version à un élément et met à jour ses pointeurs.
@@ -363,6 +365,8 @@ class DossierAnalysisRepository:
             source_id=source_id,
             restored_from_version_id=restored_from_version_id,
             origin_version_id=origin_version_id,
+            validation_status=validation_status,
+            bounding_box_id=bounding_box_id,
         )
         self.db.add(version)
         await self.db.flush()

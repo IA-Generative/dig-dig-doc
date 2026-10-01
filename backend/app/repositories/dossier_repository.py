@@ -23,7 +23,6 @@ from app.models.document_page import (
     DocumentPage,
     DocumentPrediction,
     PredictionKind,
-    PredictionValidation,
     PredictionValidationStatus,
     prediction_bounding_boxes,
     prediction_pages,
@@ -38,6 +37,7 @@ from app.models.dossier import (
     SuggestionStatus,
     TextExtractionStatus,
 )
+from app.models.dossier_analysis import AnalysisElement, AnalysisElementVersion
 from app.models.execution_log import ExecutionLog, ExecutionLogLevel
 from app.models.feedback import (
     Feedback,
@@ -52,6 +52,16 @@ from app.models.summary import (
 )
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
+from app.services.prediction_validation import record_validation
+
+
+def _validations_load(parent, *, chained: bool = False):
+    """Chargement de l'historique de validation d'une prédiction (issue #120) :
+    ses éléments d'analyse, leurs versions et la zone corrigée de chacune.
+    ``parent`` est le chargement de la prédiction ; avec ``chained``, il porte
+    déjà le chargement de ses éléments d'analyse."""
+    elements = parent if chained else parent.selectinload(DocumentPrediction.analysis_elements)
+    return elements.selectinload(AnalysisElement.versions).selectinload(AnalysisElementVersion.bounding_box)
 
 
 class DossierRepository:
@@ -68,9 +78,7 @@ class DossierRepository:
                 selectinload(Dossier.execution_steps).selectinload(ExecutionStep.logs),
                 pages_load.selectinload(DocumentPage.bounding_boxes),
                 predictions_load.selectinload(DocumentPrediction.bounding_boxes),
-                predictions_load.selectinload(DocumentPrediction.validations).selectinload(
-                    PredictionValidation.bounding_box
-                ),
+                _validations_load(predictions_load),
                 # Résumés du dossier + résumés de chaque document (issue #52).
                 selectinload(Dossier.summaries),
                 selectinload(Dossier.documents).selectinload(DossierDocument.summaries),
@@ -483,9 +491,7 @@ class DossierRepository:
         return (
             pages_load.selectinload(DocumentPage.bounding_boxes),
             predictions_load.selectinload(DocumentPrediction.bounding_boxes),
-            predictions_load.selectinload(DocumentPrediction.validations).selectinload(
-                PredictionValidation.bounding_box
-            ),
+            _validations_load(predictions_load),
             selectinload(DossierDocument.summaries),
         )
 
@@ -543,9 +549,7 @@ class DossierRepository:
         return (
             selectinload(DocumentPage.bounding_boxes),
             predictions_load.selectinload(DocumentPrediction.bounding_boxes),
-            predictions_load.selectinload(DocumentPrediction.validations).selectinload(
-                PredictionValidation.bounding_box
-            ),
+            _validations_load(predictions_load),
         )
 
     async def get_page(self, document_id: uuid.UUID, page_id: uuid.UUID) -> DocumentPage | None:
@@ -610,7 +614,6 @@ class DossierRepository:
             confidence=confidence,
             label_definition_id=label_definition_id,
             entity_definition_id=entity_definition_id,
-            validations=[],
         )
         self.db.add(prediction)
         await self.db.flush()
@@ -632,7 +635,7 @@ class DossierRepository:
         return (
             selectinload(DocumentPrediction.pages),
             selectinload(DocumentPrediction.bounding_boxes),
-            selectinload(DocumentPrediction.validations).selectinload(PredictionValidation.bounding_box),
+            _validations_load(selectinload(DocumentPrediction.analysis_elements), chained=True),
         )
 
     async def get_prediction(self, page_id: uuid.UUID, prediction_id: uuid.UUID) -> DocumentPrediction | None:
@@ -659,29 +662,27 @@ class DossierRepository:
     async def add_prediction_validation(
         self,
         prediction: DocumentPrediction,
+        page: DocumentPage,
         *,
         validator_user_id: str,
         status: PredictionValidationStatus,
         corrected_value: str | None,
         bounding_box: dict | None,
     ) -> DocumentPrediction:
-        # Toujours une nouvelle BoundingBox, jamais une mutation de celle de
-        # la prédiction d'origine (ou d'une validation précédente) : l'idée
-        # est de garder l'historique intact, comme le reste de
-        # PredictionValidation. Rattachée à la première page de la
-        # prédiction (`prediction.pages` doit déjà être chargée : cette
-        # méthode reçoit toujours un objet issu de get_prediction/_by_id).
-        bbox = BoundingBox(document_page_id=prediction.pages[0].id, **bounding_box) if bounding_box else None
-        self.db.add(
-            PredictionValidation(
-                prediction_id=prediction.id,
-                validator_user_id=validator_user_id,
-                status=status,
-                corrected_value=corrected_value,
-                bounding_box=bbox,
-            )
+        """Enregistre la décision de l'instructeur dans l'analyse de dossier
+        (issue #120) : une version d'instructeur de l'élément qui porte la
+        prédiction. ``prediction.pages`` doit déjà être chargée (la méthode
+        reçoit toujours un objet issu de get_prediction/_by_id). Lève
+        AnalysisFrozenError si l'analyse est figée."""
+        await record_validation(
+            DossierAnalysisRepository(self.db),
+            prediction=prediction,
+            page=page,
+            user_id=validator_user_id,
+            status=status,
+            corrected_value=corrected_value,
+            bounding_box=bounding_box,
         )
-        await self.db.commit()
         return await self.get_prediction_by_id(prediction.id)
 
     async def launch(self, dossier: Dossier, analyse: Analyse) -> None:
