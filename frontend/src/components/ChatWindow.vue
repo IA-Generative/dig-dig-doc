@@ -47,6 +47,8 @@ export interface ChatWindowSource {
   id: string;
   excerpt?: string | null;
   pages?: { id: string; pageNumber: number }[];
+  dossierDocumentId?: string | null;
+  boundingBoxes?: { id: string; pageId: string; xMin: number; yMin: number; xMax: number; yMax: number }[];
 }
 
 const props = withDefaults(

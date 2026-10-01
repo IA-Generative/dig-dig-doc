@@ -32,7 +32,14 @@ function mapSource(api: any): MessageSource {
     executionStepId: api.execution_step_id,
     excerpt: api.excerpt,
     pages: (api.pages ?? []).map((p: any) => ({ id: p.id, pageNumber: p.page_number })),
-    boundingBoxes: (api.bounding_boxes ?? []).map((b: any) => ({ id: b.id })),
+    boundingBoxes: (api.bounding_boxes ?? []).map((b: any) => ({
+      id: b.id,
+      pageId: b.document_page_id,
+      xMin: b.x_min,
+      yMin: b.y_min,
+      xMax: b.x_max,
+      yMax: b.y_max,
+    })),
   };
 }
 
