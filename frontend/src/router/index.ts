@@ -8,6 +8,7 @@ import AnalyseClassificationTab from "@/pages/analyse/AnalyseClassificationTab.v
 import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
 import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
+import DossierAnalysisPage from "@/pages/DossierAnalysisPage.vue";
 import DossierDetailPage from "@/pages/DossierDetailPage.vue";
 import DossiersPage from "@/pages/DossiersPage.vue";
 import ProfilePage from "@/pages/ProfilePage.vue";
@@ -44,6 +45,7 @@ export const router = createRouter({
     },
     { path: "/dossiers", name: "dossiers", component: DossiersPage },
     { path: "/dossiers/:id", name: "dossier-detail", component: DossierDetailPage },
+    { path: "/dossiers/:id/analyse", name: "dossier-analysis", component: DossierAnalysisPage },
     { path: "/profile", name: "profile", component: ProfilePage },
     {
       path: "/administration",
