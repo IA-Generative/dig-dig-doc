@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import ModelPicker from "@/components/ModelPicker.vue";
 import ChatWindow from "@/components/ChatWindow.vue";
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
@@ -225,14 +226,6 @@ async function onDeleteConversation() {
         </p>
       </div>
       <div class="dossier-detail__header-actions">
-        <DsfrSelect
-          :model-value="conversation?.model ?? ''"
-          label="Modèle"
-          hide-label
-          :options="modelOptions"
-          class="dossier-detail__model-select"
-          @update:model-value="onModelChange"
-        />
         <DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" />
         <button
           type="button"
@@ -318,6 +311,15 @@ async function onDeleteConversation() {
       placeholder="Alimentez l'analyse avec un message..."
       @submit="onChatSubmit"
     >
+      <template #header>
+        <ModelPicker
+          :model-value="conversation?.model ?? ''"
+          :options="modelOptions"
+          label="Modèle"
+          @update:model-value="onModelChange"
+        />
+      </template>
+
       <template #message-actions="{ message }">
         <button
           type="button"
@@ -436,14 +438,6 @@ async function onDeleteConversation() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-}
-
-.dossier-detail__model-select {
-  min-width: 10rem;
-}
-
-.dossier-detail__model-select :deep(.fr-select-group) {
-  margin: 0;
 }
 
 .dossier-detail__icon-button {
