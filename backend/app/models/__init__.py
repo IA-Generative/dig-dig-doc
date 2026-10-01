@@ -55,6 +55,7 @@ from .dossier_analysis import (
     ElementVersionOrigin,
 )
 from .dossier_ephemere import DossierEphemere
+from .dossier_note import DossierNote, DossierNoteVersion
 from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
@@ -64,6 +65,8 @@ from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
+    "DossierNote",
+    "DossierNoteVersion",
     "AnalysisProposal",
     "AnalysisProposalEvent",
     "ProposalEventKind",

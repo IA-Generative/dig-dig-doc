@@ -10,6 +10,7 @@ import { computed, onMounted, ref } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import ElementHistoryModal from "@/components/analysis/ElementHistoryModal.vue";
+import NotesPanel from "@/components/analysis/NotesPanel.vue";
 import ProposalCard from "@/components/analysis/ProposalCard.vue";
 import MarkdownText from "@/components/MarkdownText.vue";
 import { useDossierAnalysis } from "@/composables/useDossierAnalysis";
@@ -41,6 +42,7 @@ const {
   canEdit,
   load,
   select,
+  refresh,
   fetchVersions,
   addVersion,
   restoreVersion,
@@ -346,6 +348,8 @@ const statusLabel: Record<string, string> = { brouillon: "Brouillon", validée: 
         </form>
       </details>
     </template>
+
+    <NotesPanel :dossier-id="dossierId" :can-propose="!!analysis && canEdit" @analysis-finished="refresh" />
 
     <ElementHistoryModal
       :element="historyElement"

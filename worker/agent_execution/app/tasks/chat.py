@@ -47,6 +47,28 @@ def _last_user_message_id(conversation: dict) -> str | None:
     return None
 
 
+# Taille maximale des notes injectées dans le prompt du chat (les plus récentes d'abord).
+NOTES_CONTEXT_MAX_CHARS = 6000
+
+
+def _notes_for_prompt(notes: list[dict]) -> list[str]:
+    """Contenu des notes internes, la plus récente d'abord, borné en taille."""
+    selected: list[str] = []
+    used = 0
+    for note in notes:
+        content = (note.get("content") or "").strip()
+        if not content:
+            continue
+        if used + len(content) > NOTES_CONTEXT_MAX_CHARS:
+            content = content[: max(0, NOTES_CONTEXT_MAX_CHARS - used)]
+            if content:
+                selected.append(content + "…")
+            break
+        selected.append(content)
+        used += len(content)
+    return selected
+
+
 def _extract_syntheses(dossier: dict) -> list[dict]:
     """Récupère les synthèses existantes (output des agents terminés)
     depuis les execution_steps du dossier."""
@@ -92,8 +114,9 @@ def run_chat(self, conversation_id: str, dossier_id: str) -> None:
             )
             tools = AgentTools(dossier, analysis=proposer)
 
-            # 3. Récupère les synthèses existantes.
+            # 3. Récupère les synthèses existantes et les notes internes du dossier.
             syntheses = _extract_syntheses(dossier)
+            notes = _notes_for_prompt(api_client.list_dossier_notes(client, dossier_id))
 
             # Callback pour streamer les événements au frontend : chaque
             # tool_call/tool_result est déposé en base (chat_events) et
@@ -124,6 +147,7 @@ def run_chat(self, conversation_id: str, dossier_id: str) -> None:
                 syntheses=syntheses,
                 model=model,
                 on_event=on_event,
+                notes=notes,
             )
 
             # 5. Dépose le message assistant final (avec sources).
