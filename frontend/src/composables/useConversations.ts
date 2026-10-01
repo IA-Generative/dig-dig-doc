@@ -64,6 +64,12 @@ function mapConversation(api: any): Conversation {
 export function useConversations(dossierId: string) {
   const conversation = ref<Conversation | undefined>(undefined);
 
+  // GET /conversations est paginé ({ items, total, ... }) : on lit `items`.
+  const listConversations = async (): Promise<any[]> => {
+    const data = await apiFetch<{ items: any[] }>(`/api/dossiers/${dossierId}/conversations?page_size=100`);
+    return data.items;
+  };
+
   // Garde contre les appels concurrents : si ensureConversation() est
   // appelé plusieurs fois avant la résolution du premier appel (ex:
   // onMounted + sendMessage), on réutilise la même promesse au lieu de
@@ -75,7 +81,7 @@ export function useConversations(dossierId: string) {
     if (pending) return pending;
 
     pending = (async () => {
-      const existing = await apiFetch<any[]>(`/api/dossiers/${dossierId}/conversations`);
+      const existing = await listConversations();
       if (existing.length > 0) {
         conversation.value = mapConversation(existing[0]);
       } else {
@@ -132,7 +138,7 @@ export function useConversations(dossierId: string) {
   const refreshConversation = async () => {
     const current = conversation.value;
     if (!current) return;
-    const list = await apiFetch<any[]>(`/api/dossiers/${dossierId}/conversations`);
+    const list = await listConversations();
     const found = list.find((c: any) => c.id === current.id);
     if (found) conversation.value = mapConversation(found);
   };
