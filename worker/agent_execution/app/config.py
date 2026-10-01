@@ -27,7 +27,26 @@ class WorkerSettings(BaseSettings):
     LLM_MODEL: str = "llama-3.3-70b-instruct"
     # Taille de batch pour l'extraction d'entités : nombre de pages
     # envoyées en un seul appel LLM (compromis contexte/coût).
+    # (Mode « legacy » uniquement, voir EXTRACTION_MODE.)
     EXTRACTION_BATCH_SIZE: int = 5
+
+    # Extraction d'entités (issue #126) :
+    # - "by_document" : un appel par (lot de pages d'un même document × groupe
+    #   de définitions) ; les lots sont définis par un budget de jetons.
+    # - "legacy" : l'ancien comportement (lots de EXTRACTION_BATCH_SIZE pages
+    #   sur tout le dossier, toutes les définitions dans un seul appel), à
+    #   garder le temps de valider le nouveau découpage sur de vrais dossiers.
+    EXTRACTION_MODE: str = "by_document"
+    # Budget total d'un appel (texte des pages + définitions + prompt + réponse),
+    # en jetons estimés (un jeton ~ 4 caractères).
+    EXTRACTION_MAX_TOKENS: int = 8000
+    # Part du budget réservée à la réponse du LLM.
+    EXTRACTION_RESERVED_OUTPUT_TOKENS: int = 1500
+    # Pages communes entre deux lots consécutifs d'un document (pour ne pas
+    # couper une entité qui s'étend sur deux lots).
+    EXTRACTION_OVERLAP_PAGES: int = 1
+    # Taille des groupes de définitions d'entités (0 : un seul groupe).
+    EXTRACTION_DEFINITIONS_PER_GROUP: int = 8
 
     # Nombre maximum d'itérations du graphe LangGraph (pour éviter les
     # boucles infinies).

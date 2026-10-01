@@ -282,7 +282,10 @@ class _UnitBackend:
     """Backend simulé qui accepte les unités de calcul et enregistre ce que le
     worker lui envoie."""
 
-    def __init__(self, *, with_analysis: bool = True, units_unavailable: bool = False) -> None:
+    def __init__(
+        self, *, with_analysis: bool = True, units_unavailable: bool = False, dossier: dict | None = None
+    ) -> None:
+        self.dossier = dossier
         self.with_analysis = with_analysis
         self.units_unavailable = units_unavailable
         self.declared: list[dict] = []
@@ -292,7 +295,7 @@ class _UnitBackend:
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path.endswith("/dossiers/dossier-1"):
-            return httpx.Response(200, json=_make_dossier_response())
+            return httpx.Response(200, json=self.dossier or _make_dossier_response())
         if path.endswith("/analyses/analyse-1"):
             return httpx.Response(200, json=_make_analyse_response())
         if path.endswith("/analysis-units"):
@@ -403,6 +406,8 @@ def _stub_extraction(monkeypatch, *, fail: bool = False) -> None:
 
 
 def test_extraction_declares_one_unit_per_batch_and_attaches_predictions(monkeypatch) -> None:
+    # Mode « legacy » : l'ancien découpage (lots de 5 pages sur tout le dossier).
+    monkeypatch.setattr(extraction_mod.settings, "EXTRACTION_MODE", "legacy")
     backend = _UnitBackend()
     backend.install(monkeypatch)
     _stub_extraction(monkeypatch)
@@ -441,3 +446,256 @@ def test_extraction_works_without_analysis(monkeypatch) -> None:
 
     assert len(backend.predictions) == 1
     assert "unit_id" not in backend.predictions[0]
+
+
+# --- Extraction par document, groupes de définitions et empreintes (issue #126) ---
+
+
+def _two_documents_dossier(pages_per_document: int = 2, content: str = "texte") -> dict:
+    """Deux documents dont les pages portent les MÊMES numéros (1, 2...) : les
+    numéros de page sont propres à chaque document."""
+    dossier = _make_dossier_response()
+    dossier["documents"] = [
+        {
+            "id": f"doc-{d}",
+            "name": f"doc{d}.pdf",
+            "pages": [
+                {
+                    "id": f"doc{d}-page-{n}",
+                    "page_number": n,
+                    "content": f"{content} d{d}p{n}",
+                    "screenshot_key": None,
+                }
+                for n in range(1, pages_per_document + 1)
+            ],
+        }
+        for d in (1, 2)
+    ]
+    return dossier
+
+
+def _entity_defs(count: int) -> list[dict]:
+    return [{"id": f"entity-{i}", "name": f"e{i}", "definition": f"d{i}", "type": "texte"} for i in range(count)]
+
+
+class _RecordingLLM:
+    """LLM d'extraction simulé : enregistre chaque appel et renvoie, pour
+    chaque définition du groupe, une entité située sur la première page du lot."""
+
+    def __init__(self, same_value: bool = False) -> None:
+        self.calls: list[dict] = []
+        self.same_value = same_value
+
+    def __call__(self, **kwargs) -> ExtractionResult:
+        pages = kwargs["pages"]
+        names = [d["name"] for d in kwargs["entity_definitions"]]
+        self.calls.append({"pages": [p["page_number"] for p in pages], "definitions": names})
+        return ExtractionResult(
+            entities=[
+                EntityValue(
+                    entity_name=name,
+                    value="valeur" if self.same_value else f"{name}@{pages[0]['page_number']}",
+                    confidence=0.9,
+                    page_numbers=[pages[0]["page_number"]],
+                )
+                for name in names
+            ]
+        )
+
+
+def _setup_extraction(monkeypatch, backend: _UnitBackend, definitions: list[dict], **settings) -> _RecordingLLM:
+    backend.install(monkeypatch)
+    analyse = _make_analyse_response()
+    analyse["extraction"]["entities"] = definitions
+    original = backend.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/analyses/analyse-1"):
+            return httpx.Response(200, json=analyse)
+        return original(request)
+
+    monkeypatch.setattr(
+        api_client,
+        "get_client",
+        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+    )
+    llm = _RecordingLLM(same_value=settings.pop("same_value", False))
+    monkeypatch.setattr(extraction_mod.llm, "extract_entities_batch", llm)
+    monkeypatch.setattr(extraction_mod.settings, "EXTRACTION_MODE", "by_document")
+    for name, value in settings.items():
+        monkeypatch.setattr(extraction_mod.settings, name, value)
+    return llm
+
+
+def test_extraction_never_mixes_two_documents_in_a_lot(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    llm = _setup_extraction(monkeypatch, backend, _entity_defs(1), EXTRACTION_DEFINITIONS_PER_GROUP=8)
+
+    extract_dossier_entities.run("dossier-1")
+
+    # Un lot par document (2 pages chacun), jamais un lot de 4 pages.
+    assert [c["pages"] for c in llm.calls] == [[1, 2], [1, 2]]
+    assert [u["description"]["document_id"] for u in backend.declared] == ["doc-1", "doc-2"]
+    assert [u["description"]["page_ids"] for u in backend.declared] == [
+        ["doc1-page-1", "doc1-page-2"],
+        ["doc2-page-1", "doc2-page-2"],
+    ]
+
+
+def test_entities_are_attached_to_the_page_of_their_own_document(monkeypatch) -> None:
+    """Les deux documents ont une page 1 : la prédiction du second ne doit pas
+    être rattachée à la page 1 du premier (les numéros de page sont par document)."""
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    _setup_extraction(monkeypatch, backend, _entity_defs(1))
+    page_posts: list[str] = []
+    original = backend.handler
+
+    def spy(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/predictions"):
+            page_posts.append(request.url.path.split("/")[-2])
+        return original(request)
+
+    backend.handler = spy  # type: ignore[method-assign]
+    backend.install(monkeypatch)
+    analyse = _make_analyse_response()
+    analyse["extraction"]["entities"] = _entity_defs(1)
+    inner = backend.handler
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/analyses/analyse-1"):
+            return httpx.Response(200, json=analyse)
+        return inner(request)
+
+    monkeypatch.setattr(
+        api_client,
+        "get_client",
+        lambda: httpx.Client(base_url="http://backend/api/internal", transport=httpx.MockTransport(handler)),
+    )
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert page_posts == ["doc1-page-1", "doc2-page-1"]
+
+
+def test_definitions_are_split_into_fixed_size_groups_one_call_each(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier(pages_per_document=1))
+    llm = _setup_extraction(monkeypatch, backend, _entity_defs(5), EXTRACTION_DEFINITIONS_PER_GROUP=2)
+
+    extract_dossier_entities.run("dossier-1")
+
+    # 2 documents × 3 groupes (2 + 2 + 1 définitions).
+    assert [c["definitions"] for c in llm.calls] == [["e0", "e1"], ["e2", "e3"], ["e4"]] * 2
+    assert len(backend.declared) == 6
+    assert [u["description"]["group"] for u in backend.declared] == [0, 1, 2, 0, 1, 2]
+    assert backend.declared[0]["description"]["definition_ids"] == ["entity-0", "entity-1"]
+
+
+def test_lots_follow_the_token_budget_with_overlap_and_duplicates_are_merged(monkeypatch) -> None:
+    dossier = _two_documents_dossier(pages_per_document=4, content="m" * 800)
+    dossier["documents"] = dossier["documents"][:1]
+    backend = _UnitBackend(dossier=dossier)
+    # Budget serré : ~2 pages par lot (chaque page ~200 jetons) ; recouvrement d'une page.
+    llm = _setup_extraction(
+        monkeypatch,
+        backend,
+        _entity_defs(1),
+        EXTRACTION_MAX_TOKENS=2000,
+        EXTRACTION_RESERVED_OUTPUT_TOKENS=1300,
+        EXTRACTION_OVERLAP_PAGES=1,
+        same_value=True,
+    )
+
+    extract_dossier_entities.run("dossier-1")
+
+    assert len(llm.calls) > 1
+    assert llm.calls[0]["pages"][-1] == llm.calls[1]["pages"][0]  # recouvrement
+    assert {p for call in llm.calls for p in call["pages"]} == {1, 2, 3, 4}  # toutes les pages couvertes
+    # Même définition et même valeur dans tous les lots : une seule entité déposée.
+    assert len(backend.predictions) == 1
+    # Mais chaque lot reste une unité (même sans entité), terminée.
+    assert len(backend.declared) == len(llm.calls)
+    assert len(backend.completed) == len(llm.calls)
+
+
+def test_each_unit_carries_the_fingerprint_of_its_inputs(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    _setup_extraction(monkeypatch, backend, _entity_defs(1))
+
+    extract_dossier_entities.run("dossier-1")
+
+    fingerprints = [u["input_fingerprint"] for u in backend.declared]
+    assert all(len(f) == 64 for f in fingerprints)
+    # Deux documents au texte différent : deux empreintes différentes.
+    assert fingerprints[0] != fingerprints[1]
+
+
+def test_an_unchanged_unit_keeps_the_same_fingerprint_across_runs(monkeypatch) -> None:
+    runs = []
+    for _ in range(2):
+        backend = _UnitBackend(dossier=_two_documents_dossier())
+        _setup_extraction(monkeypatch, backend, _entity_defs(1))
+        extract_dossier_entities.run("dossier-1")
+        runs.append([u["input_fingerprint"] for u in backend.declared])
+    assert runs[0] == runs[1]
+
+
+def test_changing_one_document_only_changes_its_own_fingerprints(monkeypatch) -> None:
+    before = _UnitBackend(dossier=_two_documents_dossier())
+    _setup_extraction(monkeypatch, before, _entity_defs(1))
+    extract_dossier_entities.run("dossier-1")
+
+    changed = _two_documents_dossier()
+    changed["documents"][1]["pages"][0]["content"] = "un texte différent"
+    after = _UnitBackend(dossier=changed)
+    _setup_extraction(monkeypatch, after, _entity_defs(1))
+    extract_dossier_entities.run("dossier-1")
+
+    old = [u["input_fingerprint"] for u in before.declared]
+    new = [u["input_fingerprint"] for u in after.declared]
+    assert new[0] == old[0]  # document inchangé : même empreinte
+    assert new[1] != old[1]  # document modifié : recalcul
+
+
+def test_changing_one_definition_only_changes_the_fingerprints_of_its_group(monkeypatch) -> None:
+    definitions = _entity_defs(4)
+    before = _UnitBackend(dossier=_two_documents_dossier(pages_per_document=1))
+    _setup_extraction(monkeypatch, before, definitions, EXTRACTION_DEFINITIONS_PER_GROUP=2)
+    extract_dossier_entities.run("dossier-1")
+
+    edited = [dict(d) for d in definitions]
+    edited[3]["definition"] = "nouvelle définition"
+    after = _UnitBackend(dossier=_two_documents_dossier(pages_per_document=1))
+    _setup_extraction(monkeypatch, after, edited, EXTRACTION_DEFINITIONS_PER_GROUP=2)
+    extract_dossier_entities.run("dossier-1")
+
+    old = [u["input_fingerprint"] for u in before.declared]
+    new = [u["input_fingerprint"] for u in after.declared]
+    # Par document : groupe 0 inchangé, groupe 1 (qui contient e3) modifié.
+    assert [n == o for n, o in zip(new, old, strict=True)] == [True, False, True, False]
+
+
+def test_legacy_mode_restores_the_previous_behaviour(monkeypatch) -> None:
+    backend = _UnitBackend(dossier=_two_documents_dossier())
+    llm = _setup_extraction(monkeypatch, backend, _entity_defs(5))
+    monkeypatch.setattr(extraction_mod.settings, "EXTRACTION_MODE", "legacy")
+    monkeypatch.setattr(extraction_mod.settings, "EXTRACTION_BATCH_SIZE", 3)
+
+    extract_dossier_entities.run("dossier-1")
+
+    # 4 pages au total, lots de 3 sur tout le dossier, toutes les définitions dans un seul appel.
+    assert [len(c["pages"]) for c in llm.calls] == [3, 1]
+    assert all(len(c["definitions"]) == 5 for c in llm.calls)
+    assert all("group" not in u["description"] for u in backend.declared)
+    # L'empreinte est calculée aussi dans ce mode.
+    assert all(len(u["input_fingerprint"]) == 64 for u in backend.declared)
+
+
+def test_classification_units_carry_a_fingerprint(monkeypatch) -> None:
+    backend = _UnitBackend()
+    backend.install(monkeypatch)
+    _stub_classification(monkeypatch)
+
+    classify_dossier.run("dossier-1")
+
+    fingerprints = [u["input_fingerprint"] for u in backend.declared]
+    assert len(fingerprints) == 2 and fingerprints[0] != fingerprints[1]
