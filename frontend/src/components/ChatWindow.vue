@@ -29,7 +29,7 @@
  * - `submit` : émis avec le texte saisi quand l'utilisateur envoie.
  * - `attach-files` : émis avec les fichiers sélectionnés (si showFileAttach).
  */
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 
 import MarkdownText from "@/components/MarkdownText.vue";
 import type { StreamEvent } from "@/composables/useChatStream";
@@ -58,6 +58,10 @@ const props = withDefaults(
     introText?: string;
     placeholder?: string;
     showFileAttach?: boolean;
+    /** Des messages plus anciens existent côté serveur (pagination par curseur). */
+    hasMore?: boolean;
+    /** Une page de messages plus anciens est en cours de chargement. */
+    loadingMore?: boolean;
   }>(),
   {
     streamEvents: () => [],
@@ -66,12 +70,16 @@ const props = withDefaults(
     introText: "",
     placeholder: "Écrivez votre message...",
     showFileAttach: false,
+    hasMore: false,
+    loadingMore: false,
   },
 );
 
 const emit = defineEmits<{
   submit: [content: string];
   "attach-files": [files: File[]];
+  /** Le haut de la discussion est atteint : charger les messages plus anciens. */
+  "load-more": [];
 }>();
 
 const draft = ref("");
@@ -79,13 +87,73 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const messagesEndRef = ref<HTMLElement | null>(null);
 
+const topSentinelRef = ref<HTMLElement | null>(null);
+
+// Conteneur qui défile réellement (la zone de messages ou, selon la mise en
+// page, un ancêtre / la page) : nécessaire pour garder la position de lecture
+// quand des messages plus anciens sont insérés au-dessus.
+function getScrollParent(el: HTMLElement | null): HTMLElement {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return (document.scrollingElement as HTMLElement) ?? document.documentElement;
+}
+
+let previousLastId: string | undefined;
+let heightBeforePrepend: { scroller: HTMLElement; scrollHeight: number; scrollTop: number } | null = null;
+
 watch(
   () => props.messages,
-  () => {
-    nextTick(() => messagesEndRef.value?.scrollIntoView({ behavior: "smooth" }));
+  (messages) => {
+    const lastId = messages[messages.length - 1]?.id;
+    const appended = lastId !== previousLastId;
+    previousLastId = lastId;
+    nextTick(() => {
+      if (heightBeforePrepend) {
+        // Messages plus anciens insérés en haut : on conserve la position.
+        const { scroller, scrollHeight, scrollTop } = heightBeforePrepend;
+        heightBeforePrepend = null;
+        scroller.scrollTop = scrollTop + (scroller.scrollHeight - scrollHeight);
+      } else if (appended) {
+        messagesEndRef.value?.scrollIntoView({ behavior: "smooth" });
+      }
+    });
   },
   { deep: true },
 );
+
+// Défilement infini vers le haut : quand le repère en tête de liste devient
+// visible, on demande la page de messages précédente. L'observateur est
+// recréé à chaque fin de chargement : si le repère est encore visible (peu
+// de contenu), la page suivante se charge sans attendre un nouveau scroll.
+let observer: IntersectionObserver | undefined;
+
+function requestOlderMessages() {
+  if (!props.hasMore || props.loadingMore) return;
+  const scroller = getScrollParent(topSentinelRef.value);
+  heightBeforePrepend = { scroller, scrollHeight: scroller.scrollHeight, scrollTop: scroller.scrollTop };
+  emit("load-more");
+}
+
+watch(
+  [topSentinelRef, () => props.hasMore, () => props.loadingMore],
+  ([sentinel, hasMore, loadingMore]) => {
+    observer?.disconnect();
+    observer = undefined;
+    if (!sentinel || !hasMore || loadingMore || typeof IntersectionObserver === "undefined") return;
+    observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) requestOlderMessages();
+    });
+    observer.observe(sentinel);
+  },
+  { flush: "post" },
+);
+
+onBeforeUnmount(() => observer?.disconnect());
+
 watch(
   () => props.streamEvents,
   () => {
@@ -133,6 +201,9 @@ defineExpose({ resizeTextarea });
 
     <div v-else class="chat-window__messages">
       <div class="chat-window__inner">
+        <div v-if="hasMore" ref="topSentinelRef" class="chat-window__sentinel" aria-live="polite">
+          <span v-if="loadingMore">Chargement des messages précédents…</span>
+        </div>
         <div
           v-for="message in messages"
           :key="message.id"
@@ -280,9 +351,18 @@ defineExpose({ resizeTextarea });
   max-width: 28rem;
 }
 
+.chat-window__sentinel {
+  min-height: 1.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-mention-grey);
+}
+
 .chat-window__messages {
   flex: 1;
   overflow-y: auto;
+  /* Position de lecture restaurée à la main à l'insertion des anciens messages. */
+  overflow-anchor: none;
   padding-top: 1rem;
 }
 

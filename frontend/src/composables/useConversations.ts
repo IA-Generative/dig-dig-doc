@@ -47,6 +47,8 @@ function mapMessage(api: any): Message {
   };
 }
 
+const MESSAGES_PAGE_SIZE = 20;
+
 function mapConversation(api: any): Conversation {
   return {
     id: api.id,
@@ -54,7 +56,6 @@ function mapConversation(api: any): Conversation {
     userId: api.user_id,
     createdAt: api.created_at,
     model: api.model,
-    messages: api.messages.map(mapMessage),
   };
 }
 
@@ -63,6 +64,23 @@ function mapConversation(api: any): Conversation {
 // qui sont des stores partagés par toute l'application.
 export function useConversations(dossierId: string) {
   const conversation = ref<Conversation | undefined>(undefined);
+  // Messages chargés par pages (curseur) : les plus récents d'abord, les
+  // plus anciens à la demande quand l'utilisateur remonte dans la discussion.
+  const messages = ref<Message[]>([]);
+  const hasMoreMessages = ref(false);
+  const isLoadingMore = ref(false);
+
+  const messagesUrl = (conversationId: string) =>
+    `/api/dossiers/${dossierId}/conversations/${conversationId}/messages`;
+
+  const fetchMessagesPage = async (conversationId: string, before?: string) => {
+    const query = new URLSearchParams({ limit: String(MESSAGES_PAGE_SIZE) });
+    if (before) query.set("before", before);
+    const data = await apiFetch<{ items: any[]; has_more: boolean }>(
+      `${messagesUrl(conversationId)}?${query.toString()}`,
+    );
+    return { items: data.items.map(mapMessage), hasMore: data.has_more };
+  };
 
   // GET /conversations est paginé ({ items, total, ... }) : on lit `items`.
   const listConversations = async (): Promise<any[]> => {
@@ -88,6 +106,9 @@ export function useConversations(dossierId: string) {
         const created = await apiFetch<any>(`/api/dossiers/${dossierId}/conversations`, { method: "POST" });
         conversation.value = mapConversation(created);
       }
+      const page = await fetchMessagesPage(conversation.value!.id);
+      messages.value = page.items;
+      hasMoreMessages.value = page.hasMore;
       return conversation.value!;
     })().finally(() => {
       pending = undefined;
@@ -98,11 +119,26 @@ export function useConversations(dossierId: string) {
 
   const sendMessage = async (content: string) => {
     const current = await ensureConversation();
-    const data = await apiFetch<any>(`/api/dossiers/${dossierId}/conversations/${current.id}/messages`, {
+    const data = await apiFetch<any>(messagesUrl(current.id), {
       method: "POST",
       body: JSON.stringify({ content }),
     });
-    conversation.value = mapConversation(data);
+    messages.value.push(mapMessage(data));
+  };
+
+  // Charge la page de messages plus anciens (défilement vers le haut).
+  const loadOlderMessages = async () => {
+    const current = conversation.value;
+    const oldest = messages.value[0];
+    if (!current || !oldest || !hasMoreMessages.value || isLoadingMore.value) return;
+    isLoadingMore.value = true;
+    try {
+      const page = await fetchMessagesPage(current.id, oldest.id);
+      messages.value = [...page.items, ...messages.value];
+      hasMoreMessages.value = page.hasMore;
+    } finally {
+      isLoadingMore.value = false;
+    }
   };
 
   // SSE : s'abonne au flux d'événements de chat (tool_call, tool_result,
@@ -133,14 +169,17 @@ export function useConversations(dossierId: string) {
     return () => eventSource.close();
   };
 
-  // Recharge la conversation depuis l'API (pour récupérer le message
-  // assistant final avec ses sources après la fin du streaming).
+  // Recharge la page la plus récente (message assistant final avec ses
+  // sources, après la fin du streaming) en conservant les pages plus
+  // anciennes déjà chargées par le défilement.
   const refreshConversation = async () => {
     const current = conversation.value;
     if (!current) return;
-    const list = await listConversations();
-    const found = list.find((c: any) => c.id === current.id);
-    if (found) conversation.value = mapConversation(found);
+    const page = await fetchMessagesPage(current.id);
+    const firstCreatedAt = page.items[0]?.createdAt;
+    const older = firstCreatedAt ? messages.value.filter((m) => m.createdAt < firstCreatedAt) : [];
+    messages.value = [...older, ...page.items];
+    if (older.length === 0) hasMoreMessages.value = page.hasMore;
   };
 
   // Supprime uniquement la conversation (et ses messages) : le dossier, ses
@@ -150,6 +189,8 @@ export function useConversations(dossierId: string) {
     if (!current) return;
     await apiFetch(`/api/dossiers/${dossierId}/conversations/${current.id}`, { method: "DELETE" });
     conversation.value = undefined;
+    messages.value = [];
+    hasMoreMessages.value = false;
   };
 
   const setModel = async (model: string | null) => {
@@ -161,6 +202,11 @@ export function useConversations(dossierId: string) {
     conversation.value = mapConversation(data);
   };
 
+  const replaceMessage = (updated: Message) => {
+    const index = messages.value.findIndex((m) => m.id === updated.id);
+    if (index !== -1) messages.value.splice(index, 1, updated);
+  };
+
   const setFeedback = async (
     messageId: string,
     value: FeedbackValue,
@@ -168,24 +214,25 @@ export function useConversations(dossierId: string) {
     comment: string | null = null,
   ) => {
     const current = await ensureConversation();
-    const data = await apiFetch<any>(
-      `/api/dossiers/${dossierId}/conversations/${current.id}/messages/${messageId}/feedback`,
-      { method: "PUT", body: JSON.stringify({ value, reasons, comment }) },
-    );
-    conversation.value = mapConversation(data);
+    const data = await apiFetch<any>(`${messagesUrl(current.id)}/${messageId}/feedback`, {
+      method: "PUT",
+      body: JSON.stringify({ value, reasons, comment }),
+    });
+    replaceMessage(mapMessage(data));
   };
 
   const removeFeedback = async (messageId: string) => {
     const current = await ensureConversation();
-    const data = await apiFetch<any>(
-      `/api/dossiers/${dossierId}/conversations/${current.id}/messages/${messageId}/feedback`,
-      { method: "DELETE" },
-    );
-    conversation.value = mapConversation(data);
+    const data = await apiFetch<any>(`${messagesUrl(current.id)}/${messageId}/feedback`, { method: "DELETE" });
+    replaceMessage(mapMessage(data));
   };
 
   return {
     conversation,
+    messages,
+    hasMoreMessages,
+    isLoadingMore,
+    loadOlderMessages,
     ensureConversation,
     sendMessage,
     streamConversation,

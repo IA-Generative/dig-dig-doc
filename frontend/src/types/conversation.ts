@@ -52,7 +52,6 @@ export interface Conversation {
   createdAt: string;
   /** Identifiant de modèle (voir GET /api/models) ; null = pas de préférence, le hub par défaut sera utilisé. */
   model: string | null;
-  messages: Message[];
 }
 
 /** Entrée de la liste "mes conversations" dans la sidebar, façon ChatGPT. */
