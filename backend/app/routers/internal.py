@@ -8,11 +8,13 @@ from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.conversation import MessageRole
 from app.models.dossier import DossierStatus
-from app.models.dossier_analysis import AnalysisUnitStatus
+from app.models.dossier_analysis import AnalysisUnitStatus, DossierAnalysisStatus
 from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.analysis_proposal_repository import AnalysisProposalRepository, ProposalTargetError
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
+from app.schemas.analysis_proposal import InternalProposalCreateIn, ProposalOut
 from app.schemas.dossier import (
     BoundingBoxIn,
     BoundingBoxOut,
@@ -44,7 +46,13 @@ from app.schemas.dossier import (
     SummaryStatusIn,
     TextExtractionStatusIn,
 )
-from app.schemas.dossier_analysis import AnalysisUnitCompleteIn, AnalysisUnitCreateIn, AnalysisUnitRefOut
+from app.schemas.dossier_analysis import (
+    AnalysisUnitCompleteIn,
+    AnalysisUnitCreateIn,
+    AnalysisUnitRefOut,
+    DossierAnalysisOut,
+    InvalidElementValueError,
+)
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
 from app.services import analysis_builder
 from app.services.ephemeral_run_service import finalize_run
@@ -334,6 +342,55 @@ async def create_analysis_unit(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
     return await analyses.create_unit(analysis.id, kind=body.kind, description=body.description)
+
+
+@router.get("/dossiers/{dossier_id}/analysis", response_model=DossierAnalysisOut)
+async def get_current_analysis(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Analyse courante du dossier avec ses éléments : le chat s'en sert pour
+    savoir ce qu'il peut proposer de modifier. 404 si le dossier n'en a pas."""
+    analyses = DossierAnalysisRepository(db)
+    analysis = await analyses.get_current(dossier_id)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
+    return await analyses.build_out(analysis)
+
+
+@router.post(
+    "/dossiers/{dossier_id}/analysis/proposals",
+    response_model=ProposalOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_analysis_proposal(
+    dossier_id: uuid.UUID,
+    body: InternalProposalCreateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Dépose une proposition de modification de l'analyse courante pour le
+    compte d'un utilisateur. N'applique rien : l'utilisateur la valide."""
+    analyses = DossierAnalysisRepository(db)
+    analysis = await analyses.get_current(dossier_id)
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
+    if analysis.status == DossierAnalysisStatus.FIGEE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Cette analyse est figée")
+    try:
+        return await AnalysisProposalRepository(analyses).create(
+            analysis,
+            proposed_by=body.proposed_by,
+            value=body.value,
+            reason=body.reason,
+            element_id=body.element_id,
+            kind=body.kind,
+            definition_name=body.definition_name,
+            source_type=body.source_type,
+            source_id=body.source_id,
+            model=body.model,
+            prompt_version=body.prompt_version,
+        )
+    except ProposalTargetError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except InvalidElementValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
 
 
 @router.post("/analysis-units/{unit_id}/complete", response_model=AnalysisUnitRefOut)

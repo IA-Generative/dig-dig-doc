@@ -85,3 +85,9 @@ class ProposalOut(BaseModel):
 
 class ProposalDetailOut(ProposalOut):
     events: list[ProposalEventOut]
+
+
+class InternalProposalCreateIn(ProposalCreateIn):
+    """Proposition déposée par le worker (chat) pour le compte d'un utilisateur."""
+
+    proposed_by: str = Field(min_length=1, max_length=200)

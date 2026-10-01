@@ -130,6 +130,26 @@ def complete_unit(client: httpx.Client, unit_id: str | None, status: str) -> Non
         logger.warning("Could not complete unit %s", unit_id, exc_info=True)
 
 
+# --- Analyse de dossier : consultation et propositions du chat ---
+
+
+def get_current_analysis(client: httpx.Client, dossier_id: str) -> dict | None:
+    """Analyse courante du dossier avec ses éléments, ou None si le dossier
+    n'en a pas (exécution antérieure à l'analyse de dossier)."""
+    response = client.get(f"/dossiers/{dossier_id}/analysis")
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.json()
+
+
+def create_proposal(client: httpx.Client, dossier_id: str, body: dict) -> dict:
+    """Dépose une proposition de modification en attente (n'applique rien)."""
+    response = client.post(f"/dossiers/{dossier_id}/analysis/proposals", json=body)
+    response.raise_for_status()
+    return response.json()
+
+
 # --- Conversations & chat events ---
 
 
