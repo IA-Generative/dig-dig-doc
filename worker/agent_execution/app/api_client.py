@@ -1,6 +1,10 @@
+import logging
+
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def get_client() -> httpx.Client:
@@ -72,22 +76,58 @@ def add_prediction(
     entity_definition_id: str | None = None,
     page_ids: list[str] | None = None,
     bounding_box_ids: list[str] | None = None,
+    unit_id: str | None = None,
 ) -> dict:
-    response = client.post(
-        f"/pages/{page_id}/predictions",
-        json={
-            "kind": kind,
-            "name": name,
-            "value": value,
-            "confidence": confidence,
-            "label_definition_id": label_definition_id,
-            "entity_definition_id": entity_definition_id,
-            "page_ids": page_ids or [],
-            "bounding_box_ids": bounding_box_ids or [],
-        },
-    )
+    body = {
+        "kind": kind,
+        "name": name,
+        "value": value,
+        "confidence": confidence,
+        "label_definition_id": label_definition_id,
+        "entity_definition_id": entity_definition_id,
+        "page_ids": page_ids or [],
+        "bounding_box_ids": bounding_box_ids or [],
+    }
+    # Unité de calcul de l'analyse de dossier (voir declare_unit) : le
+    # backend en déduit l'élément d'analyse correspondant à la prédiction.
+    if unit_id is not None:
+        body["unit_id"] = unit_id
+    response = client.post(f"/pages/{page_id}/predictions", json=body)
     response.raise_for_status()
     return response.json()
+
+
+# --- Analyse de dossier : unités de calcul ---
+#
+# L'analyse de dossier ne doit jamais faire échouer le pipeline : ces deux
+# appels sont tolérants (journalisés, jamais levés). Un dossier sans analyse
+# (exécution démarrée avant #125) répond 404 : le worker continue sans unité.
+
+
+def declare_unit(client: httpx.Client, dossier_id: str, kind: str, description: dict) -> str | None:
+    """Déclare une unité de calcul (page, lot de pages...) et renvoie son
+    identifiant, ou None si elle n'a pas pu l'être."""
+    try:
+        response = client.post(
+            f"/dossiers/{dossier_id}/analysis-units", json={"kind": kind, "description": description}
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()["id"]
+    except Exception:
+        logger.warning("Could not declare %s unit for dossier %s", kind, dossier_id, exc_info=True)
+        return None
+
+
+def complete_unit(client: httpx.Client, unit_id: str | None, status: str) -> None:
+    """Marque une unité terminée ou en échec (sans effet si elle n'existe pas)."""
+    if unit_id is None:
+        return
+    try:
+        client.post(f"/analysis-units/{unit_id}/complete", json={"status": status}).raise_for_status()
+    except Exception:
+        logger.warning("Could not complete unit %s", unit_id, exc_info=True)
 
 
 # --- Conversations & chat events ---

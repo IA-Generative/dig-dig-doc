@@ -146,6 +146,40 @@ class DossierAnalysisRepository:
         )
         return list(result.scalars().all())
 
+    async def get_unit(self, unit_id: uuid.UUID) -> AnalysisUnit | None:
+        return await self.db.get(AnalysisUnit, unit_id)
+
+    async def find_agent_unit(self, analysis_id: uuid.UUID, step_id: uuid.UUID) -> AnalysisUnit | None:
+        result = await self.db.execute(
+            select(AnalysisUnit).where(
+                AnalysisUnit.analysis_id == analysis_id,
+                AnalysisUnit.kind == AnalysisUnitKind.AGENT,
+                AnalysisUnit.description["step_id"].astext == str(step_id),
+            )
+        )
+        return result.scalars().first()
+
+    async def set_unit_status(self, unit: AnalysisUnit, status: AnalysisUnitStatus) -> AnalysisUnit:
+        unit.status = status
+        await self.db.commit()
+        return unit
+
+    async def close_open_units(
+        self, analysis_id: uuid.UUID, kind: AnalysisUnitKind, status: AnalysisUnitStatus
+    ) -> None:
+        """Marque les unités encore en cours d'un type (le worker s'est arrêté
+        avant de les terminer)."""
+        await self.db.execute(
+            update(AnalysisUnit)
+            .where(
+                AnalysisUnit.analysis_id == analysis_id,
+                AnalysisUnit.kind == kind,
+                AnalysisUnit.status == AnalysisUnitStatus.EN_COURS,
+            )
+            .values(status=status)
+        )
+        await self.db.commit()
+
     async def get_element(self, analysis_id: uuid.UUID, element_id: uuid.UUID) -> AnalysisElement | None:
         result = await self.db.execute(
             select(AnalysisElement).where(AnalysisElement.id == element_id, AnalysisElement.analysis_id == analysis_id)

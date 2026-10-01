@@ -56,6 +56,7 @@ def _classify_page(
     label_defs: list[dict],
     label_by_name: dict,
     classification_prompt: str,
+    unit_id: str | None = None,
 ) -> bool:
     """Classifie une page et dépose la prédiction. Renvoie True si la
     classification a réussi."""
@@ -81,6 +82,7 @@ def _classify_page(
         value=prediction.label_name,
         confidence=prediction.confidence,
         label_definition_id=label_definition_id,
+        unit_id=unit_id,
     )
     logger.info(
         "Page %s classified as '%s' (confidence=%.2f)",
@@ -127,8 +129,20 @@ def classify_dossier(self, dossier_id: str) -> None:
             for document in dossier["documents"]:
                 for page in document["pages"]:
                     total_pages += 1
-                    if _classify_page(client, page, label_defs, label_by_name, classification_prompt):
-                        classified_pages += 1
+                    # Une unité de calcul par page dans l'analyse de dossier.
+                    unit_id = api_client.declare_unit(
+                        client,
+                        dossier_id,
+                        "classification",
+                        {"document_id": document["id"], "page_id": page["id"], "page_number": page["page_number"]},
+                    )
+                    try:
+                        if _classify_page(client, page, label_defs, label_by_name, classification_prompt, unit_id):
+                            classified_pages += 1
+                    except Exception:
+                        api_client.complete_unit(client, unit_id, _STATUS_ECHEC)
+                        raise
+                    api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
 
             output = f"{classified_pages}/{total_pages} page(s) classifiée(s)"
             if step_id:

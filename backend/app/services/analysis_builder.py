@@ -1,0 +1,156 @@
+"""Alimentation de l'analyse de dossier pendant l'exécution (issue #125, parent #113).
+
+Le pipeline existant (worker -> API interne) continue de fonctionner tel quel ;
+ce module en tire l'analyse de dossier au fil de l'eau :
+
+- chaque prédiction déposée avec une unité devient un **élément** (version de
+  provenance « modèle », lien vers la prédiction - idempotent grâce à
+  l'unicité sur la prédiction source) ;
+- chaque agent terminé produit une **unité** et un élément « synthèse » ;
+- une unité que le worker n'a pas pu terminer est marquée en échec quand son
+  étape échoue.
+
+Tout est tolérant : un dossier sans analyse (créé avant #125, exécution déjà
+en cours) continue de fonctionner, rien n'est écrit.
+"""
+
+import logging
+import uuid
+
+from sqlalchemy import select
+
+from app.db import async_session_factory
+from app.models.document_page import DocumentPage, DocumentPrediction, PredictionKind
+from app.models.dossier import ExecutionStep, ExecutionStepKind, ExecutionStepStatus
+from app.models.dossier_analysis import (
+    AnalysisElement,
+    AnalysisElementKind,
+    AnalysisUnit,
+    AnalysisUnitKind,
+    AnalysisUnitStatus,
+    DossierAnalysis,
+    ElementVersionOrigin,
+)
+from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
+
+logger = logging.getLogger(__name__)
+
+_STEP_TO_UNIT_KIND = {
+    ExecutionStepKind.CLASSIFICATION: AnalysisUnitKind.CLASSIFICATION,
+    ExecutionStepKind.EXTRACTION: AnalysisUnitKind.EXTRACTION,
+    ExecutionStepKind.AGENT: AnalysisUnitKind.AGENT,
+}
+
+
+async def record_prediction(unit_id: uuid.UUID, prediction_id: uuid.UUID, page_id: uuid.UUID) -> None:
+    """Crée l'élément d'une prédiction déposée dans une unité, dans **sa propre
+    session** : un échec est journalisé et n'affecte jamais le dépôt de la
+    prédiction (déjà enregistré) ni la session de la requête."""
+    try:
+        async with async_session_factory() as session:
+            repository = DossierAnalysisRepository(session)
+            unit = await repository.get_unit(unit_id)
+            prediction = await session.get(DocumentPrediction, prediction_id)
+            page = await session.get(DocumentPage, page_id)
+            if unit is not None and prediction is not None and page is not None:
+                await _create_element_from_prediction(repository, unit, prediction, page)
+    except Exception:
+        logger.exception("Analyse de dossier : échec de création de l'élément de la prédiction %s", prediction_id)
+
+
+async def _create_element_from_prediction(
+    repository: DossierAnalysisRepository,
+    unit: AnalysisUnit,
+    prediction: DocumentPrediction,
+    page: DocumentPage,
+) -> AnalysisElement | None:
+    """Renvoie None si l'élément existe déjà (dépôt rejoué) ou si l'analyse de
+    l'unité n'existe plus."""
+    existing = await repository.db.execute(
+        select(AnalysisElement).where(AnalysisElement.source_prediction_id == prediction.id)
+    )
+    if existing.scalar_one_or_none() is not None:
+        return None
+    analysis = await repository.db.get(DossierAnalysis, unit.analysis_id)
+    if analysis is None:
+        return None
+    if prediction.kind == PredictionKind.LABEL:
+        kind, value, definition_id = (
+            AnalysisElementKind.CLASSIFICATION,
+            {"label": prediction.value},
+            prediction.label_definition_id,
+        )
+    else:
+        kind, value, definition_id = (
+            AnalysisElementKind.ENTITY,
+            {"value": prediction.value},
+            prediction.entity_definition_id,
+        )
+    return await repository.create_element(
+        analysis,
+        kind=kind,
+        value=value,
+        origin=ElementVersionOrigin.MODEL,
+        unit=unit,
+        definition_id=definition_id,
+        definition_name=prediction.name,
+        document_id=page.dossier_document_id,
+        first_page_number=page.page_number,
+        source_prediction_id=prediction.id,
+        confidence=prediction.confidence,
+    )
+
+
+async def record_step_result(step_id: uuid.UUID) -> None:
+    """À la fin d'une étape : unité et synthèse d'un agent, unités ouvertes
+    d'une étape en échec. Sans effet si le dossier n'a pas d'analyse. Dans
+    **sa propre session** : un échec est journalisé et ne gêne pas l'étape."""
+    try:
+        async with async_session_factory() as session:
+            step = await session.get(ExecutionStep, step_id)
+            if step is not None:
+                await _record_step_result(DossierAnalysisRepository(session), step)
+    except Exception:
+        logger.exception("Analyse de dossier : échec de l'enregistrement de l'étape %s", step_id)
+
+
+async def _record_step_result(repository: DossierAnalysisRepository, step: ExecutionStep) -> None:
+    analysis = await repository.get_current(step.dossier_id)
+    if analysis is None:
+        return
+    unit_kind = _STEP_TO_UNIT_KIND[step.kind]
+    if step.kind == ExecutionStepKind.AGENT:
+        await _record_agent_step(repository, analysis, step)
+    elif step.status == ExecutionStepStatus.ECHEC:
+        await repository.close_open_units(analysis.id, unit_kind, AnalysisUnitStatus.ECHEC)
+
+
+async def _record_agent_step(
+    repository: DossierAnalysisRepository, analysis: DossierAnalysis, step: ExecutionStep
+) -> None:
+    if step.status == ExecutionStepStatus.EN_COURS:
+        return
+    succeeded = step.status == ExecutionStepStatus.TERMINE
+    unit = await repository.find_agent_unit(analysis.id, step.id)
+    if unit is None:
+        unit = await repository.create_unit(
+            analysis.id,
+            kind=AnalysisUnitKind.AGENT,
+            description={"step_id": str(step.id), "label": step.label},
+            status=AnalysisUnitStatus.TERMINE if succeeded else AnalysisUnitStatus.ECHEC,
+        )
+    if succeeded and step.output:
+        already = await repository.db.execute(
+            select(AnalysisElement.id).where(
+                AnalysisElement.unit_id == unit.id, AnalysisElement.kind == AnalysisElementKind.SYNTHESIS
+            )
+        )
+        if already.first() is None:
+            await repository.create_element(
+                analysis,
+                kind=AnalysisElementKind.SYNTHESIS,
+                value={"text": step.output},
+                origin=ElementVersionOrigin.MODEL,
+                unit=unit,
+                definition_name=step.label,
+            )
