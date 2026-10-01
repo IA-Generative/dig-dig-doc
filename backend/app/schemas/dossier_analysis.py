@@ -6,7 +6,7 @@ l'usager (#96)."""
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -174,3 +174,28 @@ class AnalysisRevisionSummaryOut(BaseModel):
 
 class AnalysisRevisionOut(AnalysisRevisionSummaryOut):
     items: list[RevisionItemOut]
+
+
+# Source d'une modification d'instructeur : d'où vient l'information.
+VersionSource = Literal["chat_message", "note", "proposal"]
+
+
+class ElementCreateIn(BaseModel):
+    """Élément ajouté à la main par un instructeur (y compris une relation)."""
+
+    kind: AnalysisElementKind
+    value: dict[str, Any]
+    definition_name: str | None = Field(default=None, max_length=200)
+    reason: str | None = Field(default=None, max_length=2000)
+    source_type: VersionSource | None = None
+    source_id: uuid.UUID | None = None
+
+
+class ElementVersionCreateIn(BaseModel):
+    """Nouvelle valeur apportée par un instructeur à un élément existant. Le
+    motif est obligatoire : il fait partie de l'historique."""
+
+    value: dict[str, Any]
+    reason: str = Field(min_length=1, max_length=2000)
+    source_type: VersionSource | None = None
+    source_id: uuid.UUID | None = None

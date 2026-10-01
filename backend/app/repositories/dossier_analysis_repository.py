@@ -130,6 +130,14 @@ class DossierAnalysisRepository:
             created_at=element.created_at,
         )
 
+    async def element_out(self, element: AnalysisElement) -> AnalysisElementOut:
+        ids = [v for v in (element.retained_version_id, element.latest_model_version_id) if v is not None]
+        versions: dict[uuid.UUID, AnalysisElementVersion] = {}
+        if ids:
+            result = await self.db.execute(select(AnalysisElementVersion).where(AnalysisElementVersion.id.in_(ids)))
+            versions = {v.id: v for v in result.scalars().all()}
+        return self._element_out(element, versions)
+
     async def list_units(self, analysis_id: uuid.UUID) -> list[AnalysisUnit]:
         result = await self.db.execute(
             select(AnalysisUnit)
