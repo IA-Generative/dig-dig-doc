@@ -330,12 +330,14 @@ async function onDeleteConversation() {
       </template>
 
       <template #source="{ source }">
-        <button type="button" class="chat-source-button" @click="openSource(source)">
-          <span v-if="source.pages && source.pages.length > 0" class="chat-source-button__pages">
-            {{ source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") }}
-          </span>
-          <span v-if="source.excerpt" class="chat-source-button__excerpt">« {{ source.excerpt }} »</span>
-          <span class="chat-source-button__cta">Voir la source <VIcon name="ri-arrow-right-s-line" /></span>
+        <button
+          type="button"
+          class="chat-source-chip"
+          :title="source.excerpt ? `« ${source.excerpt} »` : 'Voir la source'"
+          @click="openSource(source)"
+        >
+          <VIcon name="ri-file-text-line" />
+          <span>{{ source.pages && source.pages.length > 0 ? source.pages.map((p) => `p. ${p.pageNumber}`).join(", ") : "Document" }}</span>
         </button>
       </template>
 
@@ -466,49 +468,25 @@ async function onDeleteConversation() {
   gap: 0.75rem;
 }
 
-/* Source citée dans une réponse : cliquable, ouvre la page dans une modale. */
-.chat-source-button {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.125rem;
-  width: 100%;
-  padding: 0.5rem 0.625rem;
+/* Source citée dans une réponse : pastille compacte, ouvre la page dans une modale. */
+.chat-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.125rem 0.625rem;
   border: 1px solid var(--border-default-grey);
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   background: transparent;
-  color: inherit;
+  color: var(--text-action-high-blue-france);
   font: inherit;
-  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1.5;
   cursor: pointer;
 }
 
-.chat-source-button:hover {
+.chat-source-chip:hover {
   background: var(--background-default-grey-hover);
-}
-
-.chat-source-button__pages {
-  font-weight: 600;
-  font-size: 0.8rem;
-}
-
-.chat-source-button__excerpt {
-  font-size: 0.8rem;
-  font-style: italic;
-  color: var(--text-mention-grey);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
-
-.chat-source-button__cta {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.75rem;
-  color: var(--text-action-high-blue-france);
 }
 
 .dossier-detail__icon-button {
