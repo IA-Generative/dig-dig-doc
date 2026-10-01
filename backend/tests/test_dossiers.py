@@ -412,6 +412,30 @@ def test_page_screenshot_is_relayed_through_the_backend(client: TestClient) -> N
     assert response.headers["content-type"] == "image/png"
 
 
+def test_document_page_view_exposes_text_and_boxes(client: TestClient) -> None:
+    analyse_id = _create_analyse(client, "Analyse lecture page")
+    dossier = client.post("/api/dossiers", json={"name": "Dossier lecture page", "analyse_id": analyse_id}).json()
+    dossier = client.post(
+        f"/api/dossiers/{dossier['id']}/documents",
+        files=[("files", ("cni.pdf", b"fake-bytes", "application/pdf"))],
+    ).json()
+    document_id = dossier["documents"][0]["id"]
+    page = _create_page(client, document_id, 3, "REPUBLIQUE FRANCAISE Carte nationale d'identité")
+    bbox = _create_bbox(client, page["id"], x_min=0.1, y_min=0.2, x_max=0.6, y_max=0.3)
+
+    view = client.get(f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/{page['id']}").json()
+    assert view["page_number"] == 3
+    assert view["content"] == "REPUBLIQUE FRANCAISE Carte nationale d'identité"
+    assert view["document_name"] == "cni.pdf"
+    assert view["has_screenshot"] is False
+    assert [(b["id"], b["document_page_id"]) for b in view["bounding_boxes"]] == [(bbox["id"], page["id"])]
+
+    missing = client.get(
+        f"/api/dossiers/{dossier['id']}/documents/{document_id}/pages/00000000-0000-0000-0000-000000000000"
+    )
+    assert missing.status_code == 404
+
+
 def test_classification_prediction_linked_to_one_page_and_label(
     client: TestClient,
 ) -> None:
