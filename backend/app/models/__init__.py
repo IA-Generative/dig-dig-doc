@@ -35,6 +35,19 @@ from .dossier import (
     ExecutionStepStatus,
     TextExtractionStatus,
 )
+from .dossier_analysis import (
+    AnalysisElement,
+    AnalysisElementKind,
+    AnalysisElementVersion,
+    AnalysisRevision,
+    AnalysisRevisionItem,
+    AnalysisUnit,
+    AnalysisUnitKind,
+    AnalysisUnitStatus,
+    DossierAnalysis,
+    DossierAnalysisStatus,
+    ElementVersionOrigin,
+)
 from .dossier_ephemere import DossierEphemere
 from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
@@ -45,6 +58,17 @@ from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
 
 __all__ = [
+    "AnalysisElement",
+    "AnalysisElementKind",
+    "AnalysisElementVersion",
+    "AnalysisRevision",
+    "AnalysisRevisionItem",
+    "AnalysisUnit",
+    "AnalysisUnitKind",
+    "AnalysisUnitStatus",
+    "DossierAnalysis",
+    "DossierAnalysisStatus",
+    "ElementVersionOrigin",
     "Agent",
     "AgentChatEvent",
     "AgentChatEventKind",
