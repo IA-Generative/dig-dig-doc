@@ -119,6 +119,10 @@ class DocumentPredictionIn(BaseModel):
     # .../pages/{page_id}/bounding-boxes).
     page_ids: list[uuid.UUID] = []
     bounding_box_ids: list[uuid.UUID] = []
+    # Unité de calcul de l'analyse de dossier qui produit cette prédiction
+    # (voir POST /internal/dossiers/{id}/analysis-units). Facultatif : sans
+    # elle, la prédiction est déposée comme avant, sans élément d'analyse.
+    unit_id: uuid.UUID | None = None
 
 
 class MessageSourceIn(BaseModel):

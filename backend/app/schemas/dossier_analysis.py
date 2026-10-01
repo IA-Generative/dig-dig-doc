@@ -199,3 +199,21 @@ class ElementVersionCreateIn(BaseModel):
     reason: str = Field(min_length=1, max_length=2000)
     source_type: VersionSource | None = None
     source_id: uuid.UUID | None = None
+
+
+# --- API interne (worker) : unités de calcul ---
+
+
+class AnalysisUnitCreateIn(BaseModel):
+    kind: AnalysisUnitKind
+    # Ce que couvre l'unité (page, lot de pages...) - forme libre.
+    description: dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalysisUnitRefOut(BaseModel):
+    id: uuid.UUID
+    analysis_id: uuid.UUID
+
+
+class AnalysisUnitCompleteIn(BaseModel):
+    status: Literal["terminé", "échec"]

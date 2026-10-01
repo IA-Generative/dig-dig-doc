@@ -51,6 +51,7 @@ from app.models.summary import (
     SummaryStatus,
 )
 from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 
 
 class DossierRepository:
@@ -731,6 +732,11 @@ class DossierRepository:
         dossier.started_at = now
         dossier.ended_at = None
         await self.db.commit()
+        # Analyse de dossier (#125) : une par exécution (le worker tolère un
+        # dossier sans analyse : exécutions déjà en cours avant ce changement).
+        await DossierAnalysisRepository(self.db).create_analysis(
+            dossier.id, analyse_version=dossier.analyse_version, started_at=now
+        )
         # Pas de refresh(dossier) ici : ça re-déclencherait un lazy-load des
         # nouvelles execution_steps (et de leur relation `logs`, vide mais
         # non chargée) en dehors du contexte async - MissingGreenlet. Les

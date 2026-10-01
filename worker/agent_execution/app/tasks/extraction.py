@@ -52,6 +52,7 @@ def _deposit_entity(
     entity_def_by_name: dict,
     page_id_by_number: dict,
     batch_page_numbers: set,
+    unit_id: str | None = None,
 ) -> bool:
     """Dépose une entité extraite comme prédiction. Renvoie True si le dépôt
     a réussi, False si l'entité n'est pas dans les définitions."""
@@ -76,6 +77,7 @@ def _deposit_entity(
         confidence=entity_value.confidence,
         entity_definition_id=entity_def["id"],
         page_ids=all_page_ids,
+        unit_id=unit_id,
     )
     logger.info(
         "Entity '%s' = '%s' (confidence=%.2f, pages=%s)",
@@ -94,6 +96,7 @@ def _process_batch(
     entity_def_by_name: dict,
     extraction_prompt: str,
     page_id_by_number: dict,
+    unit_id: str | None = None,
 ) -> int:
     """Traite un batch de pages : extraction LLM + dépôt des entités.
     Renvoie le nombre d'entités déposées."""
@@ -113,6 +116,7 @@ def _process_batch(
             entity_def_by_name,
             page_id_by_number,
             batch_page_numbers,
+            unit_id,
         ):
             count += 1
     return count
@@ -165,14 +169,28 @@ def extract_dossier_entities(self, dossier_id: str) -> None:
 
             for i in range(0, len(all_pages), batch_size):
                 batch = all_pages[i : i + batch_size]
-                total_entities += _process_batch(
+                # Une unité de calcul par lot de pages dans l'analyse de dossier
+                # (le découpage en lots lui-même n'a pas changé).
+                unit_id = api_client.declare_unit(
                     client,
-                    batch,
-                    entity_defs,
-                    entity_def_by_name,
-                    extraction_prompt,
-                    page_id_by_number,
+                    dossier_id,
+                    "extraction",
+                    {"page_numbers": [p["page_number"] for p in batch], "page_ids": [p["id"] for p in batch]},
                 )
+                try:
+                    total_entities += _process_batch(
+                        client,
+                        batch,
+                        entity_defs,
+                        entity_def_by_name,
+                        extraction_prompt,
+                        page_id_by_number,
+                        unit_id,
+                    )
+                except Exception:
+                    api_client.complete_unit(client, unit_id, _STATUS_ECHEC)
+                    raise
+                api_client.complete_unit(client, unit_id, _STATUS_TERMINE)
 
             output = f"{total_entities} entité(s) extraite(s) sur {len(all_pages)} page(s)"
             if step_id:
