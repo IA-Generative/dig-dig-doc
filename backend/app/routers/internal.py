@@ -341,7 +341,9 @@ async def create_analysis_unit(
     analysis = await analyses.get_current(dossier_id)
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aucune analyse pour ce dossier")
-    return await analyses.create_unit(analysis.id, kind=body.kind, description=body.description)
+    return await analyses.create_unit(
+        analysis.id, kind=body.kind, description=body.description, input_fingerprint=body.input_fingerprint
+    )
 
 
 @router.get("/dossiers/{dossier_id}/analysis", response_model=DossierAnalysisOut)

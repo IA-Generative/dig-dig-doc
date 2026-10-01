@@ -359,3 +359,101 @@ def test_step_completes_for_a_dossier_without_analysis(client: TestClient) -> No
     assert response.status_code == 200
     assert response.json()["status"] == "terminé"
     assert client.get(f"/api/dossiers/{dossier_id}/analyse-dossier").status_code == 404
+
+
+# --- Empreintes d'entrées des unités (issue #126) ---
+
+FP_A = "a" * 64
+FP_B = "b" * 64
+
+
+def _unit_with_fingerprint(
+    client: TestClient, dossier_id: str, fingerprint: str | None, kind: str = "extraction"
+) -> dict:
+    body: dict[str, Any] = {"kind": kind, "description": {}}
+    if fingerprint is not None:
+        body["input_fingerprint"] = fingerprint
+    response = client.post(f"/api/internal/dossiers/{dossier_id}/analysis-units", json=body, headers=INTERNAL)
+    assert response.status_code == 201
+    return response.json()
+
+
+def _units(client: TestClient, dossier_id: str) -> list[dict[str, Any]]:
+    analysis_id = _current(client, dossier_id)["id"]
+    return client.get(f"/api/dossiers/{dossier_id}/analyses-dossier/{analysis_id}/units").json()
+
+
+def test_worker_unit_keeps_its_input_fingerprint(client: TestClient) -> None:
+    dossier_id = _create_dossier(client)
+    _launch(client, dossier_id)
+    _unit_with_fingerprint(client, dossier_id, FP_A)
+    _unit_with_fingerprint(client, dossier_id, None, "classification")
+
+    units = {u["kind"]: u for u in _units(client, dossier_id)}
+    assert units["extraction"]["input_fingerprint"] == FP_A
+    assert units["classification"]["input_fingerprint"] is None
+
+
+@pytest.mark.parametrize("bad", ["abc", "g" * 64, "A" * 64, "a" * 65])
+def test_malformed_fingerprint_is_refused(client: TestClient, bad: str) -> None:
+    dossier_id = _create_dossier(client)
+    _launch(client, dossier_id)
+    response = client.post(
+        f"/api/internal/dossiers/{dossier_id}/analysis-units",
+        json={"kind": "extraction", "input_fingerprint": bad},
+        headers=INTERNAL,
+    )
+    assert response.status_code == 422
+
+
+def _agent_id(client: TestClient, analyse_id: str) -> str:
+    return client.get(f"/api/analyses/{analyse_id}").json()["agents"][0]["id"]
+
+
+def _finish_agent(client: TestClient, dossier_id: str, upstream: list[str], *, prompt: str | None = None) -> str | None:
+    """Lance le dossier, déclare des unités amont, termine l'agent et renvoie
+    l'empreinte de son unité."""
+    dossier = _launch(client, dossier_id)
+    for fingerprint in upstream:
+        _unit_with_fingerprint(client, dossier_id, fingerprint)
+    step = _step(client, dossier, "agent")
+    client.post(
+        f"/api/internal/execution-steps/{step['id']}/complete",
+        json={"status": "terminé", "output": "OK"},
+        headers=INTERNAL,
+    )
+    [agent_unit] = [u for u in _units(client, dossier_id) if u["kind"] == "agent"]
+    return agent_unit["input_fingerprint"]
+
+
+def test_agent_unit_fingerprint_depends_on_its_configuration_and_on_what_it_reads(client: TestClient) -> None:
+    def fingerprint_for(upstream: list[str], prompt: str) -> str | None:
+        dossier_id = _create_dossier(client, agent="Cohérence")
+        dossier = client.get(f"/api/dossiers/{dossier_id}").json()
+        agent_id = _agent_id(client, dossier["analyse_id"])
+        client.put(f"/api/analyses/{dossier['analyse_id']}/agents/{agent_id}/prompt", json={"prompt": prompt})
+        return _finish_agent(client, dossier_id, upstream)
+
+    base = fingerprint_for([FP_A], "Vérifie la cohérence.")
+    assert base and len(base) == 64
+    assert fingerprint_for([FP_A], "Vérifie la cohérence.") == base
+    # L'ordre des unités amont n'a pas d'importance.
+    assert fingerprint_for([FP_B, FP_A], "Vérifie la cohérence.") != base  # une unité de plus
+    assert fingerprint_for([FP_A], "Vérifie autre chose.") != base  # prompt modifié
+    assert fingerprint_for([FP_B], "Vérifie la cohérence.") != base  # ce qu'il lit a changé
+    two_a = fingerprint_for([FP_A, FP_B], "Vérifie la cohérence.")
+    two_b = fingerprint_for([FP_B, FP_A], "Vérifie la cohérence.")
+    assert two_a == two_b
+
+
+def test_failed_agent_also_gets_a_fingerprint(client: TestClient) -> None:
+    dossier_id = _create_dossier(client, agent="Cohérence")
+    step = _step(client, _launch(client, dossier_id), "agent")
+    client.post(
+        f"/api/internal/execution-steps/{step['id']}/complete",
+        json={"status": "échec", "output": "boom"},
+        headers=INTERNAL,
+    )
+    [agent_unit] = [u for u in _units(client, dossier_id) if u["kind"] == "agent"]
+    assert agent_unit["status"] == "échec"
+    assert agent_unit["input_fingerprint"] and len(agent_unit["input_fingerprint"]) == 64

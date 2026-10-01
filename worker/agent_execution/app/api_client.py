@@ -104,13 +104,17 @@ def add_prediction(
 # (exécution démarrée avant #125) répond 404 : le worker continue sans unité.
 
 
-def declare_unit(client: httpx.Client, dossier_id: str, kind: str, description: dict) -> str | None:
-    """Déclare une unité de calcul (page, lot de pages...) et renvoie son
-    identifiant, ou None si elle n'a pas pu l'être."""
+def declare_unit(
+    client: httpx.Client, dossier_id: str, kind: str, description: dict, fingerprint: str | None = None
+) -> str | None:
+    """Déclare une unité de calcul (page, lot de pages...) avec l'empreinte de ses
+    entrées (voir app.fingerprint) et renvoie son identifiant, ou None si elle
+    n'a pas pu l'être."""
     try:
-        response = client.post(
-            f"/dossiers/{dossier_id}/analysis-units", json={"kind": kind, "description": description}
-        )
+        body = {"kind": kind, "description": description}
+        if fingerprint is not None:
+            body["input_fingerprint"] = fingerprint
+        response = client.post(f"/dossiers/{dossier_id}/analysis-units", json=body)
         if response.status_code == 404:
             return None
         response.raise_for_status()
