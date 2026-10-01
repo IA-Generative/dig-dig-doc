@@ -149,11 +149,13 @@ export function useDossierAnalysis(dossierId: string) {
   }
 
   /** Apporte une nouvelle valeur à un élément (le motif est obligatoire). */
-  async function addVersion(elementId: string, value: ElementValue, reason: string) {
+  async function addVersion(elementId: string, value: ElementValue, reason: string, baseVersionId?: string | null) {
     if (!analysis.value) return;
     await apiFetch(`${analysisBase(analysis.value.id)}/elements/${elementId}/versions`, {
       method: "POST",
-      body: JSON.stringify({ value, reason }),
+      // base_version_id : la version que l'instructeur avait sous les yeux ; si
+      // l'élément a changé depuis, le serveur refuse au lieu d'écraser (409).
+      body: JSON.stringify({ value, reason, base_version_id: baseVersionId ?? null }),
     });
     await refresh();
   }

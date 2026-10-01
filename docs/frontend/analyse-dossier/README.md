@@ -76,6 +76,33 @@ Comment ça marche :
 - Une proposition en attente **identique** (même cible, même valeur) n'est pas dupliquée : demander l'analyse deux fois ne double pas les propositions.
 - Une seule analyse à la fois par note ; impossible sur une note archivée, sans analyse de dossier ou si l'analyse est figée.
 
+## Travail à plusieurs
+
+Issue : [#118](https://github.com/IA-Generative/dig-dig-doc/issues/118).
+
+Plusieurs instructeurs peuvent travailler en même temps sur la même analyse sans s'écraser. Cela concerne l'**analyse courante** et modifiable ; une exécution précédente ou une analyse figée n'a ni présence ni verrou.
+
+![Présence des autres instructeurs et élément verrouillé](presence-verrou.png)
+
+- **Présence** : en haut de la page, « Aussi sur cette analyse : … » ; sur chaque élément, qui le **consulte** ou le **modifie**. Elle est mise à jour en temps réel (flux SSE) et expire seule si l'instructeur ferme son onglet.
+- **Verrou court par élément** : cliquer sur **Modifier** prend le verrou de l'élément avant d'ouvrir le formulaire. Tant qu'un autre le détient, le bouton est désactivé et l'élément porte « Verrouillé par … ». Pas de verrou global sur le dossier : on peut modifier un autre élément.
+- **Refus clair** : si le verrou est pris entre-temps, le message dit **qui** le détient et **jusqu'à quand**, et le formulaire ne s'ouvre pas.
+
+![Verrou refusé : message clair](verrou-refuse.png)
+
+![Édition avec verrou obtenu](edition-verrouillee.png)
+
+- **Expiration** : un verrou dure **60 s** sans renouvellement. La page le renouvelle toutes les 20 s **tant que l'instructeur écrit** ; sans saisie depuis **5 minutes** (onglet laissé ouvert), elle cesse de le renouveler et il expire seul. Un instructeur qui part sans enregistrer ne bloque donc personne durablement. Le verrou est libéré dès l'enregistrement ou l'annulation.
+- **Contrôle de version** : l'enregistrement envoie la version que l'instructeur avait sous les yeux (`base_version_id`) ; si l'élément a changé depuis, le serveur refuse (409) au lieu d'écraser.
+- **Le verrou n'est pas obligatoire pour écrire** (compatibilité avec l'API et les automatismes), mais **toute écriture est refusée tant qu'un autre instructeur détient un verrou valide** : modification d'un élément, restauration d'une version, acceptation ou modification d'une proposition, validation d'une prédiction. **Rejeter** une proposition n'est pas bloqué (elle ne modifie pas l'élément).
+- **Écritures simultanées** : un verrou de ligne en base fait passer les écritures sur un même élément l'une après l'autre (jamais deux versions de même numéro) ; la prise de verrou est atomique (deux demandes en même temps, un seul gagnant).
+
+Réglages côté backend : `ELEMENT_LOCK_TTL_SECONDS` (60), `PRESENCE_TTL_SECONDS` (30), `LIVE_POLL_SECONDS` (1,5).
+
+API (`/api/dossiers/{id}/analyses-dossier/{analyse}/…`) : `POST|DELETE elements/{e}/lock`, `PUT|DELETE|GET presence`, `GET live` (SSE).
+
+Comment ça marche : la présence est stockée en base (table `analysis_presence`, éphémère) et le verrou sur l'élément (`locked_by`, `locked_until`) ; le flux SSE relit la base toutes les 1,5 s et n'émet qu'en cas de changement (plus un signal de maintien toutes les 15 s).
+
 ## Historique et restauration
 
 ![Historique d'un élément avec les différences entre versions](historique-et-differences.png)
@@ -88,6 +115,8 @@ Le bouton **Historique** liste toutes les versions d'un élément, avec ce qui a
 - `frontend/src/composables/useDossierAnalysis.ts` : chargement et actions (modifier, restaurer, accepter, modifier ou rejeter une proposition).
 - `frontend/src/components/analysis/ProposalCard.vue` : carte de proposition, partagée avec le chat.
 - `frontend/src/components/analysis/ChatProposals.vue` : cartes sous une réponse du chat (#115).
+- `frontend/src/composables/useAnalysisLive.ts` : flux temps réel, battement de cœur, verrou (#118).
+- `backend/app/routers/analysis_collaboration.py`, `repositories/analysis_collaboration_repository.py` : verrou, présence, flux SSE.
 - `frontend/src/components/analysis/NotesPanel.vue`, `composables/useDossierNotes.ts` : notes internes (#117).
 - `backend/app/routers/dossier_notes.py`, `repositories/dossier_note_repository.py`, `models/dossier_note.py` : notes versionnées, archivage, demande d'analyse.
 - `worker/agent_execution/app/tasks/note_proposals.py`, `llm.py` : analyse d'une note ; `tasks/chat.py`, `chat_graph.py` : notes comme contexte du chat.

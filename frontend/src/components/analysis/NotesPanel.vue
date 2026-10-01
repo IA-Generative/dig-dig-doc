@@ -144,8 +144,8 @@ const hasNotes = computed(() => notes.value.length > 0);
       l'analyse que si vous demandez des propositions, que vous confirmez ensuite.
     </p>
 
-    <DsfrAlert v-if="error" type="error" :title="error" small />
-    <DsfrAlert v-if="actionError" type="error" :title="actionError" small />
+    <DsfrAlert v-if="error" type="error" :title="error" />
+    <DsfrAlert v-if="actionError" type="error" :title="actionError" />
 
     <form class="notes__new" @submit.prevent="submitNew">
       <label class="notes__label" for="new-note">Nouvelle note</label>

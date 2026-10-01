@@ -194,6 +194,7 @@ class AnalysisElement(UUIDMixin, TimestampMixin, Base):
     review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Verrou court par élément (travail à plusieurs, #118) - réservé.
     locked_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    locked_by_name: Mapped[str | None] = mapped_column(String, nullable=True)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Lecture seule : toutes les versions de l'élément, de la plus ancienne à la
@@ -283,3 +284,24 @@ class AnalysisRevisionItem(Base):
     version_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("analysis_element_versions.id", ondelete="CASCADE"), nullable=False
     )
+
+
+class AnalysisPresence(Base):
+    """Présence d'un instructeur sur une analyse (issue #118) : sur quel élément il
+    est, et s'il le consulte ou l'édite. Éphémère : mise à jour par battement de
+    cœur, ignorée passé ``PRESENCE_TTL_SECONDS`` (jamais une trace durable)."""
+
+    __tablename__ = "analysis_presence"
+    __table_args__ = (PrimaryKeyConstraint("analysis_id", "user_id"),)
+
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("dossier_analyses.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # Élément concerné ; vide quand l'instructeur est sur l'analyse sans élément précis.
+    element_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("analysis_elements.id", ondelete="CASCADE"), nullable=True
+    )
+    mode: Mapped[str] = mapped_column(String, nullable=False, default="viewing")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

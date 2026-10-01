@@ -14,6 +14,7 @@ from app.routers.admin_tasks import router as admin_tasks_router
 from app.routers.agent_conversations import router as agent_conversations_router
 from app.routers.analyses import public_router as analyses_public_router
 from app.routers.analyses import router as analyses_router
+from app.routers.analysis_collaboration import router as analysis_collaboration_router
 from app.routers.analysis_proposals import router as analysis_proposals_router
 from app.routers.app_tokens import router as app_tokens_router
 from app.routers.assist import router as assist_router
@@ -122,6 +123,7 @@ app.include_router(analyses_router, prefix="/api")
 app.include_router(agent_conversations_router, prefix="/api")
 app.include_router(dossiers_router, prefix="/api")
 app.include_router(dossier_analyses_router, prefix="/api")
+app.include_router(analysis_collaboration_router, prefix="/api")
 app.include_router(dossier_notes_router, prefix="/api")
 app.include_router(analysis_proposals_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")

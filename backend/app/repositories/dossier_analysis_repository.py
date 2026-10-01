@@ -186,6 +186,18 @@ class DossierAnalysisRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_element_for_update(self, analysis_id: uuid.UUID, element_id: uuid.UUID) -> AnalysisElement | None:
+        """Élément avec verrou de ligne : les écritures concurrentes sur le même
+        élément s'exécutent l'une après l'autre (jamais deux versions de même numéro).
+        Le verrou de ligne tient jusqu'à la fin de la transaction (l'écriture)."""
+        result = await self.db.execute(
+            select(AnalysisElement)
+            .where(AnalysisElement.id == element_id, AnalysisElement.analysis_id == analysis_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
     async def list_versions(self, element_id: uuid.UUID) -> list[AnalysisElementVersion]:
         result = await self.db.execute(
             select(AnalysisElementVersion)
