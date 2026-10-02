@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.8.0...v0.9.0-rc) (2026-10-02)
+
+
+### Features
+
+* **backend:** logs JSON et détail des dépendances en échec sur /health/ready ([b3a59d9](https://github.com/IA-Generative/dig-dig-doc/commit/b3a59d9cb6836ff3c1ad4bc24de96627b366ba83))
+
+
+### Bug Fixes
+
+* **backend:** formatage ruff de logging_config ([44b4835](https://github.com/IA-Generative/dig-dig-doc/commit/44b48352baf08d84357236e6b582b0af730d5cc5))
+
 ## [0.8.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.7.0...v0.8.0) (2026-10-02)
 
 
