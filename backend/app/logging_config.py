@@ -39,7 +39,9 @@ def configure_logging() -> None:
             "version": 1,
             "disable_existing_loggers": False,
             "formatters": {"json": {"()": f"{__name__}.JsonFormatter"}},
-            "handlers": {"stdout": {"class": "logging.StreamHandler", "formatter": "json", "stream": "ext://sys.stdout"}},
+            "handlers": {
+                "stdout": {"class": "logging.StreamHandler", "formatter": "json", "stream": "ext://sys.stdout"}
+            },
             "root": {"level": "INFO", "handlers": ["stdout"]},
             "loggers": {
                 name: {"handlers": [], "level": "INFO", "propagate": True}
