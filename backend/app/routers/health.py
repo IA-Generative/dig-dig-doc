@@ -1,8 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Response, status
 
 from app.connectors import db_connector, redis_connector, s3_connector
 from app.schemas.health import Health, HealthReport, HealthStatus
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Health"])
 
 
@@ -27,5 +30,10 @@ async def health_ready(response: Response) -> HealthReport:
         if dependency.status == "unhealthy":
             api_status = "unhealthy"
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            logger.error(
+                "Readiness check failed: %s is unhealthy",
+                dependency.name,
+                extra={"dependency": dependency.name, "details": dependency.extras},
+            )
 
     return HealthReport(name="dig-dig-doc-backend", status=api_status, dependencies=dependencies)
