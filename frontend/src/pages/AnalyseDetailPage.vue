@@ -4,10 +4,12 @@ import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 
 import MarkdownText from "@/components/MarkdownText.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
+import { useAuth } from "@/composables/useAuth";
 
 const route = useRoute();
 const router = useRouter();
 const { getById, fetchAnalyse } = useAnalyses();
+const { isAdmin } = useAuth();
 
 const analyse = computed(() => getById(String(route.params.id)));
 
@@ -19,21 +21,24 @@ onMounted(() => {
 // route enfant (classification, extraction, agents). L'index actif est
 // déduit du nom de la route courante. Les champs tabId/panelId sont
 // requis par DsfrTabs pour les attributs ARIA.
-const tabs = [
+const allTabs = [
   { title: "Classification documentaire", icon: "ri-price-tag-3-line", tabId: "tab-classification", panelId: "panel-classification", routeName: "analyse-classification" },
   { title: "Extraction d'entités nommées", icon: "ri-braces-line", tabId: "tab-extraction", panelId: "panel-extraction", routeName: "analyse-extraction" },
   { title: "Agents", icon: "ri-robot-line", tabId: "tab-agents", panelId: "panel-agents", routeName: "analyse-agents" },
+  // Modèles de document de l'analyse : réservés aux administrateurs, comme leur API (backend issue #138).
+  { title: "Documents", icon: "ri-file-word-2-line", tabId: "tab-documents", panelId: "panel-documents", routeName: "analyse-documents", adminOnly: true },
 ] as const;
 
+const tabs = computed(() => allTabs.filter((tab) => !("adminOnly" in tab && tab.adminOnly) || isAdmin.value));
+
 const activeTabIndex = computed(() => {
-  const index = tabs.findIndex((tab) => tab.routeName === route.name);
+  const index = tabs.value.findIndex((tab) => tab.routeName === route.name);
   return index === -1 ? 0 : index;
 });
 
-const activeTab = computed(() => tabs[activeTabIndex.value]);
 
 function selectTab(index: number) {
-  const tab = tabs[index];
+  const tab = tabs.value[index];
   if (tab) {
     router.push({ name: tab.routeName, params: route.params });
   }
@@ -59,8 +64,10 @@ function selectTab(index: number) {
       :tab-titles="tabs"
       @update:model-value="selectTab"
     >
-      <DsfrTabContent :panel-id="activeTab.panelId" :tab-id="activeTab.tabId">
-        <RouterView />
+      <!-- Un panneau par onglet : DsfrTabs mesure le panneau de l'onglet actif (panels[index]) pour dimensionner la
+           zone, avec un seul panneau les onglets autres que le premier étaient coupés. Seule la route active est rendue. -->
+      <DsfrTabContent v-for="tab in tabs" :key="tab.tabId" :panel-id="tab.panelId" :tab-id="tab.tabId">
+        <RouterView v-if="tab.routeName === route.name" />
       </DsfrTabContent>
     </DsfrTabs>
   </div>
