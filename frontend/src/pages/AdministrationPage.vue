@@ -5,7 +5,7 @@ import AdminReportsTab from "@/components/admin/AdminReportsTab.vue";
 import AdminStatsTab from "@/components/admin/AdminStatsTab.vue";
 import AdminTasksTab from "@/components/admin/AdminTasksTab.vue";
 import AdminCguTab from "@/components/admin/AdminCguTab.vue";
-import AdminDocumentTemplatesTab from "@/components/admin/AdminDocumentTemplatesTab.vue";
+import AdminDocumentGenerationTab from "@/components/admin/AdminDocumentGenerationTab.vue";
 
 // ── Onglets ─────────────────────────────────────────────────────────────
 // Les données sont chargées paresseusement à la première ouverture de chaque
@@ -16,7 +16,7 @@ const tabs = [
   { title: "Statistiques", icon: "ri-bar-chart-2-line", tabId: "tab-stats", panelId: "panel-stats" },
   { title: "Tâches Celery", icon: "ri-list-check-2", tabId: "tab-tasks", panelId: "panel-tasks" },
   { title: "CGU", icon: "ri-file-text-line", tabId: "tab-cgu", panelId: "panel-cgu" },
-  { title: "Modèles de document", icon: "ri-file-word-2-line", tabId: "tab-templates", panelId: "panel-templates" },
+  { title: "Génération des documents", icon: "ri-file-word-2-line", tabId: "tab-generation", panelId: "panel-generation" },
 ] as const;
 
 const loadedTabs = ref(new Set<number>());
@@ -26,7 +26,7 @@ const reportsTabRef = ref<InstanceType<typeof AdminReportsTab>>();
 const statsTabRef = ref<InstanceType<typeof AdminStatsTab>>();
 const tasksTabRef = ref<InstanceType<typeof AdminTasksTab>>();
 const cguTabRef = ref<InstanceType<typeof AdminCguTab>>();
-const templatesTabRef = ref<InstanceType<typeof AdminDocumentTemplatesTab>>();
+const generationTabRef = ref<InstanceType<typeof AdminDocumentGenerationTab>>();
 
 watch(selectedTab, (idx) => {
   if (loadedTabs.value.has(idx)) return;
@@ -35,7 +35,7 @@ watch(selectedTab, (idx) => {
   if (idx === 1) statsTabRef.value?.fetchStats();
   if (idx === 2) tasksTabRef.value?.fetchTasks();
   if (idx === 3) cguTabRef.value?.reload();
-  if (idx === 4) templatesTabRef.value?.reload();
+  if (idx === 4) generationTabRef.value?.reload();
 }, { immediate: true });
 </script>
 
@@ -65,7 +65,7 @@ watch(selectedTab, (idx) => {
       </DsfrTabContent>
 
       <DsfrTabContent :panel-id="tabs[4].panelId" :tab-id="tabs[4].tabId">
-        <AdminDocumentTemplatesTab ref="templatesTabRef" />
+        <AdminDocumentGenerationTab ref="generationTabRef" />
       </DsfrTabContent>
     </DsfrTabs>
   </div>
