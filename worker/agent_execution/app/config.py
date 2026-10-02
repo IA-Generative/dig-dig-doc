@@ -48,6 +48,13 @@ class WorkerSettings(BaseSettings):
     # Taille des groupes de définitions d'entités (0 : un seul groupe).
     EXTRACTION_DEFINITIONS_PER_GROUP: int = 8
 
+    # Génération des valeurs de champs d'un document (issue #141) : budget de jetons estimés du contexte
+    # (éléments de l'analyse et notes) d'un appel, nombre de champs par appel, et taille maximale d'un
+    # élément ou d'une note avant coupe. Des réglages à ajuster sur de vrais dossiers.
+    GENERATION_MAX_CONTEXT_TOKENS: int = 12000
+    GENERATION_FIELDS_PER_CALL: int = 10
+    GENERATION_MAX_ITEM_CHARS: int = 1500
+
     # Nombre maximum d'itérations du graphe LangGraph (pour éviter les
     # boucles infinies).
     AGENT_MAX_ITERATIONS: int = 10
