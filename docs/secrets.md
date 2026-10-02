@@ -119,7 +119,7 @@ Variables attendues dans Vault :
 
 **Consommateurs** :
 - backend (`RedisSettings` → `REDIS_URL`)
-- worker_document, worker_agent (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`)
+- worker_document, worker_agent, worker_render (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`)
 - redis sub-chart (`auth.existingSecret`)
 - KEDA `TriggerAuthentication` (pour le scaling sur la longueur de queue)
 

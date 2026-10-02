@@ -122,6 +122,44 @@ worker_document:
     AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
     OCR_LANGUAGE: "fra"
 
+# Celery worker - fills ODT document templates and converts them to PDF with LibreOffice
+# (worker/document_render). The image is large (~800 MB: LibreOffice Writer + fonts) and LibreOffice
+# is memory-hungry - see `resources` below. Fonts installed in the image decide the fidelity of the
+# PDF: a font missing from the image is silently replaced (see worker/document_render/README.md).
+worker_render:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/dig-dig-doc-worker-document-render"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue (`document_render`) - see document_process above.
+  # Probes disabled - see document_process above for rationale (a conversion can keep the worker busy).
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  # Two concurrent LibreOffice conversions (`--concurrency=2` in the image CMD), one profile each.
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "250m"
+    limits:
+      memory: "3Gi"
+      cpu: "2"
+  # Broker (CELERY_BROKER_URL / CELERY_RESULT_BACKEND) from `digdigdoc-worker`, S3 credentials, bucket
+  # and endpoint from `digdigdoc-s3`: nothing else - this worker calls neither the backend nor the LLM.
+  envFrom:
+  - secretRef:
+      name: "digdigdoc-s3"
+  - secretRef:
+      name: "digdigdoc-worker"
+  - secretRef:
+      name: "digdigdoc-redis"
+  env:
+    CELERY_QUEUE_NAME: "document_render"
+
 # Celery worker - agentic research/chat execution (worker/agent_execution).
 # NOTE: this worker's LangGraph checkpointer needs RediSearch (redis-stack), which is why
 # `redis.image` below is overridden away from the chart's plain redis default - see comment there.
@@ -470,7 +508,7 @@ extraObjects:
   # Per-env overrides (minReplicaCount, maxReplicaCount, pollingInterval, listLength) live
   # in `values-<env>.yaml` under `extraObjects.<name>.spec`.
 
-  # TriggerAuthentication: shared by both worker ScaledObjects.
+  # TriggerAuthentication: shared by all the worker ScaledObjects.
   digdigdoc-keda-triggerauth:
     apiVersion: keda.sh/v1alpha1
     kind: TriggerAuthentication
@@ -526,6 +564,31 @@ extraObjects:
         metadata:
           address: "digdigdoc-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
           listName: "agent_execution"
+          listLength: "5"
+        authenticationRef:
+          name: digdigdoc-keda-triggerauth
+
+  # ScaledObject for document_render (queue: document_render). A conversion takes about a second, so a
+  # short queue is fine: scale up when more than 5 documents wait.
+  digdigdoc-keda-document-render:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: digdigdoc-worker-render
+    spec:
+      scaleTargetRef:
+        name: digdigdoc-worker-render
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 1
+      maxReplicaCount: 3
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "digdigdoc-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "document_render"
           listLength: "5"
         authenticationRef:
           name: digdigdoc-keda-triggerauth
