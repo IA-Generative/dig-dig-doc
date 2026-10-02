@@ -62,6 +62,14 @@ def test_none_is_empty_and_numbers_are_text() -> None:
     assert "[] [42] [3.5]" in _text(out)
 
 
+def test_a_list_in_a_simple_field_is_written_as_a_comma_separated_text() -> None:
+    out = odt_template.render(
+        make_odt(_p("Adresses : {{ v }} / vide : [{{ w }}]")), {"v": ["1 rue A", "2 rue B"], "w": []}
+    )
+    assert "Adresses : 1 rue A, 2 rue B / vide : []" in _text(out)
+    assert "['" not in read_part(out)  # pas la représentation d'une liste Python
+
+
 def test_xml_forbidden_control_characters_are_dropped() -> None:
     out = odt_template.render(make_odt(_p("{{ v }}")), {"v": "a\x00b\x0bc\x1fd"})
     etree.fromstring(read_part(out).encode())

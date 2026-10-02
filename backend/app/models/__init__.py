@@ -70,6 +70,7 @@ from .dossier_note import DossierNote, DossierNoteVersion
 from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
+from .generated_document import VISIBILITY_INTERNAL, GeneratedDocument
 from .generation_prompt import GenerationPromptVersion
 from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
@@ -81,7 +82,9 @@ __all__ = [
     "DocumentFieldEvent",
     "DocumentFieldVersion",
     "DocumentTemplate",
+    "GeneratedDocument",
     "GenerationPromptVersion",
+    "VISIBILITY_INTERNAL",
     "DraftStatus",
     "FieldEventKind",
     "FieldOrigin",

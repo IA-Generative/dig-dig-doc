@@ -24,7 +24,13 @@ METADATA_KEYS = (
     "instructor_name",
     "instructor_email",
     "generated_at",
+    # Numéro de la révision de l'analyse dont viennent les valeurs, et numéro de version du document :
+    # permettent d'écrire « analyse version N » dans le document (#143).
+    "analysis_revision",
+    "document_version",
 )
+# Posées à l'assemblage du fichier (#143), pas à la création du brouillon.
+ASSEMBLY_TIME_KEYS = ("generated_at", "document_version")
 
 
 class AnalysisSource(BaseModel):

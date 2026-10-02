@@ -45,6 +45,7 @@ from app.models.feedback import (
     FeedbackReasonCode,
     FeedbackValue,
 )
+from app.models.generated_document import GeneratedDocument
 from app.models.summary import (
     DocumentSummary,
     DossierSummary,
@@ -783,6 +784,16 @@ class DossierRepository:
             for page in document.pages:
                 if page.screenshot_key:
                     await asyncio.to_thread(s3_connector.delete, page.screenshot_key)
+        # Documents générés (#143) : les lignes partent par cascade, pas les fichiers.
+        generated = await self.db.execute(
+            select(GeneratedDocument.odt_key, GeneratedDocument.pdf_key).where(
+                GeneratedDocument.dossier_id == dossier.id
+            )
+        )
+        for odt_key, pdf_key in generated.all():
+            for key in (odt_key, pdf_key):
+                if key:
+                    await asyncio.to_thread(s3_connector.delete, key)
         await self.db.delete(dossier)
         await self.db.commit()
 
