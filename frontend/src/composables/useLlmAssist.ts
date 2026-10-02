@@ -106,3 +106,58 @@ export async function suggestEntityDefinition(
   );
   return parseJsonFromCompletion<{ definition: string; type: EntityType }>(content);
 }
+
+// --- Modèles de document (administration, issue #139) ---
+
+function withDraft(draft: string, what: string): string {
+  return draft.trim()
+    ? `L'utilisateur a déjà commencé à rédiger ${what} ou décrit son besoin : "${draft.trim()}". Prends-le en ` +
+        "compte pour l'améliorer ou le compléter. "
+    : "";
+}
+
+export async function suggestTemplateDescription(
+  draft: string,
+  ctx: { name: string },
+  model: string | null = null,
+): Promise<string> {
+  return completeChat(
+    withDraft(draft, "cette description") +
+      `Rédige, en français, une description courte (deux ou trois phrases) du modèle de document « ${ctx.name || "sans nom"} », ` +
+      "utilisé pour produire un document de fin d'instruction d'un dossier administratif : à quoi il sert et dans quel cas " +
+      "l'utiliser. Réponds uniquement avec le texte de la description, sans balises ni explication.",
+    model,
+  );
+}
+
+export async function suggestTemplateInstructions(
+  draft: string,
+  ctx: { name: string; description: string },
+  model: string | null = null,
+): Promise<string> {
+  return completeChat(
+    withDraft(draft, "ces consignes") +
+      "Rédige, en français, des consignes générales de rédaction destinées à un agent qui propose les valeurs des champs " +
+      `du modèle de document « ${ctx.name || "sans nom"} »` +
+      (ctx.description.trim() ? ` (${ctx.description.trim()})` : "") +
+      " : ton, registre administratif, vouvoiement, formules à privilégier ou à éviter. Quelques lignes, sans inventer " +
+      "d'information sur un dossier. Réponds uniquement avec le texte des consignes, sans balises ni explication.",
+    model,
+  );
+}
+
+export async function suggestFieldInstruction(
+  draft: string,
+  ctx: { templateName: string; label: string; name: string; type: string; source: string },
+  model: string | null = null,
+): Promise<string> {
+  return completeChat(
+    withDraft(draft, "cette consigne") +
+      "Rédige, en français, une consigne courte (une ou deux phrases) pour l'agent qui propose la valeur du champ " +
+      `« ${ctx.label || ctx.name} » (nom ${ctx.name}, type ${ctx.type}) du modèle de document « ${ctx.templateName || "sans nom"} ». ` +
+      `La valeur ${ctx.source}. Précise le format attendu (par exemple une date au format JJ/MM/AAAA), la longueur et le ton ` +
+      "si cela a un sens pour ce champ. Ne donne pas d'exemple de valeur inventée. Réponds uniquement avec le texte de la " +
+      "consigne, sans balises ni explication.",
+    model,
+  );
+}
