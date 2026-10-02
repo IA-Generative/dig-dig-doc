@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.9.0...v0.9.1) (2026-10-02)
+
+
+### Code Refactoring
+
+* S3_BUCKET et S3_VERIFY_SSL renommés en AWS_S3_BUCKET_NAME et AWS_S3_VERIFY ([b2022f7](https://github.com/IA-Generative/dig-dig-doc/commit/b2022f737c72c5baba655272a60e8bde66ac0547))
+* variables S3_* renommées au standard AWS_* ([1ebcfea](https://github.com/IA-Generative/dig-dig-doc/commit/1ebcfeae5347585b67d79ee94522096b24dcf75d))
+
 ## [0.9.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.8.0...v0.9.0) (2026-10-02)
 
 
