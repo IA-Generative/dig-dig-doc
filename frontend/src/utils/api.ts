@@ -8,6 +8,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Détail brut renvoyé par le serveur (texte, liste d'erreurs ou objet structuré, ex. rapport de validation). */
+    public detail?: unknown,
   ) {
     super(message);
   }
@@ -22,8 +24,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   });
 
   if (!response.ok) {
-    const detail = await response.json().catch(() => null);
-    throw new ApiError(response.status, detail?.detail ?? response.statusText);
+    const body = await response.json().catch(() => null);
+    const detail = body?.detail;
+    throw new ApiError(response.status, typeof detail === "string" ? detail : response.statusText, detail);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

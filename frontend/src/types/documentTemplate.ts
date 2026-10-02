@@ -1,0 +1,113 @@
+// Modèles de document (backend issue #138) : un fichier ODT à placeholders {{ nom }} et la définition de ses
+// champs, versionnés. Réservés aux administrateurs.
+
+export type FieldType = "text" | "date" | "number" | "list" | "boolean";
+export type ElementKind = "classification" | "entity" | "relation" | "synthesis" | "field";
+
+export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+  text: "Texte",
+  date: "Date",
+  number: "Nombre",
+  list: "Liste de textes",
+  boolean: "Oui / non",
+};
+
+export const ELEMENT_KIND_LABELS: Record<ElementKind, string> = {
+  entity: "Entité",
+  classification: "Classification",
+  relation: "Relation",
+  synthesis: "Synthèse",
+  field: "Champ renseigné",
+};
+
+/** Métadonnées du dossier ou du contexte de génération utilisables comme source d'un champ. */
+export const METADATA_KEY_LABELS = {
+  dossier_name: "Nom du dossier",
+  dossier_id: "Identifiant du dossier",
+  dossier_created_at: "Date de création du dossier",
+  dossier_started_at: "Date de début d'instruction",
+  dossier_ended_at: "Date de fin d'instruction",
+  instructor_name: "Nom de l'instructeur",
+  instructor_email: "Courriel de l'instructeur",
+  generated_at: "Date de génération du document",
+  analysis_revision: "Version de l'analyse",
+  document_version: "Version du document",
+} as const;
+export type MetadataKey = keyof typeof METADATA_KEY_LABELS;
+
+export type FieldSource =
+  | { kind: "analysis"; elementKind: ElementKind; definitionName: string }
+  | { kind: "instruction" }
+  | { kind: "dossier_metadata"; key: MetadataKey };
+
+export type SourceKind = FieldSource["kind"];
+
+export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
+  analysis: "Donnée de l'analyse",
+  instruction: "Renseigné au fil de l'instruction",
+  dossier_metadata: "Métadonnée du dossier",
+};
+
+export interface FieldDefinition {
+  /** Nom stable : celui du placeholder dans le fichier. */
+  name: string;
+  label: string;
+  type: FieldType;
+  required: boolean;
+  /** Consigne de génération propre au champ (format de date, longueur, ton). */
+  instruction: string;
+  source: FieldSource;
+}
+
+export interface DocumentTemplate {
+  id: string;
+  archived: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  versionNumber: number;
+  name: string;
+  description: string;
+  generationInstructions: string;
+  fields: FieldDefinition[];
+  /** Placeholders trouvés dans le fichier par le worker, à l'import. */
+  placeholders: string[];
+  fileName: string;
+  fileSize: number;
+  lastAuthorId: string;
+}
+
+export interface DocumentTemplateVersion {
+  id: string;
+  versionNumber: number;
+  name: string;
+  description: string;
+  generationInstructions: string;
+  fields: FieldDefinition[];
+  placeholders: string[];
+  fileName: string;
+  fileSize: number;
+  authorId: string;
+  restoredFromVersionId: string | null;
+  createdAt: string;
+}
+
+export interface TemplateInspection {
+  placeholders: string[];
+  fileName: string;
+  fileSize: number;
+}
+
+/** Rapport renvoyé par le serveur quand les champs ne correspondent pas au fichier (422). */
+export interface PlaceholderReport {
+  message: string;
+  unknownPlaceholders: string[];
+  unusedFields: string[];
+}
+
+export interface GenerationPrompt {
+  versionNumber: number | null;
+  label: string;
+  content: string;
+  isDefault: boolean;
+}
