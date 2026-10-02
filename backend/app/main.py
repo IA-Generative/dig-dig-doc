@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from mcp.server.transport_security import TransportSecuritySettings
 
 from app.config import KeycloakSettings
+from app.logging_config import configure_logging
 from app.mcp.auth import BearerTokenAuthMiddleware
 from app.mcp.helper_server import mcp_server as helper_mcp_server
 from app.mcp.server import mcp_server
@@ -38,6 +39,9 @@ from app.routers.models import router as models_router
 from app.routers.profile import router as profile_router
 from app.routers.reports import router as reports_router
 from app.routers.user_tasks import router as user_tasks_router
+
+# Uvicorn configure son logging avant d'importer l'app : on le remplace ici par du JSON (access log inclus).
+configure_logging()
 
 _keycloak_settings = KeycloakSettings()
 
