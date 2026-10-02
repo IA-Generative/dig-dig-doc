@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import boto3
 import redis
 from botocore.config import Config as BotoConfig
@@ -68,6 +70,31 @@ class S3Connector:
         response = self.client.get_object(Bucket=self.bucket, Key=key)
         content_type = response.get("ContentType") or "application/octet-stream"
         return response["Body"].read(), content_type
+
+    def delete_prefix(self, prefix: str, *, older_than: timedelta | None = None, keep: set[str] = frozenset()) -> int:
+        """Supprime les objets d'un préfixe (éventuellement seulement les plus anciens que ``older_than``, et jamais
+        ceux de ``keep``) et renvoie leur nombre. Comme ``delete``, avale les erreurs de connectivité : un nettoyage
+        ne bloque rien."""
+        deleted = 0
+        try:
+            cutoff = datetime.now(UTC) - older_than if older_than else None
+            paginator = self.client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    if obj["Key"] in keep or (cutoff is not None and obj["LastModified"] > cutoff):
+                        continue
+                    self.client.delete_object(Bucket=self.bucket, Key=obj["Key"])
+                    deleted += 1
+        except (BotoCoreError, ClientError):
+            pass
+        return deleted
+
+    def exists(self, key: str) -> bool:
+        try:
+            self.client.head_object(Bucket=self.bucket, Key=key)
+            return True
+        except (BotoCoreError, ClientError):
+            return False
 
     def delete(self, key: str) -> None:
         # delete_object est idempotent côté S3 (pas d'erreur si la clé
