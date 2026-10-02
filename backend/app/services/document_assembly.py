@@ -48,8 +48,12 @@ def build_values(
     *,
     generated_at: datetime,
     document_version: int,
+    include_proposed: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
-    """(valeurs par nom de champ, champs obligatoires non validés). Un champ facultatif non validé est vide."""
+    """(valeurs par nom de champ, champs obligatoires non validés). Un champ facultatif non validé est vide.
+
+    ``include_proposed`` : pour l'**aperçu** (#142), les valeurs seulement proposées entrent aussi, pour voir le
+    document tel qu'il serait avec les valeurs courantes ; le document généré, lui, n'utilise que les validées."""
     values: dict[str, Any] = {}
     incomplete: list[str] = []
     for definition in definitions:
@@ -58,7 +62,10 @@ def build_values(
             values[definition.name] = format_value(definition, generated_at.date().isoformat())
         elif isinstance(source, MetadataSource) and source.key == "document_version":
             values[definition.name] = str(document_version)
-        elif current[definition.name].status == FieldStatus.VALIDE and current[definition.name].value is not None:
+        elif current[definition.name].value is not None and (
+            current[definition.name].status == FieldStatus.VALIDE
+            or (include_proposed and current[definition.name].status == FieldStatus.PROPOSE)
+        ):
             values[definition.name] = format_value(definition, current[definition.name].value)
         elif definition.required:
             incomplete.append(definition.name)

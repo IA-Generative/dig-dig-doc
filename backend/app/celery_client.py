@@ -166,3 +166,19 @@ def render_document(template_key: str, values: dict, output_prefix: str, timeout
         raise RenderWorkerUnavailableError() from error
     except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique
         raise RenderFailedError(str(error)) from error
+
+
+def render_preview(template_key: str, values: dict, output_key: str, timeout: int = 120) -> str:
+    """Demande au worker ``document_render`` un aperçu PDF du modèle rempli (issue #142), déposé sous
+    ``output_key``. Seul le PDF est produit : rien d'autre n'est conservé. Bloquant : hors de la boucle d'événements."""
+    from celery.exceptions import TimeoutError as CeleryTimeoutError
+
+    result = celery_client.send_task(
+        "app.tasks.render_preview", args=[template_key, values, output_key], queue="document_render"
+    )
+    try:
+        return str(result.get(timeout=timeout))
+    except CeleryTimeoutError as error:
+        raise RenderWorkerUnavailableError() from error
+    except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique
+        raise RenderFailedError(str(error)) from error

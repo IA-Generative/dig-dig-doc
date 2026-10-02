@@ -794,6 +794,8 @@ class DossierRepository:
             for key in (odt_key, pdf_key):
                 if key:
                     await asyncio.to_thread(s3_connector.delete, key)
+        # Aperçus PDF des brouillons de document (#142) : des objets S3 sans ligne en base.
+        await asyncio.to_thread(s3_connector.delete_prefix, f"previews/{dossier.id}/")
         await self.db.delete(dossier)
         await self.db.commit()
 
