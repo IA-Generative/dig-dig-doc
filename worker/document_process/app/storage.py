@@ -14,7 +14,7 @@ class RustFsStorage:
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
-        self._bucket = settings.S3_BUCKET
+        self._bucket = settings.AWS_S3_BUCKET_NAME
 
     def get_object(self, key: str) -> bytes:
         response = self._client.get_object(Bucket=self._bucket, Key=key)

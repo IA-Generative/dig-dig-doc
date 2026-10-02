@@ -16,7 +16,7 @@ class WorkerSettings(BaseSettings):
     AWS_ENDPOINT_URL: str = ""
     AWS_ACCESS_KEY_ID: str = "rustfsadmin"
     AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
-    S3_BUCKET: str = "dig-dig-doc"
+    AWS_S3_BUCKET_NAME: str = "dig-dig-doc"
 
     # LibreOffice en ligne de commande (conversion en PDF).
     SOFFICE_BINARY: str = "soffice"

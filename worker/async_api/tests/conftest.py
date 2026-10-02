@@ -6,7 +6,7 @@ for name, value in {
     "AWS_ENDPOINT_URL": "http://localhost:9000",
     "AWS_ACCESS_KEY_ID": "test",
     "AWS_SECRET_ACCESS_KEY": "test",
-    "S3_BUCKET_NAME": "test",
+    "AWS_S3_BUCKET_NAME": "test",
     "DIGDIGDOC_BASE_URL": "http://localhost:8000",
     "DIGDIGDOC_API_TOKEN": "test",
 }.items():

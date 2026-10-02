@@ -52,7 +52,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET: dig-dig-doc
+      AWS_S3_BUCKET_NAME: dig-dig-doc
       SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
       INTERNAL_WORKER_TOKEN: ${INTERNAL_WORKER_TOKEN:-dev-only-worker-token-not-for-prod}
       # Hub LLM (compatible API OpenAI) pour GET /api/models et le choix de
@@ -87,7 +87,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET: dig-dig-doc
+      AWS_S3_BUCKET_NAME: dig-dig-doc
     depends_on:
       redis:
         condition: service_healthy
@@ -109,7 +109,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET: dig-dig-doc
+      AWS_S3_BUCKET_NAME: dig-dig-doc
       # Hub LLM (compatible API OpenAI) pour la classification (VLM + LLM)
       # et l'extraction d'entités (LLM en structured output).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -138,7 +138,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET: dig-dig-doc
+      AWS_S3_BUCKET_NAME: dig-dig-doc
     depends_on:
       redis:
         condition: service_healthy
@@ -181,8 +181,8 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET_NAME: dig-dig-doc
-      S3_VERIFY_SSL: "false"
+      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_VERIFY: "false"
       DIGDIGDOC_BASE_URL: http://backend:8000
       # Token API créé via POST /api/app-tokens (compte de service du worker).
       DIGDIGDOC_API_TOKEN: ${ASYNC_API_WORKER_TOKEN:-}
@@ -225,7 +225,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      S3_BUCKET: dig-dig-doc
+      AWS_S3_BUCKET_NAME: dig-dig-doc
       SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
     depends_on:
       postgres:

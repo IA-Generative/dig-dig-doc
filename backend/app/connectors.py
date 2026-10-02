@@ -42,7 +42,7 @@ class S3Connector:
     même client boto3 dans les deux cas, seul endpoint_url change."""
 
     def __init__(self, settings: StorageSettings) -> None:
-        self.bucket = settings.S3_BUCKET
+        self.bucket = settings.AWS_S3_BUCKET_NAME
         self.client = boto3.client(
             "s3",
             endpoint_url=settings.AWS_ENDPOINT_URL,

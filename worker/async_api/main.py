@@ -18,8 +18,8 @@ def build_s3_client() -> S3Client:
         access_key=settings.AWS_ACCESS_KEY_ID,
         secret_key=settings.AWS_SECRET_ACCESS_KEY,
         region_name=settings.AWS_DEFAULT_REGION,
-        bucket_name=settings.S3_BUCKET_NAME,
-        verify=settings.S3_VERIFY_SSL,
+        bucket_name=settings.AWS_S3_BUCKET_NAME,
+        verify=settings.AWS_S3_VERIFY,
     )
 
 
