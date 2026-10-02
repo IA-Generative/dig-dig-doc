@@ -12,7 +12,10 @@ import {
   type MetadataKey,
   type SourceKind,
 } from "@/types/documentTemplate";
+import { suggestFieldInstruction } from "@/composables/useLlmAssist";
 import type { ValidationIssue } from "@/utils/documentTemplateValidation";
+
+import AssistedTextarea from "./AssistedTextarea.vue";
 
 /** Écrit un placeholder comme dans le fichier : {{ nom }} (hors gabarit, où « }} » fermerait l'interpolation). */
 const braces = (name: string) => `{{ ${name} }}`;
@@ -20,6 +23,8 @@ const braces = (name: string) => `{{ ${name} }}`;
 // Un champ d'un modèle de document : son libellé, son type, sa source et sa consigne de génération.
 const props = defineProps<{
   modelValue: FieldDefinition;
+  /** Nom du modèle, pour contextualiser l'aide à la rédaction de la consigne. */
+  templateName?: string;
   /** Le fichier contient le placeholder {{ nom }}. */
   inFile: boolean;
   issues: ValidationIssue[];
@@ -44,6 +49,23 @@ function changeSourceKind(kind: SourceKind) {
 }
 
 const analysisSource = computed(() => (props.modelValue.source.kind === "analysis" ? props.modelValue.source : null));
+/** Phrase décrivant d'où vient la valeur, pour l'aide à la rédaction. */
+const sourceSentence = computed(() => {
+  const source = props.modelValue.source;
+  if (source.kind === "analysis") return `est tirée de l'élément « ${source.definitionName || "?"} » de l'analyse du dossier`;
+  if (source.kind === "dossier_metadata") return `est la métadonnée « ${METADATA_KEY_LABELS[source.key]} »`;
+  return "est renseignée par l'instructeur au fil de l'instruction du dossier";
+});
+
+function suggestInstruction(draft: string, model: string | null) {
+  const f = props.modelValue;
+  return suggestFieldInstruction(
+    draft,
+    { templateName: props.templateName ?? "", label: f.label, name: f.name, type: FIELD_TYPE_LABELS[f.type], source: sourceSentence.value },
+    model,
+  );
+}
+
 const metadataSource = computed(() => (props.modelValue.source.kind === "dossier_metadata" ? props.modelValue.source : null));
 </script>
 
@@ -136,17 +158,15 @@ const metadataSource = computed(() => (props.modelValue.source.kind === "dossier
       </div>
     </div>
 
-    <div>
-      <DsfrInput
-        :model-value="modelValue.instruction"
-        label="Consigne de génération"
-        label-visible
-        hint="Pour l'agent : format de date, longueur, ton… (facultatif)"
-        is-textarea
-        :rows="2"
-        @update:model-value="update({ instruction: String($event) })"
-      />
-    </div>
+    <AssistedTextarea
+      :model-value="modelValue.instruction"
+      label="Consigne de génération"
+      hint="Pour l'agent : format de date, longueur, ton… (facultatif)"
+      :rows="2"
+      assist-label="Suggérer une consigne"
+      :suggest="suggestInstruction"
+      @update:model-value="update({ instruction: $event })"
+    />
 
     <ul v-if="issues.length" class="field-row__issues">
       <li v-for="issue in issues" :key="issue.kind + issue.message">{{ issue.message }}</li>

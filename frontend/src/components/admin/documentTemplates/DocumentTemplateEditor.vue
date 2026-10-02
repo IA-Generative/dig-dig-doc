@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
 import { errorMessage, placeholderReportFrom, useDocumentTemplates } from "@/composables/useDocumentTemplates";
+import { suggestTemplateDescription, suggestTemplateInstructions } from "@/composables/useLlmAssist";
 import type { Version } from "@/types/analyse";
 import type {
   DocumentTemplate,
@@ -12,6 +13,7 @@ import type {
 } from "@/types/documentTemplate";
 import { defaultField, isValidFieldName, validateTemplate } from "@/utils/documentTemplateValidation";
 
+import AssistedTextarea from "./AssistedTextarea.vue";
 import TemplateFieldRow from "./TemplateFieldRow.vue";
 
 /** Écrit un placeholder comme dans le fichier : {{ nom }} (hors gabarit, où « }} » fermerait l'interpolation). */
@@ -46,9 +48,35 @@ const serverReport = ref<PlaceholderReport | null>(null);
 const newFieldName = ref("");
 const versions = ref<DocumentTemplateVersion[]>([]);
 
+// Carrousel : un seul champ est édité à la fois, les pastilles donnent l'état de chacun.
+const activeIndex = ref(0);
+const activeField = computed(() => fields.value[activeIndex.value] ?? null);
+watch(
+  () => fields.value.length,
+  (count) => {
+    if (activeIndex.value >= count) activeIndex.value = Math.max(0, count - 1);
+  },
+);
+
 const issues = computed(() => validateTemplate(placeholders.value, fields.value));
 const issuesByField = (fieldName: string) => issues.value.filter((i) => i.name === fieldName && i.kind !== "unknown_placeholder");
 const unknownPlaceholders = computed(() => issues.value.filter((i) => i.kind === "unknown_placeholder"));
+const fieldHasIssue = (fieldName: string) => issuesByField(fieldName).length > 0;
+
+function previous() {
+  activeIndex.value = Math.max(0, activeIndex.value - 1);
+}
+
+function next() {
+  activeIndex.value = Math.min(fields.value.length - 1, activeIndex.value + 1);
+}
+
+/** Va au premier champ qui a un point à corriger. */
+function goToFirstIssue() {
+  const index = fields.value.findIndex((f) => fieldHasIssue(f.name) || !f.name);
+  if (index !== -1) activeIndex.value = index;
+}
+
 const canSave = computed(
   () => name.value.trim().length > 0 && issues.value.length === 0 && (!isNew.value || file.value !== null) && !saving.value,
 );
@@ -79,7 +107,9 @@ async function onFileChange(event: Event) {
     // Un champ par placeholder détecté ; ceux déjà définis sont conservés tels quels.
     const known = new Set(fields.value.map((f) => f.name));
     const added = result.placeholders.filter((p) => !known.has(p));
+    const firstAdded = fields.value.length;
     fields.value = [...fields.value, ...added.map(defaultField)];
+    if (added.length) activeIndex.value = firstAdded;
     info.value = `${result.placeholders.length} placeholder(s) détecté(s) dans le fichier` + (added.length ? `, ${added.length} champ(s) à définir.` : ".");
   } catch (e) {
     file.value = null;
@@ -93,6 +123,7 @@ function addField() {
   const fieldName = newFieldName.value.trim();
   if (!fieldName) return;
   fields.value = [...fields.value, defaultField(fieldName)];
+  activeIndex.value = fields.value.length - 1;
   newFieldName.value = "";
 }
 
@@ -106,6 +137,11 @@ function removeField(index: number) {
   fields.value = fields.value.filter((_, i) => i !== index);
 }
 
+function defineUnknown(fieldName: string) {
+  fields.value = [...fields.value, defaultField(fieldName)];
+  activeIndex.value = fields.value.length - 1;
+}
+
 /** Recharge l'éditeur depuis le modèle renvoyé par le serveur (après enregistrement ou restauration). */
 function load(template: DocumentTemplate) {
   current.value = template;
@@ -114,6 +150,7 @@ function load(template: DocumentTemplate) {
   generationInstructions.value = template.generationInstructions;
   fields.value = clone(template.fields);
   placeholders.value = [...template.placeholders];
+  activeIndex.value = Math.min(activeIndex.value, Math.max(0, template.fields.length - 1));
   file.value = null;
   fileLabel.value = `${template.fileName} (version ${template.versionNumber})`;
   void loadVersions();
@@ -213,14 +250,20 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
     <fieldset class="template-editor__block">
       <legend class="fr-h6">Le modèle</legend>
       <DsfrInput v-model="name" label="Nom" label-visible hint="Unique, majuscules et accents ignorés" />
-      <DsfrInput v-model="description" label="Description" label-visible is-textarea :rows="2" />
-      <DsfrInput
+      <AssistedTextarea
+        v-model="description"
+        label="Description"
+        :rows="2"
+        assist-label="Suggérer une description"
+        :suggest="(draft, model) => suggestTemplateDescription(draft, { name }, model)"
+      />
+      <AssistedTextarea
         v-model="generationInstructions"
         label="Consignes générales de génération"
-        label-visible
         hint="Ton, registre, langue : communes à tous les champs (facultatif)"
-        is-textarea
-        :rows="2"
+        :rows="3"
+        assist-label="Suggérer des consignes"
+        :suggest="(draft, model) => suggestTemplateInstructions(draft, { name, description }, model)"
       />
     </fieldset>
 
@@ -269,24 +312,67 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
       <ul v-if="unknownPlaceholders.length" class="template-editor__unknown">
         <li v-for="issue in unknownPlaceholders" :key="issue.name">
           {{ issue.message }}
-          <DsfrButton label="Définir ce champ" size="sm" tertiary @click="fields = [...fields, defaultField(issue.name)]" />
+          <DsfrButton label="Définir ce champ" size="sm" tertiary @click="defineUnknown(issue.name)" />
         </li>
       </ul>
 
       <p v-if="fields.length === 0" class="fr-text--sm">
         Aucun champ. Choisissez un fichier : un champ est créé pour chaque placeholder détecté.
       </p>
-      <ul class="template-editor__fields">
-        <TemplateFieldRow
-          v-for="(f, index) in fields"
-          :key="f.name + index"
-          :model-value="f"
-          :in-file="placeholders.includes(f.name)"
-          :issues="issuesByField(f.name)"
-          @update:model-value="updateField(index, $event)"
-          @remove="removeField(index)"
-        />
-      </ul>
+      <div v-if="fields.length" class="template-editor__carousel">
+        <div class="template-editor__carousel-nav">
+          <DsfrButton label="Précédent" icon="ri-arrow-left-s-line" tertiary size="sm" :disabled="activeIndex === 0" @click="previous" />
+          <div class="template-editor__chips" role="tablist" aria-label="Champs du modèle">
+            <button
+              v-for="(f, index) in fields"
+              :id="`field-chip-${index}`"
+              :key="f.name + index"
+              type="button"
+              role="tab"
+              class="template-editor__chip"
+              :class="{
+                'template-editor__chip--active': index === activeIndex,
+                'template-editor__chip--ko': fieldHasIssue(f.name),
+              }"
+              :aria-selected="index === activeIndex"
+              @click="activeIndex = index"
+            >
+              <span aria-hidden="true">{{ fieldHasIssue(f.name) ? "⚠" : "✔" }}</span>
+              {{ braces(f.name) }}
+            </button>
+          </div>
+          <DsfrButton
+            label="Suivant"
+            icon="ri-arrow-right-s-line"
+            icon-right
+            tertiary
+            size="sm"
+            :disabled="activeIndex >= fields.length - 1"
+            @click="next"
+          />
+        </div>
+        <p class="fr-text--sm template-editor__carousel-caption">
+          Champ {{ activeIndex + 1 }} sur {{ fields.length }}
+          <DsfrButton
+            v-if="issues.length"
+            label="Aller au premier point à corriger"
+            tertiary
+            no-outline
+            size="sm"
+            @click="goToFirstIssue"
+          />
+        </p>
+        <ul v-if="activeField" class="template-editor__fields" role="tabpanel" :aria-labelledby="`field-chip-${activeIndex}`">
+          <TemplateFieldRow
+            :model-value="activeField"
+            :template-name="name"
+            :in-file="placeholders.includes(activeField.name)"
+            :issues="issuesByField(activeField.name)"
+            @update:model-value="updateField(activeIndex, $event)"
+            @remove="removeField(activeIndex)"
+          />
+        </ul>
+      </div>
 
       <div class="template-editor__add">
         <DsfrInput
@@ -394,6 +480,63 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
   gap: 0.5rem;
   flex-wrap: wrap;
   color: var(--text-default-error);
+}
+
+.template-editor__carousel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.template-editor__carousel-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.template-editor__chips {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem;
+  flex: 1;
+  scroll-snap-type: x proximity;
+}
+
+.template-editor__chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border-default-grey);
+  border-radius: 1rem;
+  background: var(--background-default-grey);
+  color: var(--text-default-grey);
+  font-family: monospace;
+  font-size: 0.875rem;
+  cursor: pointer;
+  scroll-snap-align: center;
+}
+
+.template-editor__chip--ko {
+  border-color: var(--border-plain-error);
+  color: var(--text-default-error);
+}
+
+.template-editor__chip--active {
+  background: var(--background-action-high-blue-france);
+  border-color: var(--background-action-high-blue-france);
+  color: #fff;
+  font-weight: 700;
+}
+
+.template-editor__carousel-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--text-mention-grey);
 }
 
 .template-editor__fields {
