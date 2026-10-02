@@ -39,6 +39,11 @@ Types : texte et date (non vide), nombre (accepte `"1 250,5"`), booléen (oui/no
 
 À la validation (saisie, acceptation ou restauration) d'un champ « renseigné au fil de l'instruction », la valeur est écrite dans l'analyse comme élément `field` (nom du champ = `definition_name`) : nouvel élément la première fois, nouvelle version ensuite (rien si la valeur est identique). Il hérite des versions, propositions, notes, du verrou et de la reprise à la relance. Les champs tirés de l'analyse ne sont **pas** recopiés. Si l'analyse est figée, la valeur est validée dans le brouillon mais pas recopiée (le journal le précise).
 
+## Pour la revue (#142)
+
+- `GET /{draft}/preview` : **aperçu PDF** du modèle rempli avec les valeurs **courantes** (validées *et* proposées ; un champ obligatoire vide s'écrit « [non renseigné] »), rendu par le worker `document_render` (tâche `render_preview`). Mis en cache dans S3 sur le hash du modèle et des valeurs (`previews/<dossier>/<brouillon>/<hash>.pdf`, en-tête `X-Preview-Cache: hit|miss`) ; les aperçus de plus de 10 minutes sont supprimés au prochain calcul, **jamais l'aperçu courant**, et ceux d'un dossier partent avec lui. 503 si le worker ne répond pas, 502 s'il échoue. Un brouillon archivé reste prévisualisable.
+- Chaque champ du brouillon porte des **sources lisibles** (`source_details` : type et nom de l'élément, texte, page ; note interne ; métadonnée) et un drapeau `stale` quand un élément source a été **modifié depuis la révision** du brouillon. Le brouillon donne aussi le `revision_number`.
+
 ## Journal
 
 `document_field_events`, en ajout seul : `proposed`, `accepted`, `modified`, `rejected`, `regenerated`, `restored`, avec auteur, **durée** entre la proposition et la décision (vide si rien n'était proposé), version du prompt, modèle, sources et précision (consigne de régénération, motif de rejet, recopie dans l'analyse). Pour les métriques de qualité (#145).
