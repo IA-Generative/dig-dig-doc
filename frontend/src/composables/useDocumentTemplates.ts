@@ -1,6 +1,8 @@
 import { ref } from "vue";
 
 import type {
+  AnalyseDefinitions,
+  AnalyseOption,
   DocumentTemplate,
   DocumentTemplateVersion,
   ElementKind,
@@ -9,6 +11,7 @@ import type {
   GenerationPrompt,
   MetadataKey,
   PlaceholderReport,
+  SourcesReport,
   TemplateInspection,
 } from "@/types/documentTemplate";
 import type { PromptVersion } from "@/types/analyse";
@@ -39,6 +42,7 @@ function mapField(api: any): FieldDefinition {
 function mapTemplate(api: any): DocumentTemplate {
   return {
     id: api.id,
+    analyseId: api.analyse_id,
     archived: api.archived,
     createdBy: api.created_by,
     createdAt: api.created_at,
@@ -91,6 +95,8 @@ function fieldToApi(field: FieldDefinition) {
 }
 
 export interface TemplateDraft {
+  /** Analyse du modèle, à la création seulement : elle ne change plus ensuite. */
+  analyseId?: string;
   name: string;
   description: string;
   generationInstructions: string;
@@ -101,6 +107,7 @@ export interface TemplateDraft {
 
 function toFormData(draft: TemplateDraft): FormData {
   const form = new FormData();
+  if (draft.analyseId) form.append("analyse_id", draft.analyseId);
   form.append("name", draft.name.trim());
   form.append("description", draft.description.trim());
   form.append("generation_instructions", draft.generationInstructions.trim());
@@ -121,6 +128,21 @@ export function placeholderReportFrom(error: unknown): PlaceholderReport | null 
     message: detail.message,
     unknownPlaceholders: detail.unknown_placeholders,
     unusedFields: detail.unused_fields ?? [],
+  };
+}
+
+/** Rapport « sources » du serveur (422) : des champs désignent des éléments que l'analyse ne définit pas. */
+export function sourcesReportFrom(error: unknown): SourcesReport | null {
+  if (!(error instanceof ApiError) || error.status !== 422) return null;
+  const detail = error.detail as any;
+  if (!detail || typeof detail !== "object" || !Array.isArray(detail.unknown_sources)) return null;
+  return {
+    message: detail.message,
+    unknownSources: detail.unknown_sources.map((u: any) => ({
+      field: u.field,
+      elementKind: u.element_kind,
+      definitionName: u.definition_name,
+    })),
   };
 }
 
@@ -145,10 +167,22 @@ export function errorMessage(error: unknown, fallback: string): string {
 export function useDocumentTemplates() {
   const templates = ref<DocumentTemplate[]>([]);
 
-  async function fetchTemplates(includeArchived = false): Promise<DocumentTemplate[]> {
-    const data = await apiFetch<any[]>(`${BASE}?include_archived=${includeArchived}`);
+  /** Modèles d'une analyse (un modèle appartient à une seule analyse). */
+  async function fetchTemplates(analyseId: string, includeArchived = false): Promise<DocumentTemplate[]> {
+    const data = await apiFetch<any[]>(`${BASE}?analyse_id=${analyseId}&include_archived=${includeArchived}`);
     templates.value = data.map(mapTemplate);
     return templates.value;
+  }
+
+  /** Les analyses, pour choisir celle d'un modèle. */
+  async function fetchAnalyses(): Promise<AnalyseOption[]> {
+    const data = await apiFetch<{ items: any[] }>("/api/analyses?page=1&page_size=100");
+    return data.items.map((a) => ({ id: a.id, name: a.name }));
+  }
+
+  /** Entités, labels et agents que l'analyse définit : les choix possibles pour la source d'un champ. */
+  async function fetchDefinitions(analyseId: string): Promise<AnalyseDefinitions> {
+    return apiFetch<AnalyseDefinitions>(`${BASE}/analyses/${analyseId}/definitions`);
   }
 
   async function fetchTemplate(id: string): Promise<DocumentTemplate> {
@@ -214,6 +248,8 @@ export function useDocumentTemplates() {
   return {
     templates,
     fetchTemplates,
+    fetchAnalyses,
+    fetchDefinitions,
     fetchTemplate,
     fetchVersions,
     inspectFile,

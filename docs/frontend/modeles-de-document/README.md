@@ -2,13 +2,15 @@
 
 Issue : [#139](https://github.com/IA-Generative/dig-dig-doc/issues/139) (parent [#107](https://github.com/IA-Generative/dig-dig-doc/issues/107)). API : [`docs/backend/modeles-de-document.md`](../../backend/modeles-de-document.md) et [`generation-des-champs.md`](../../backend/generation-des-champs.md).
 
-Un **modèle de document** est un fichier ODT (LibreOffice Writer) avec des champs `{{ nom }}` et la **définition de ces champs**. Les documents de fin d'instruction sont produits à partir d'un modèle. Cette page est réservée aux **administrateurs** : *Administration → Modèles de document*.
+Un **modèle de document** est un fichier ODT (LibreOffice Writer) avec des champs `{{ nom }}` et la **définition de ces champs**. Les documents de fin d'instruction sont produits à partir d'un modèle.
+
+**Un modèle appartient à une analyse**, et à une seule : il ne sert qu'aux dossiers de cette analyse, et ses champs puisent dans ce qu'elle définit (entités, labels, agents). Rien n'est global : on choisit d'abord l'analyse. Cette page est réservée aux **administrateurs** : *Administration → Modèles de document*.
 
 ## La liste
 
 ![Liste des modèles et prompt de l'agent](01-liste-des-modeles.png)
 
-Nom, version, nombre de champs, fichier et date de modification. « Afficher les modèles archivés » inclut les modèles archivés (ils ne sont plus proposés pour de nouveaux documents). Sous la liste : le **prompt de l'agent de génération** (voir plus bas).
+On choisit d'abord **l'analyse** : la liste ne montre que ses modèles, et « Nouveau modèle » crée un modèle dans cette analyse (elle ne peut plus changer ensuite). Chaque ligne : nom, version, nombre de champs, fichier et date de modification. Le **nom est unique dans l'analyse** (deux analyses peuvent chacune avoir un « Courrier »). « Afficher les modèles archivés » inclut les modèles archivés (ils ne sont plus proposés pour de nouveaux documents). Sous la liste : le **prompt de l'agent de génération** (voir plus bas).
 
 ## Créer un modèle
 
@@ -27,7 +29,7 @@ Pour chaque champ :
 | **Libellé** | Affiché à l'instructeur. |
 | **Type** | Texte, date, nombre, liste de textes, oui/non. |
 | **Obligatoire** | Un champ obligatoire non validé empêche d'assembler le document (sauf confirmation explicite). |
-| **D'où vient la valeur** | *Donnée de l'analyse* (type d'élément et nom de l'élément), *renseigné au fil de l'instruction* (décision, motif, commentaire) ou *métadonnée du dossier* (nom, dates, instructeur, version de l'analyse, version du document…). |
+| **D'où vient la valeur** | *Donnée de l'analyse* : un type d'élément et **un élément choisi dans la liste de ce que l'analyse définit** (entités, labels de classification, agents) ; pour une relation ou un champ renseigné, un nom libre. *Renseigné au fil de l'instruction* (décision, motif, commentaire) ou *métadonnée du dossier* (nom, dates, instructeur, version de l'analyse, version du document…). |
 | **Consigne de génération** | Pour l'agent : format de date, longueur, ton. Facultative. |
 
 ## Aide à la rédaction
@@ -44,15 +46,20 @@ Il se met à jour **en direct** et **bloque l'enregistrement** tant qu'il reste 
 
 - un placeholder du fichier **sans champ** défini (bouton « Définir ce champ ») ;
 - un champ **sans placeholder** dans le fichier (badge « Absent du fichier », bouton « Supprimer ») ;
-- un nom de champ invalide ou en double, un **libellé vide**, une source *analyse* **sans nom d'élément**.
+- un nom de champ invalide ou en double, un **libellé vide**, une source *analyse* **sans élément** ;
+- une source qui désigne **un élément que l'analyse ne définit pas** (par exemple une entité supprimée de l'analyse depuis) : le champ affiche « (inconnu dans l'analyse) ».
+
+![Source inconnue de l'analyse](05-source-inconnue.png)
 
 Le serveur refait la même vérification, dans les deux sens, et reste l'autorité : si ses écarts diffèrent, ils s'affichent tels quels.
 
-![Rapport renvoyé par le serveur](06-rapport-du-serveur.png)
+![Rapport renvoyé par le serveur](07-rapport-du-serveur.png)
+
+![Éléments que l'analyse ne définit pas, vus par le serveur](08-source-inconnue-serveur.png)
 
 ## Modifier, versions, restaurer
 
-![Modèle existant et historique](05-modele-existant-et-historique.png)
+![Modèle existant et historique](06-modele-existant-et-historique.png)
 
 « Enregistrer une nouvelle version » **ajoute** une version (nom, description, consignes, champs, fichier) : rien n'est écrasé. Sans nouveau fichier, la version garde celui de la version courante ; choisir un fichier le remplace pour cette version (et les champs sont réconciliés : ceux déjà définis sont conservés, les nouveaux placeholders créent des champs à définir). **Télécharger** donne le fichier de la version courante.
 
@@ -64,6 +71,10 @@ En bas de la liste, le prompt qui guide l'agent proposant une valeur pour chaque
 
 ## Choix et limites
 
+- Le sélecteur d'analyse montre les **100 analyses les plus récentes**.
+- **Pas de duplication** d'un modèle vers une autre analyse pour l'instant : un courrier commun à deux analyses se recrée dans chacune.
+- Un modèle créé **avant** ce rattachement n'a pas d'analyse : il n'est proposé à aucun dossier et n'apparaît dans aucune liste par analyse.
+- Une source déjà enregistrée peut devenir inconnue si l'analyse change ; elle est signalée à la prochaine modification, et au moment de générer un brouillon le champ reste simplement non renseigné.
 - Les captures sont prises avec une **API simulée** (le backend de développement n'était pas à jour) : elles montrent l'interface, pas des données réelles.
 - Pas d'**aperçu** du modèle rempli : hors de cette première version.
 - L'aide à la rédaction a été vue avec un LLM simulé ; avec le vrai LLM, la qualité des suggestions n'est pas évaluée.
