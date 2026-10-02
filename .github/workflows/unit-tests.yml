@@ -137,13 +137,32 @@ jobs:
           enable-cache: true
           cache-dependency-glob: worker/document_render/uv.lock
 
+      # Même jeu de paquets que l'image du worker : sans LibreOffice, les tests marqués `libreoffice`
+      # (conversion réelle d'un modèle en PDF) sont ignorés au lieu de s'exécuter.
+      - name: Install LibreOffice and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer-nogui \
+            fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea
+
       - name: Install worker dependencies
         working-directory: worker/document_render
         run: uv sync --group dev
 
       - name: Run tests
         working-directory: worker/document_render
-        run: uv run pytest
+        run: uv run pytest -rs
+
+      - name: Check the LibreOffice tests were not skipped
+        working-directory: worker/document_render
+        run: |
+          # `-m libreoffice` selects only the real conversions: none must be skipped (soffice found).
+          output="$(uv run pytest -m libreoffice -rs -q)"
+          echo "$output"
+          if echo "$output" | grep -qi "skipped"; then
+            echo "::error::Des tests LibreOffice ont été ignorés : soffice est introuvable sur le runner."
+            exit 1
+          fi
 
   unit-tests-worker-agent-execution:
     name: worker/agent_execution

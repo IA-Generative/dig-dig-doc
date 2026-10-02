@@ -1,0 +1,25 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.worker_render.deploymentType "StatefulSet" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "worker_render") }}
+  labels: {{- include "helper.labels" (dict "root" . "componentName" "worker_render") | nindent 4 }}
+spec:
+  {{- if not .Values.worker_render.autoscaling.enabled }}
+  replicas: {{ .Values.worker_render.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.worker_render.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "worker_render") | nindent 6 }}
+  serviceName: {{ include "helper.componentFullname" (dict "root" . "componentName" "worker_render") }}
+  {{- with .Values.worker_render.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "worker_render" "component" .Values.worker_render) | nindent 4 }}
+  {{- if or .Values.worker_render.volumeClaims .Values.worker_render.extraVolumeClaims }}
+  volumeClaimTemplates: {{- toYaml (concat (default (list) .Values.worker_render.volumeClaims) (default (list) .Values.worker_render.extraVolumeClaims)) | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}

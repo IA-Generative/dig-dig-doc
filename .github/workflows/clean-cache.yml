@@ -82,6 +82,7 @@ jobs:
           - backend
           - worker-document-process
           - worker-agent-execution
+          - worker-document-render
     with:
       IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}:pr-${{ matrix.pr.number }}
 
@@ -99,6 +100,7 @@ jobs:
           - backend
           - worker-document-process
           - worker-agent-execution
+          - worker-document-render
     with:
       IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}
       CLEAN_TAGGED: false
