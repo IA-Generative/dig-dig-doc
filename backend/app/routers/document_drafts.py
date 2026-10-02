@@ -4,13 +4,23 @@ Réservées aux utilisateurs authentifiés : un brouillon est **interne**, jamai
 Un brouillon lie un modèle (version précise) à une révision de l'analyse du dossier ; ses champs ont chacun
 un état (non renseigné, proposé, validé), des versions en ajout seul et un journal des décisions."""
 
+import asyncio
+import hashlib
+import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.celery_client import dispatch_document_generation
+from app.celery_client import (
+    RenderFailedError,
+    RenderWorkerUnavailableError,
+    dispatch_document_generation,
+    render_preview,
+)
+from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.document_draft import DocumentDraft, DraftStatus, FieldStatus
@@ -28,6 +38,7 @@ from app.repositories.document_draft_repository import (
 from app.repositories.document_template_repository import DocumentTemplateRepository, template_out
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
+from app.repositories.generated_document_repository import GeneratedDocumentRepository
 from app.schemas.document_draft import (
     CompletenessOut,
     DraftCreateIn,
@@ -43,6 +54,7 @@ from app.schemas.document_draft import (
     RegenerateIn,
 )
 from app.schemas.document_template import FieldDefinition, MetadataSource, TemplateOut
+from app.services.document_assembly import build_values
 from app.services.document_fields import FieldValueError
 
 router = APIRouter(prefix="/dossiers", tags=["Documents"], dependencies=[Depends(get_current_user)])
@@ -348,3 +360,54 @@ async def regenerate_field(
         )
     instruction = (body.instruction or "").strip() or None
     return await _start_generation(db, draft, user, [name], instruction)
+
+
+# Un aperçu plus ancien que cela est supprimé au prochain calcul (pas avant : une autre requête peut le lire).
+PREVIEW_RETENTION = timedelta(minutes=10)
+
+
+@router.get("/{dossier_id}/document-drafts/{draft_id}/preview")
+async def preview_draft(dossier_id: uuid.UUID, draft_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """**Aperçu fidèle** (#142) : le modèle rempli avec les valeurs **courantes** du brouillon (validées et
+    proposées), rendu en PDF par le même moteur que le document final. Non éditable : on modifie les valeurs des
+    champs. Mis en cache sur les valeurs : un aperçu déjà calculé pour les mêmes valeurs est rendu tel quel."""
+    draft = await _draft_or_404(db, dossier_id, draft_id)
+    repository = DocumentDraftRepository(db)
+    template_version = await repository.template_version(draft)
+    values, _ = build_values(
+        template_definitions(template_version),
+        await repository.current_versions(draft.id),
+        generated_at=datetime.now(UTC),
+        document_version=await GeneratedDocumentRepository(db).next_version_number(draft),
+        include_proposed=True,
+    )
+    digest = hashlib.sha256(
+        json.dumps({"template_version": str(draft.template_version_id), "values": values}, sort_keys=True).encode()
+    ).hexdigest()
+    prefix = f"previews/{dossier_id}/{draft.id}/"
+    key = f"{prefix}{digest}.pdf"
+
+    cached = await asyncio.to_thread(s3_connector.exists, key)
+    if not cached:
+        try:
+            await asyncio.to_thread(render_preview, template_version.file_key, values, key)
+        except RenderWorkerUnavailableError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Le worker de rendu ne répond pas : l'aperçu n'est pas disponible pour l'instant",
+            ) from None
+        except RenderFailedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Aperçu impossible : {error}"
+            ) from error
+        await asyncio.to_thread(s3_connector.delete_prefix, prefix, older_than=PREVIEW_RETENTION, keep={key})
+    data, _ = await asyncio.to_thread(s3_connector.download, key)
+    return Response(
+        content=data,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'inline; filename="apercu.pdf"',
+            "Cache-Control": "private, no-store",
+            "X-Preview-Cache": "hit" if cached else "miss",
+        },
+    )

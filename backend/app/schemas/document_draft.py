@@ -52,6 +52,15 @@ class FieldVersionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SourceDetailOut(BaseModel):
+    """Une source d'une valeur, lisible : l'élément de l'analyse (type, nom, texte, page) ou la note."""
+
+    type: str
+    label: str
+    text: str
+    page: int | None = None
+
+
 class DraftFieldOut(BaseModel):
     """Un champ du modèle avec son état courant."""
 
@@ -62,6 +71,9 @@ class DraftFieldOut(BaseModel):
     instruction: str
     source: dict[str, Any]
     current: FieldVersionOut
+    source_details: list[SourceDetailOut] = Field(default_factory=list)
+    # Un élément de l'analyse dont vient la valeur a été modifié depuis la révision du brouillon.
+    stale: bool = False
 
 
 class CompletenessOut(BaseModel):
@@ -76,6 +88,7 @@ class DraftOut(BaseModel):
     dossier_id: uuid.UUID
     analysis_id: uuid.UUID
     revision_id: uuid.UUID
+    revision_number: int
     template_id: uuid.UUID
     template_version_id: uuid.UUID
     template_name: str

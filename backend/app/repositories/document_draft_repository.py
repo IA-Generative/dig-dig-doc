@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import TypeAdapter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.security.factory import RequestContext
 from app.models.document_draft import (
@@ -37,10 +38,12 @@ from app.models.dossier_analysis import (
     AnalysisElement,
     AnalysisElementKind,
     AnalysisElementVersion,
+    AnalysisRevision,
     DossierAnalysis,
     DossierAnalysisStatus,
     ElementVersionOrigin,
 )
+from app.models.dossier_note import DossierNote
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.schemas.document_draft import (
     CompletenessOut,
@@ -48,6 +51,7 @@ from app.schemas.document_draft import (
     DraftOut,
     DraftSummaryOut,
     FieldVersionOut,
+    SourceDetailOut,
 )
 from app.schemas.document_template import (
     ASSEMBLY_TIME_KEYS,
@@ -56,7 +60,15 @@ from app.schemas.document_template import (
     InstructionSource,
     MetadataSource,
 )
-from app.services.document_fields import coerce_value, resolve_initial_values, value_to_text
+from app.services.document_fields import coerce_value, element_text, resolve_initial_values, value_to_text
+
+ELEMENT_KIND_LABELS = {
+    AnalysisElementKind.CLASSIFICATION: "Classification",
+    AnalysisElementKind.ENTITY: "Entité",
+    AnalysisElementKind.RELATION: "Relation",
+    AnalysisElementKind.SYNTHESIS: "Synthèse",
+    AnalysisElementKind.FIELD: "Champ renseigné",
+}
 
 
 class DraftError(Exception):
@@ -182,15 +194,91 @@ class DocumentDraftRepository:
                 proposed.append(definition.name)
         return CompletenessOut(complete=not missing and not proposed, missing=missing, proposed=proposed)
 
+    async def _source_details(
+        self, current: dict[str, DocumentFieldVersion]
+    ) -> tuple[dict[str, list[SourceDetailOut]], set[str]]:
+        """Sources lisibles de chaque champ, et champs dont un élément source a changé depuis la révision."""
+        version_ids: set[uuid.UUID] = set()
+        note_ids: set[uuid.UUID] = set()
+        for version in current.values():
+            for source in version.sources:
+                if source.get("type") == "analysis_element" and source.get("version_id"):
+                    version_ids.add(uuid.UUID(source["version_id"]))
+                elif source.get("type") == "note" and source.get("note_id"):
+                    note_ids.add(uuid.UUID(source["note_id"]))
+        elements: dict[uuid.UUID, tuple[AnalysisElement, AnalysisElementVersion]] = {}
+        if version_ids:
+            rows = await self.db.execute(
+                select(AnalysisElement, AnalysisElementVersion)
+                .join(AnalysisElementVersion, AnalysisElementVersion.element_id == AnalysisElement.id)
+                .where(AnalysisElementVersion.id.in_(version_ids))
+            )
+            elements = {version.id: (element, version) for element, version in rows.all()}
+        notes: dict[uuid.UUID, DossierNote] = {}
+        if note_ids:
+            rows = await self.db.execute(
+                select(DossierNote)
+                .where(DossierNote.id.in_(note_ids))
+                .options(selectinload(DossierNote.versions))
+                .execution_options(populate_existing=True)
+            )
+            notes = {note.id: note for note in rows.scalars()}
+
+        details: dict[str, list[SourceDetailOut]] = {}
+        stale: set[str] = set()
+        for name, version in current.items():
+            items: list[SourceDetailOut] = []
+            for source in version.sources:
+                kind = source.get("type")
+                if kind == "analysis_element" and source.get("version_id"):
+                    found = elements.get(uuid.UUID(source["version_id"]))
+                    if found is None:
+                        items.append(SourceDetailOut(type=kind, label="Élément de l'analyse (supprimé)", text=""))
+                        continue
+                    element, element_version = found
+                    label = (
+                        f"{ELEMENT_KIND_LABELS.get(element.kind, element.kind)} « {element.definition_name or '?'} »"
+                    )
+                    items.append(
+                        SourceDetailOut(
+                            type=kind,
+                            label=label,
+                            text=element_text(element.kind, element_version.value)[:400],
+                            page=element.first_page_number,
+                        )
+                    )
+                    if element.retained_version_id != element_version.id:
+                        stale.add(name)
+                elif kind == "note" and source.get("note_id"):
+                    note = notes.get(uuid.UUID(source["note_id"]))
+                    items.append(
+                        SourceDetailOut(
+                            type=kind,
+                            label="Note interne" + (" (archivée)" if note and note.archived else ""),
+                            text=(note.current.content[:400] if note else ""),
+                        )
+                    )
+                elif kind == "dossier_metadata":
+                    items.append(
+                        SourceDetailOut(type=kind, label="Métadonnée du dossier", text=str(source.get("key", "")))
+                    )
+                else:
+                    items.append(SourceDetailOut(type=str(kind), label=str(kind), text=""))
+            details[name] = items
+        return details, stale
+
     async def build_out(self, draft: DocumentDraft) -> DraftOut:
         template_version = await self.template_version(draft)
         definitions = template_definitions(template_version)
         current = await self.current_versions(draft.id)
+        source_details, stale = await self._source_details(current)
+        revision = await self.db.get(AnalysisRevision, draft.revision_id)
         return DraftOut(
             id=draft.id,
             dossier_id=draft.dossier_id,
             analysis_id=draft.analysis_id,
             revision_id=draft.revision_id,
+            revision_number=revision.number if revision else 0,
             template_id=draft.template_id,
             template_version_id=draft.template_version_id,
             template_name=template_version.name,
@@ -207,6 +295,8 @@ class DocumentDraftRepository:
                     instruction=d.instruction,
                     source=d.source.model_dump(),
                     current=FieldVersionOut.model_validate(current[d.name]),
+                    source_details=source_details.get(d.name, []),
+                    stale=d.name in stale,
                 )
                 for d in definitions
             ],
