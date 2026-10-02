@@ -10,9 +10,9 @@ class WorkerSettings(BaseSettings):
 
     # RustFS en local/dev, un bucket S3 réel en prod (voir backend
     # StorageSettings, mêmes noms de variables des deux côtés).
-    S3_ENDPOINT_URL: str = "http://localhost:9000"
-    S3_ACCESS_KEY: str = "rustfsadmin"
-    S3_SECRET_KEY: str = "rustfsadmin"
+    AWS_ENDPOINT_URL: str = "http://localhost:9000"
+    AWS_ACCESS_KEY_ID: str = "rustfsadmin"
+    AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
     S3_BUCKET: str = "dig-dig-doc"
 
     # Langue Tesseract (ISO 639-2) pour l'OCR des pages scannées par

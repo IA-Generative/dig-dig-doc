@@ -77,7 +77,7 @@ Trois endroits, selon l'usage. Le détail (Vault, création des jetons, rotation
 
 | Où | Secret | Contenu |
 |---|---|---|
-| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `DIGDIGDOC_API_TOKEN` (identifiants uniquement) |
+| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DIGDIGDOC_API_TOKEN` (identifiants uniquement) |
 | GitHub Actions | `ASYNC_API_TOKEN` | Jeton en lecture sur le dépôt privé `async-api` (installation de `mic-worker` : lint, tests, build d'image) |
 | Local / docker compose | `.env` | `ASYNC_API_WORKER_TOKEN` (token API dig-dig-doc), `GH_TOKEN` (build), `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (facultatifs, valeurs de dev par défaut) |
 
@@ -119,7 +119,7 @@ d'AsyncTaskAPI, que le chart ne fournit pas.
 helm template digdigdoc ./digdigdoc -f digdigdoc/values/common-values.yaml --set worker_async_api.enabled=true
 ```
 
-Les identifiants (`BROKER_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `DIGDIGDOC_API_TOKEN`) viennent du secret
+Les identifiants (`BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DIGDIGDOC_API_TOKEN`) viennent du secret
 `digdigdoc-async-api-worker` (Vault) ; tout le reste est dans `env`, avec des valeurs par défaut (`common-values.yaml`). Sondes : `/health`
 (vivacité) et `/ready` (stockage objet), sur le port `8084`. Pas de mise à l'échelle KEDA : le worker consomme
 RabbitMQ, pas les files Celery ; régler `WORKER_CONCURRENCY` et `replicaCount` selon la mémoire.

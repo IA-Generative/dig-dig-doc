@@ -17,10 +17,10 @@ class Settings(BaseSettings):
     SERVICE_CLASS: str | None = None
 
     # Stockage objet d'AsyncTaskAPI, où les fichiers sont déposés avant la tâche.
-    S3_ENDPOINT_URL: str
-    S3_ACCESS_KEY: str
-    S3_SECRET_KEY: str
-    S3_REGION_NAME: str = "fr-par"
+    AWS_ENDPOINT_URL: str
+    AWS_ACCESS_KEY_ID: str
+    AWS_SECRET_ACCESS_KEY: str
+    AWS_DEFAULT_REGION: str = "fr-par"
     S3_BUCKET_NAME: str
     S3_VERIFY_SSL: bool = True
 

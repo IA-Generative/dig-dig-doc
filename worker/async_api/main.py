@@ -14,10 +14,10 @@ from src.task import AnalyzeTask
 
 def build_s3_client() -> S3Client:
     return S3Client(
-        endpoint_url=settings.S3_ENDPOINT_URL,
-        access_key=settings.S3_ACCESS_KEY,
-        secret_key=settings.S3_SECRET_KEY,
-        region_name=settings.S3_REGION_NAME,
+        endpoint_url=settings.AWS_ENDPOINT_URL,
+        access_key=settings.AWS_ACCESS_KEY_ID,
+        secret_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_DEFAULT_REGION,
         bucket_name=settings.S3_BUCKET_NAME,
         verify=settings.S3_VERIFY_SSL,
     )
