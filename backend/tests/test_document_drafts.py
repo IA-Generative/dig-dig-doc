@@ -4,8 +4,9 @@ import uuid
 from typing import Any
 
 import pytest
-from document_helpers import (  # noqa: E402
+from document_helpers import (
     add_entity,
+    analyse_of,  # noqa: E402
     by_name,
     create_draft,
     entity,
@@ -67,6 +68,7 @@ def setup(client: TestClient) -> dict[str, Any]:
             field("decision"),
             field("dossier", meta("dossier_name")),
         ],
+        dossier_id=dossier_id,
     )
     return {"dossier_id": dossier_id, "analysis": analysis, "template_id": template_id}
 
@@ -92,13 +94,13 @@ def test_a_draft_starts_with_values_from_the_analysis_and_the_dossier(client: Te
 
 
 def test_a_single_valued_field_takes_the_first_occurrence_by_page(client: TestClient, setup: dict) -> None:
-    template_id = make_template(client, [field("adresse", entity("adresse"))])
+    template_id = make_template(client, [field("adresse", entity("adresse"))], dossier_id=setup["dossier_id"])
     draft = create_draft(client, setup["dossier_id"], template_id)
     assert by_name(draft)["adresse"]["current"]["value"] == "3 place Neuve"
 
 
 def test_an_analysis_field_without_data_is_not_filled(client: TestClient, setup: dict) -> None:
-    template_id = make_template(client, [field("siret", entity("siret"))])
+    template_id = make_template(client, [field("siret", entity("siret"))], dossier_id=setup["dossier_id"])
     current = by_name(create_draft(client, setup["dossier_id"], template_id))["siret"]["current"]
     assert current["status"] == "non_renseigné" and current["value"] is None
 
@@ -162,7 +164,7 @@ def test_a_revision_of_another_dossier_is_refused(client: TestClient, setup: dic
 def test_a_dossier_without_analysis_cannot_get_a_draft(client: TestClient) -> None:
     analyse_id = client.post("/api/analyses", json={"name": "Vide", "description": "t"}).json()["id"]
     dossier_id = client.post("/api/dossiers", json={"name": "Sans analyse", "analyse_id": analyse_id}).json()["id"]
-    template_id = make_template(client, [field("decision")])
+    template_id = make_template(client, [field("decision")], dossier_id=dossier_id)
     response = client.post(f"/api/dossiers/{dossier_id}/document-drafts", json={"template_id": template_id})
     assert response.status_code == 409
 
@@ -182,6 +184,58 @@ def test_unknown_and_archived_templates_are_refused(client: TestClient, setup: d
         f"/api/dossiers/{setup['dossier_id']}/document-drafts", json={"template_id": setup["template_id"]}
     )
     assert archived.status_code == 409
+
+
+def test_a_template_of_another_analysis_cannot_be_used_on_this_dossier(client: TestClient, setup: dict) -> None:
+    """Un modèle appartient à une analyse : seuls les dossiers de cette analyse peuvent s'en servir."""
+    other_dossier, _ = make_dossier(client)  # une autre analyse
+    foreign_template = make_template(client, [field("decision")], dossier_id=other_dossier)
+
+    response = client.post(
+        f"/api/dossiers/{setup['dossier_id']}/document-drafts", json={"template_id": foreign_template}
+    )
+
+    assert response.status_code == 409 and "n'appartient pas à l'analyse" in response.json()["detail"]
+    assert client.get(f"/api/dossiers/{setup['dossier_id']}/document-drafts").json() == []
+    # Le même modèle sert bien un dossier de sa propre analyse.
+    own = client.post(f"/api/dossiers/{other_dossier}/document-drafts", json={"template_id": foreign_template})
+    assert own.status_code == 201
+
+
+def test_a_template_without_analysis_is_offered_to_no_dossier(client: TestClient, setup: dict) -> None:
+    """Un modèle créé avant le rattachement à une analyse n'en a pas : il ne sert à aucun dossier."""
+    from app.models.document_template import DocumentTemplate
+
+    async def detach(session: Any) -> None:
+        row = await session.get(DocumentTemplate, uuid.UUID(setup["template_id"]))
+        row.analyse_id = None
+        await session.commit()
+
+    run(client, detach)
+    response = client.post(
+        f"/api/dossiers/{setup['dossier_id']}/document-drafts", json={"template_id": setup["template_id"]}
+    )
+    assert response.status_code == 409
+    assert setup["template_id"] not in [
+        t["id"] for t in client.get(f"/api/dossiers/{setup['dossier_id']}/document-templates").json()
+    ]
+
+
+def test_the_templates_a_dossier_can_use_are_those_of_its_analysis(client: TestClient, setup: dict) -> None:
+    other_dossier, _ = make_dossier(client)
+    foreign = make_template(client, [field("decision")], dossier_id=other_dossier)
+    archived = make_template(client, [field("decision")], dossier_id=setup["dossier_id"])
+    client.post(f"/api/admin/document-templates/{archived}/archive")
+
+    listed = client.get(f"/api/dossiers/{setup['dossier_id']}/document-templates")
+
+    assert listed.status_code == 200
+    ids = [t["id"] for t in listed.json()]
+    assert setup["template_id"] in ids  # le sien
+    assert foreign not in ids  # d'une autre analyse
+    assert archived not in ids  # archivé : plus proposé
+    assert all(t["analyse_id"] == analyse_of(client, setup["dossier_id"]) for t in listed.json())
+    assert client.get(f"/api/dossiers/{uuid.uuid4()}/document-templates").status_code == 404
 
 
 def test_list_and_get_drafts(client: TestClient, setup: dict) -> None:
@@ -215,7 +269,7 @@ def test_an_instructor_value_is_validated_and_versioned(client: TestClient, setu
     [("number", "abc"), ("number", True), ("boolean", "peut-être"), ("list", []), ("list", "texte"), ("text", "  ")],
 )
 def test_a_value_of_the_wrong_type_is_refused(client: TestClient, setup: dict, field_type: str, bad: Any) -> None:
-    template_id = make_template(client, [field("champ", type=field_type)])
+    template_id = make_template(client, [field("champ", type=field_type)], dossier_id=setup["dossier_id"])
     draft = create_draft(client, setup["dossier_id"], template_id)
     response = client.put(url(setup["dossier_id"], draft["id"], "/fields/champ"), json={"value": bad})
     assert response.status_code == 422
@@ -226,7 +280,7 @@ def test_a_value_of_the_wrong_type_is_refused(client: TestClient, setup: dict, f
     [("number", "1 250,5", 1250.5), ("number", 3, 3), ("boolean", "Oui", True), ("list", [" a ", "b"], ["a", "b"])],
 )
 def test_values_are_typed(client: TestClient, setup: dict, field_type: str, given: Any, stored: Any) -> None:
-    template_id = make_template(client, [field("champ", type=field_type)])
+    template_id = make_template(client, [field("champ", type=field_type)], dossier_id=setup["dossier_id"])
     draft = create_draft(client, setup["dossier_id"], template_id)
     response = client.put(url(setup["dossier_id"], draft["id"], "/fields/champ"), json={"value": given})
     assert response.status_code == 200 and response.json()["value"] == stored
@@ -391,7 +445,7 @@ def test_the_value_is_reused_by_another_document_of_the_same_dossier(client: Tes
     first = create_draft(client, setup["dossier_id"], setup["template_id"])
     client.put(url(setup["dossier_id"], first["id"], "/fields/decision"), json={"value": "Accordée"})
 
-    other_template = make_template(client, [field("decision")])
+    other_template = make_template(client, [field("decision")], dossier_id=setup["dossier_id"])
     second = create_draft(client, setup["dossier_id"], other_template)
 
     current = by_name(second)["decision"]["current"]
@@ -449,6 +503,7 @@ def test_completeness_lists_required_fields_not_yet_validated(client: TestClient
             field("motif", required=False),
             field("genere", meta("generated_at")),
         ],
+        dossier_id=setup["dossier_id"],
     )
     draft = create_draft(client, setup["dossier_id"], template_id)
     path = url(setup["dossier_id"], draft["id"], "/completeness")

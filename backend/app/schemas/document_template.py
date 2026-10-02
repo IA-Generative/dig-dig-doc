@@ -145,6 +145,7 @@ class TemplateOut(BaseModel):
     """Un modèle avec sa version courante."""
 
     id: uuid.UUID
+    analyse_id: uuid.UUID | None
     archived: bool
     created_by: str
     created_at: datetime

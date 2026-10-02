@@ -42,12 +42,20 @@ def meta(key: str) -> dict[str, Any]:
     return {"kind": "dossier_metadata", "key": key}
 
 
-def make_template(client: TestClient, fields: list[dict[str, Any]], name: str = "Décision") -> str:
+def analyse_of(client: TestClient, dossier_id: str) -> str:
+    """Analyse (type d'analyse) d'un dossier : un modèle de document appartient à une analyse."""
+    return client.get(f"/api/dossiers/{dossier_id}").json()["analyse_id"]
+
+
+def make_template(client: TestClient, fields: list[dict[str, Any]], name: str = "Décision", *, dossier_id: str) -> str:
+    """Crée un modèle dans l'analyse du dossier donné (il ne sert qu'aux dossiers de cette analyse)."""
     definitions = [FieldDefinition.model_validate(f) for f in fields]
+    analyse_id = uuid.UUID(analyse_of(client, dossier_id))
 
     async def create(session: Any) -> str:
         template = await DocumentTemplateRepository(session).create(
             user_id="admin",
+            analyse_id=analyse_id,
             name=f"{name} {uuid.uuid4().hex[:8]}",
             description="",
             generation_instructions="",

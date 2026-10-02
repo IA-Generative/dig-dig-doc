@@ -35,6 +35,34 @@ def make_odt(*placeholders: str) -> bytes:
     return out.getvalue()
 
 
+# L'analyse du test en cours : un modèle appartient à une analyse (issue #139).
+CURRENT: dict[str, str] = {}
+
+
+def make_analyse(
+    client: TestClient, *, entities=("nom", "adresse"), labels=("Passeport",), agents=("Synthèse",)
+) -> str:
+    """Une analyse qui définit des entités, des labels et des agents (les éléments que les champs peuvent viser)."""
+    analyse_id = client.post("/api/analyses", json={"name": f"Analyse {RUN}", "description": "t"}).json()["id"]
+    client.put(
+        f"/api/analyses/{analyse_id}/extraction/entities",
+        json={"entities": [{"name": e, "definition": f"def {e}", "type": "texte"} for e in entities]},
+    )
+    client.put(
+        f"/api/analyses/{analyse_id}/classification/labels",
+        json={"labels": [{"name": label, "definition": f"def {label}"} for label in labels]},
+    )
+    for agent in agents:
+        client.post(f"/api/analyses/{analyse_id}/agents", json={"name": agent, "prompt": "p", "tools": []})
+    return analyse_id
+
+
+@pytest.fixture(autouse=True)
+def analyse(client: TestClient) -> str:
+    CURRENT["analyse_id"] = make_analyse(client)
+    return CURRENT["analyse_id"]
+
+
 @pytest.fixture(autouse=True)
 def worker(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Remplace le worker de rendu : il « lit » les placeholders écrits entre {{ }} dans le fichier."""
@@ -54,6 +82,14 @@ def worker(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return state
 
 
+NOT_ODT = {"file": ("m.odt", b"texte", ODT_MIME)}
+
+
+def base() -> dict[str, str]:
+    """Champs de formulaire communs aux créations : l'analyse du test en cours et un nom."""
+    return {"analyse_id": CURRENT["analyse_id"], "name": "X"}
+
+
 def field(name: str, **extra: Any) -> dict[str, Any]:
     return {"name": name, "label": name.capitalize(), "source": {"kind": "instruction"}, **extra}
 
@@ -68,6 +104,7 @@ def create(
     return client.post(
         URL,
         data={
+            "analyse_id": CURRENT["analyse_id"],
             "name": n(name),
             "fields": json.dumps(fields if fields is not None else [field(x) for x in names]),
             **form,
@@ -161,7 +198,11 @@ def test_inspect_lists_placeholders_without_saving(client: TestClient) -> None:
 
 
 def test_a_file_that_is_not_an_odt_is_refused(client: TestClient, worker: dict) -> None:
-    response = client.post(URL, data={"name": "X", "fields": "[]"}, files={"file": ("m.odt", b"texte", ODT_MIME)})
+    response = client.post(
+        URL,
+        data={"analyse_id": CURRENT["analyse_id"], "name": "X", "fields": "[]"},
+        files={"file": ("m.odt", b"texte", ODT_MIME)},
+    )
     assert response.status_code == 422 and "ODT" in response.json()["detail"]
     assert worker["calls"] == 0  # le worker n'est même pas sollicité
 
@@ -217,7 +258,11 @@ def test_two_fields_with_the_same_name_are_refused(client: TestClient) -> None:
 
 
 def test_the_fields_must_be_valid_json(client: TestClient) -> None:
-    response = client.post(URL, data={"name": "X", "fields": "pas du json"}, files={"file": ("m.odt", odt(), ODT_MIME)})
+    response = client.post(
+        URL,
+        data={"analyse_id": CURRENT["analyse_id"], "name": "X", "fields": "pas du json"},
+        files={"file": ("m.odt", odt(), ODT_MIME)},
+    )
     assert response.status_code == 422
 
 
@@ -339,8 +384,14 @@ def test_every_route_is_forbidden_for_a_non_admin(client: TestClient) -> None:
             client.get(f"{URL}/{tid}/versions"),
             client.get(f"{URL}/{tid}/versions/1/file"),
             client.post(f"{URL}/inspect", files={"file": ("m.odt", odt(), ODT_MIME)}),
-            client.post(URL, data={"name": "X", "fields": "[]"}, files={"file": ("m.odt", odt(), ODT_MIME)}),
-            client.post(f"{URL}/{tid}/versions", data={"name": "X", "fields": "[]"}),
+            client.post(
+                URL,
+                data={"analyse_id": CURRENT["analyse_id"], "name": "X", "fields": "[]"},
+                files={"file": ("m.odt", odt(), ODT_MIME)},
+            ),
+            client.post(
+                f"{URL}/{tid}/versions", data={"analyse_id": CURRENT["analyse_id"], "name": "X", "fields": "[]"}
+            ),
             client.post(f"{URL}/{tid}/restore", json={"version_id": "00000000-0000-0000-0000-000000000000"}),
             client.post(f"{URL}/{tid}/archive"),
             client.post(f"{URL}/{tid}/unarchive"),
@@ -348,3 +399,123 @@ def test_every_route_is_forbidden_for_a_non_admin(client: TestClient) -> None:
         assert [c.status_code for c in calls] == [403] * len(calls)
     finally:
         del app.dependency_overrides[get_current_user]
+
+
+# --- Un modèle appartient à une analyse (issue #139) ---
+
+
+def analysis_source(kind: str, name: str) -> dict[str, Any]:
+    return {"kind": "analysis", "element_kind": kind, "definition_name": name}
+
+
+def test_a_template_belongs_to_one_analysis(client: TestClient, analyse: str) -> None:
+    body = create(client, "Décision P").json()
+    assert body["analyse_id"] == analyse
+    assert client.get(f"{URL}/{body['id']}").json()["analyse_id"] == analyse
+    # L'analyse ne peut pas changer : ni la création d'une version ni la restauration n'en déplacent un.
+    assert new_version(client, body["id"], "Décision P", [field("nom")]).json()["analyse_id"] == analyse
+
+
+def test_the_analysis_is_required_and_must_exist(client: TestClient) -> None:
+    files = {"file": ("m.odt", odt("nom"), ODT_MIME)}
+    missing = client.post(URL, data={"name": "X", "fields": json.dumps([field("nom")])}, files=files)
+    assert missing.status_code == 422
+    unknown = client.post(
+        URL, data={"analyse_id": str(uuid.uuid4()), "name": "X", "fields": json.dumps([field("nom")])}, files=files
+    )
+    assert unknown.status_code == 404 and "Analyse" in unknown.json()["detail"]
+
+
+def test_the_list_can_be_filtered_by_analysis(client: TestClient, analyse: str) -> None:
+    mine = create(client, "Décision Q").json()
+    other_analyse = make_analyse(client)
+    theirs = client.post(
+        URL,
+        data={"analyse_id": other_analyse, "name": n("Décision R"), "fields": json.dumps([field("nom")])},
+        files={"file": ("m.odt", odt("nom"), ODT_MIME)},
+    ).json()
+
+    in_mine = [t["id"] for t in client.get(URL, params={"analyse_id": analyse}).json()]
+    in_theirs = [t["id"] for t in client.get(URL, params={"analyse_id": other_analyse}).json()]
+
+    assert in_mine == [mine["id"]] and in_theirs == [theirs["id"]]
+
+
+def test_the_name_is_unique_within_an_analysis_not_across_analyses(client: TestClient) -> None:
+    assert create(client, "Courrier commun").status_code == 201
+    assert create(client, "courrier COMMUN").status_code == 409  # même analyse
+    other = make_analyse(client)
+    files = {"file": ("m.odt", odt("nom"), ODT_MIME)}
+    same_name_elsewhere = client.post(
+        URL,
+        data={"analyse_id": other, "name": n("Courrier commun"), "fields": json.dumps([field("nom")])},
+        files=files,
+    )
+    assert same_name_elsewhere.status_code == 201
+
+
+def test_a_source_must_designate_an_element_the_analysis_defines(client: TestClient) -> None:
+    fields = [
+        field("a", source=analysis_source("entity", "SIRET")),  # entité que l'analyse ne définit pas
+        field("b", source=analysis_source("classification", "Permis")),  # label inconnu
+        field("c", source=analysis_source("synthesis", "Rapport")),  # agent inconnu
+        field("d", source=analysis_source("entity", "nom")),  # connue
+    ]
+    response = create(client, "Décision S", ("a", "b", "c", "d"), fields)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "ne définit pas" in detail["message"]
+    assert [u["field"] for u in detail["unknown_sources"]] == ["a", "b", "c"]
+    assert detail["unknown_sources"][0] == {"field": "a", "element_kind": "entity", "definition_name": "SIRET"}
+
+
+def test_known_elements_are_accepted_whatever_their_case_and_kind(client: TestClient) -> None:
+    fields = [
+        field("a", source=analysis_source("entity", "NOM")),
+        field("b", source=analysis_source("classification", "passeport")),
+        field("c", source=analysis_source("synthesis", "synthèse")),
+        field("d", source=analysis_source("relation", "n'importe quelle relation")),  # pas de définition à vérifier
+        field("e", source=analysis_source("field", "décision")),  # champ renseigné : idem
+    ]
+    assert create(client, "Décision T", ("a", "b", "c", "d", "e"), fields).status_code == 201
+
+
+def test_a_new_version_is_checked_against_the_analysis_too(client: TestClient) -> None:
+    template = create(client, "Décision U").json()
+    bad = new_version(
+        client, template["id"], "Décision U", [field("nom", source=analysis_source("entity", "inconnue"))]
+    )
+    assert bad.status_code == 422 and bad.json()["detail"]["unknown_sources"][0]["field"] == "nom"
+    assert client.get(f"{URL}/{template['id']}").json()["version_number"] == 1
+    good = new_version(
+        client, template["id"], "Décision U", [field("nom", source=analysis_source("entity", "adresse"))]
+    )
+    assert good.status_code == 201
+
+
+def test_the_definitions_of_an_analysis_are_offered_as_choices(client: TestClient, analyse: str) -> None:
+    response = client.get(f"{URL}/analyses/{analyse}/definitions")
+    assert response.status_code == 200
+    assert response.json() == {"entity": ["nom", "adresse"], "classification": ["Passeport"], "synthesis": ["Synthèse"]}
+    assert client.get(f"{URL}/analyses/{uuid.uuid4()}/definitions").status_code == 404
+
+
+def test_deleting_an_analysis_deletes_its_templates_and_their_files(client: TestClient, analyse: str) -> None:
+    from app.connectors import s3_connector
+    from app.db import async_session_factory
+    from app.repositories.analyse_repository import AnalyseRepository
+
+    template = create(client, "Décision V").json()
+    key = f"document-templates/{template['id']}/v1.odt"
+    assert s3_connector.download(key)[0]
+
+    async def delete() -> None:
+        async with async_session_factory() as session:
+            repository = AnalyseRepository(session)
+            await repository.delete(await repository.get(uuid.UUID(analyse)))
+
+    client.portal.call(delete)
+
+    assert client.get(f"{URL}/{template['id']}").status_code == 404
+    with pytest.raises(Exception):  # noqa: B017, PT011 - le fichier du modèle a été supprimé avec lui
+        s3_connector.download(key)

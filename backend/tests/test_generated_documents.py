@@ -62,6 +62,7 @@ def setup(client: TestClient) -> dict[str, Any]:
             field("version", {"kind": "dossier_metadata", "key": "document_version"}),
         ],
         name="Décision d'octroi",
+        dossier_id=dossier_id,
     )
     draft = create_draft(client, dossier_id, template_id)
     return {
@@ -121,7 +122,9 @@ def test_the_document_is_assembled_from_the_validated_values(client: TestClient,
 def test_only_validated_values_enter_the_document(client: TestClient, setup: dict) -> None:
     validate_all(client, setup)
     # Un champ facultatif simplement proposé n'entre pas : on n'écrit que ce qui est validé.
-    template_id = make_template(client, [field("nom", entity("nom")), field("note", required=False)])
+    template_id = make_template(
+        client, [field("nom", entity("nom")), field("note", required=False)], dossier_id=setup["dossier_id"]
+    )
     draft = create_draft(client, setup["dossier_id"], template_id)
     run(client, lambda s: _propose(s, setup["dossier_id"], draft["id"], "note", "Proposée par l'agent"))
     client.post(url(setup["dossier_id"], draft["id"], "/fields/nom/validate"))
@@ -258,7 +261,7 @@ def test_unknown_or_foreign_documents_are_404(client: TestClient, setup: dict) -
 def test_the_list_can_be_filtered_by_draft(client: TestClient, setup: dict) -> None:
     validate_all(client, setup)
     generate(client, setup)
-    other_template = make_template(client, [field("nom", entity("nom"))])
+    other_template = make_template(client, [field("nom", entity("nom"))], dossier_id=setup["dossier_id"])
     other = create_draft(client, setup["dossier_id"], other_template)
     client.post(url(setup["dossier_id"], other["id"], "/fields/nom/validate"))
     client.post(url(setup["dossier_id"], other["id"], "/documents"), json={})
