@@ -70,6 +70,7 @@ from .dossier_note import DossierNote, DossierNoteVersion
 from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
+from .generation_prompt import GenerationPromptVersion
 from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
 from .user_preference import UserPreference
@@ -80,6 +81,7 @@ __all__ = [
     "DocumentFieldEvent",
     "DocumentFieldVersion",
     "DocumentTemplate",
+    "GenerationPromptVersion",
     "DraftStatus",
     "FieldEventKind",
     "FieldOrigin",

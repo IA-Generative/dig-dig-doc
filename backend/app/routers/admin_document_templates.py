@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_client import RenderWorkerUnavailableError, TemplateExtractionError, extract_template_fields
 from app.connectors import s3_connector
-from app.core.security.factory import RequestContext, get_current_user
+from app.core.security.admin import require_admin
+from app.core.security.factory import RequestContext
 from app.db import get_db
 from app.models.document_template import DocumentTemplate
 from app.repositories.document_template_repository import (
@@ -41,13 +42,7 @@ ODT_MIME = "application/vnd.oasis.opendocument.text"
 MAX_TEMPLATE_BYTES = 10 * 1024 * 1024
 
 
-def _require_admin(user: Annotated[RequestContext, Depends(get_current_user)]) -> RequestContext:
-    if not user.is_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Accès réservé aux administrateurs")
-    return user
-
-
-router = APIRouter(prefix="/admin/document-templates", tags=["Admin"], dependencies=[Depends(_require_admin)])
+router = APIRouter(prefix="/admin/document-templates", tags=["Admin"], dependencies=[Depends(require_admin)])
 
 
 def _unprocessable(detail) -> HTTPException:
@@ -135,7 +130,7 @@ async def list_templates(
 @router.post("", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
 async def create_template(
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[RequestContext, Depends(_require_admin)],
+    user: Annotated[RequestContext, Depends(require_admin)],
     name: Annotated[str, Form(min_length=1, max_length=200)],
     fields: Annotated[str, Form(description="Liste JSON de définitions de champs")],
     file: Annotated[UploadFile, File()],
@@ -187,7 +182,7 @@ async def list_template_versions(template_id: uuid.UUID, db: Annotated[AsyncSess
 async def add_template_version(
     template_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[RequestContext, Depends(_require_admin)],
+    user: Annotated[RequestContext, Depends(require_admin)],
     name: Annotated[str, Form(min_length=1, max_length=200)],
     fields: Annotated[str, Form(description="Liste JSON de définitions de champs")],
     file: Annotated[UploadFile | None, File()] = None,
@@ -240,7 +235,7 @@ async def restore_template_version(
     template_id: uuid.UUID,
     body: TemplateRestoreIn,
     db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[RequestContext, Depends(_require_admin)],
+    user: Annotated[RequestContext, Depends(require_admin)],
 ):
     """Restaure une version antérieure : ajoute une version qui en reprend tout le contenu (fichier compris)."""
     template = await _template_or_404(db, template_id)
