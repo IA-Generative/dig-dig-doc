@@ -12,11 +12,11 @@ Chaque secret ci-dessous correspond à un **chemin Vault** (`mirai` mount, kv-v2
 
 | Secret K8s                | Chemin Vault (`exploration/`)       | Type K8s                    | Utilisé par                          |
 | ------------------------- | ------------------------------ | --------------------------- | ------------------------------------ |
-| `digdigdoc-s3`            | `digdigdoc-s3`                 | Opaque                      | backend, worker_document, worker_agent |
+| `digdigdoc-s3`            | `digdigdoc-s3`                 | Opaque                      | backend, worker_document, worker_agent, worker_render |
 | `digdigdoc-keycloak`      | `digdigdoc-keycloak`           | Opaque                      | backend                               |
 | `digdigdoc-openai`        | `digdigdoc-openai`             | Opaque                      | backend                               |
 | `digdigdoc-worker`        | `digdigdoc-worker`             | Opaque                      | backend, worker_document, worker_agent |
-| `digdigdoc-redis`         | `digdigdoc-redis`              | Opaque                      | backend, worker_document, worker_agent, redis sub-chart, KEDA |
+| `digdigdoc-redis`         | `digdigdoc-redis`              | Opaque                      | backend, worker_document, worker_agent, worker_render, redis sub-chart, KEDA |
 | `digdigdoc-meilisearch`   | `digdigdoc-meilisearch`        | Opaque                      | backend (envFrom)                     |
 | `digdigdoc-db-superuser`  | `digdigdoc-db-superuser`       | kubernetes.io/basic-auth    | CNPG (superuserSecret)                |
 | `digdigdoc-db-appuser`    | `digdigdoc-db-appuser`         | kubernetes.io/basic-auth    | CNPG (initdb.secret)                  |
@@ -43,7 +43,10 @@ Variables attendues dans Vault :
 > Seules les credentials (`S3_ACCESS_KEY`, `S3_SECRET_KEY`) et le bucket/région viennent du secret.
 
 **Consommateurs** : backend (`StorageSettings`), worker_document (`WorkerSettings`),
-worker_agent (`WorkerSettings`).
+worker_agent (`WorkerSettings`), worker_render (`WorkerSettings` : `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`).
+Ce dernier lit le modèle ODT et **écrit** les documents générés et les aperçus dans le bucket. Il préfère
+`AWS_ENDPOINT_URL` (endpoint complet, défini par le chart) au `S3_ENDPOINT_URL` du secret, et ajoute `https://` à un
+hôte sans schéma (`s3.fr-par.scw.cloud`) : boto3 refuse un hôte nu.
 
 ---
 
@@ -99,7 +102,8 @@ Variables attendues dans Vault :
 > **Important** : `INTERNAL_WORKER_TOKEN` doit être **identique** à celui du secret
 > `digdigdoc-keycloak` (le backend le vérifie, les workers l'envoient).
 
-**Consommateurs** : worker_document, worker_agent.
+**Consommateurs** : worker_document, worker_agent. **Pas** worker_render : il n'appelle ni le backend ni le LLM, il ne reçoit donc
+ni `INTERNAL_WORKER_TOKEN` ni la clé du LLM (principe du moindre privilège : ce secret n'est pas dans son `envFrom`).
 
 ---
 
@@ -119,9 +123,35 @@ Variables attendues dans Vault :
 
 **Consommateurs** :
 - backend (`RedisSettings` → `REDIS_URL`)
-- worker_document, worker_agent, worker_render (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`)
+- worker_document, worker_agent (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`)
+- worker_render (`REDIS_URL`, pris comme broker et backend de résultats Celery faute de `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND`)
 - redis sub-chart (`auth.existingSecret`)
 - KEDA `TriggerAuthentication` (pour le scaling sur la longueur de queue)
+
+---
+
+## Variables d'environnement du worker `worker_render`
+
+Le worker de rendu de documents (`worker/document_render`, voir son [README](../worker/document_render/README.md)) lit les
+variables suivantes. **Aucun secret propre** : il réutilise `digdigdoc-s3` et `digdigdoc-redis`, et rien d'autre.
+
+| Variable | Rôle | Origine en Kubernetes | Valeur par défaut |
+| --- | --- | --- | --- |
+| `REDIS_URL` | URL Redis (avec mot de passe) : broker **et** résultats Celery | secret `digdigdoc-redis` (champ calculé par VSO) | `redis://localhost:6379/0` |
+| `CELERY_BROKER_URL` | Broker Celery, si différent de `REDIS_URL` | non défini | `REDIS_URL` |
+| `CELERY_RESULT_BACKEND` | Backend de résultats, si différent de `REDIS_URL` | non défini | `REDIS_URL` |
+| `S3_ACCESS_KEY` | Clé d'accès S3 | secret `digdigdoc-s3` | `rustfsadmin` |
+| `S3_SECRET_KEY` | Clé secrète S3 | secret `digdigdoc-s3` | `rustfsadmin` |
+| `S3_BUCKET` | Bucket (modèles lus ; documents et aperçus écrits) | secret `digdigdoc-s3` | `dig-dig-doc` |
+| `AWS_ENDPOINT_URL` | Endpoint S3 complet, avec schéma | `values/common-values.yaml` (en clair) | — |
+| `S3_ENDPOINT_URL` | Endpoint S3 si `AWS_ENDPOINT_URL` est absent (docker-compose : RustFS) ; un hôte sans schéma reçoit `https://` | secret `digdigdoc-s3` | `http://localhost:9000` |
+| `CELERY_QUEUE_NAME` | Nom de la file (indicatif : l'image écoute `document_render`) | `values/common-values.yaml` | — |
+| `SOFFICE_BINARY` | Binaire LibreOffice | image | `soffice` |
+| `SOFFICE_TIMEOUT_SECONDS` | Délai maximal d'une conversion (au-delà, le processus est tué) | image | `120` |
+| `FC_MATCH_BINARY` | Binaire fontconfig (contrôle des polices à l'import) | image | `fc-match` |
+
+> `S3_REGION` du secret n'est pas utilisé par ce worker. `digdigdoc-worker` (jeton interne, clé du LLM) **n'est pas fourni** à ce
+> pod : il n'en a pas besoin.
 
 ---
 
