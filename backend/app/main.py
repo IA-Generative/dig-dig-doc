@@ -29,6 +29,7 @@ from app.routers.dossier_analyses import router as dossier_analyses_router
 from app.routers.dossier_notes import router as dossier_notes_router
 from app.routers.dossiers import router as dossiers_router
 from app.routers.ephemeral import router as ephemeral_router
+from app.routers.generated_documents import router as generated_documents_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.routers.internal_agent import agent_conversations_router as internal_agent_conversations_router
@@ -129,6 +130,7 @@ app.include_router(dossier_analyses_router, prefix="/api")
 app.include_router(analysis_collaboration_router, prefix="/api")
 app.include_router(dossier_notes_router, prefix="/api")
 app.include_router(document_drafts_router, prefix="/api")
+app.include_router(generated_documents_router, prefix="/api")
 app.include_router(analysis_proposals_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
 app.include_router(models_router, prefix="/api")

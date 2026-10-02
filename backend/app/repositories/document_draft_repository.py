@@ -49,7 +49,13 @@ from app.schemas.document_draft import (
     DraftSummaryOut,
     FieldVersionOut,
 )
-from app.schemas.document_template import FieldDefinition, FieldList, InstructionSource, MetadataSource
+from app.schemas.document_template import (
+    ASSEMBLY_TIME_KEYS,
+    FieldDefinition,
+    FieldList,
+    InstructionSource,
+    MetadataSource,
+)
 from app.services.document_fields import coerce_value, resolve_initial_values, value_to_text
 
 
@@ -85,9 +91,17 @@ def template_definitions(template_version: DocumentTemplateVersion) -> list[Fiel
     return TypeAdapter(FieldList).validate_python({"fields": template_version.fields}).fields
 
 
-def _is_generated_at(definition: FieldDefinition) -> bool:
+def generation_in_progress(draft: DocumentDraft) -> bool:
+    """Une génération des valeurs est en cours (et pas perdue depuis plus de 15 minutes)."""
+    started = draft.generation_requested_at
+    return draft.generation_status == GENERATION_RUNNING and bool(
+        started and datetime.now(UTC) - started < GENERATION_STALE_AFTER
+    )
+
+
+def is_assembly_time(definition: FieldDefinition) -> bool:
     # Posée à l'assemblage du fichier (#143) : ne bloque pas la complétude du brouillon.
-    return isinstance(definition.source, MetadataSource) and definition.source.key == "generated_at"
+    return isinstance(definition.source, MetadataSource) and definition.source.key in ASSEMBLY_TIME_KEYS
 
 
 class DocumentDraftRepository:
@@ -159,7 +173,7 @@ class DocumentDraftRepository:
     ) -> CompletenessOut:
         missing, proposed = [], []
         for definition in definitions:
-            if not definition.required or _is_generated_at(definition):
+            if not definition.required or is_assembly_time(definition):
                 continue
             status = current[definition.name].status
             if status == FieldStatus.NON_RENSEIGNE:
@@ -618,10 +632,7 @@ class DocumentDraftRepository:
         """Marque la génération « en cours » (une seule à la fois par brouillon)."""
         await self._lock(draft)
         self._check_editable(draft)
-        recent = (
-            draft.generation_requested_at and datetime.now(UTC) - draft.generation_requested_at < GENERATION_STALE_AFTER
-        )
-        if draft.generation_status == GENERATION_RUNNING and recent:
+        if generation_in_progress(draft):
             raise GenerationRunningError("Une génération est déjà en cours pour ce brouillon")
         draft.generation_status = GENERATION_RUNNING
         draft.generation_requested_by = user_id

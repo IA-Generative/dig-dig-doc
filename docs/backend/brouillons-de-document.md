@@ -12,7 +12,7 @@ Valeur de départ de chaque champ, selon sa source :
 | --- | --- |
 | `analysis` | Valeur retenue de l'élément de même type et même nom dans la révision : **proposée**. Un champ `list` reprend toutes les occurrences, les autres la première (page la plus basse). Rien trouvé : non renseigné. |
 | `instruction` | Si l'analyse a déjà un élément `field` de même nom (renseigné par un autre document du dossier), sa valeur est reprise, **proposée** ; sinon non renseigné. Les valeurs « renseignées » sont donc partagées par nom entre les modèles d'un même dossier. |
-| `dossier_metadata` | Un fait du dossier : **validé** d'office. `generated_at` est posée à l'assemblage (#143) et ne compte pas dans la complétude. |
+| `dossier_metadata` | Un fait du dossier : **validé** d'office. `analysis_revision` (numéro de la révision de l'analyse) est posée à la création ; `generated_at` et `document_version` sont posées à l'assemblage (#143) et ne comptent pas dans la complétude. |
 
 ## Valeurs de champs
 
@@ -49,4 +49,4 @@ Types : texte et date (non vide), nombre (accepte `"1 250,5"`), booléen (oui/no
 - **Champ obligatoire non validé** : exposé par la complétude ; c'est l'assemblage (#143) qui bloque, avec confirmation explicite pour passer outre.
 - **Mise à jour depuis une analyse plus récente** : non faite, le brouillon reste lié à sa révision.
 - **Verrou par champ** : non fait ; la saisie la plus récente gagne et chaque version est conservée. À traiter avec l'écran de revue (#142).
-- **Fichier figé à la génération** : le statut `généré` est posé par #143.
+- **Fichier figé à la génération** : le contenu est figé dans le *document généré* ([assemblage](assemblage-des-documents.md)), pas dans le brouillon, qui reste modifiable pour régénérer une nouvelle version.
