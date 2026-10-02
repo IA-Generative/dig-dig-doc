@@ -39,6 +39,21 @@ Un champ sans valeur est une **erreur** (`MissingValueError` nommant le champ) :
 | Concurrence | Un profil LibreOffice temporaire par conversion : 3 conversions simultanées OK. |
 | Sécurité | Macros désactivées, délai maximal (groupe de processus tué), entrée vérifiée avant LibreOffice (qui convertirait sinon n'importe quel texte en PDF). |
 
+## Configuration (variables d'environnement)
+
+Aucun secret propre : le worker réutilise les secrets Kubernetes `digdigdoc-s3` et `digdigdoc-redis` ([`docs/secrets.md`](../../docs/secrets.md)). Il n'a ni jeton interne ni clé du LLM.
+
+| Variable | Rôle | Défaut |
+| --- | --- | --- |
+| `REDIS_URL` | URL Redis (avec mot de passe) : broker **et** résultats Celery. En Kubernetes, fournie par le secret `digdigdoc-redis` | `redis://localhost:6379/0` |
+| `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Broker et résultats, **s'ils diffèrent** de `REDIS_URL` (docker-compose les définit) | `REDIS_URL` |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` | Accès au bucket : lit les modèles, écrit les documents et aperçus. Secret `digdigdoc-s3` | `rustfsadmin`, `rustfsadmin`, `dig-dig-doc` |
+| `AWS_ENDPOINT_URL` | Endpoint S3 complet (avec schéma). Défini par le chart ; prioritaire | — |
+| `S3_ENDPOINT_URL` | Endpoint S3 si `AWS_ENDPOINT_URL` est absent (RustFS en docker-compose). Un hôte sans schéma reçoit `https://` | `http://localhost:9000` |
+| `SOFFICE_BINARY` | Binaire LibreOffice | `soffice` |
+| `SOFFICE_TIMEOUT_SECONDS` | Délai maximal d'une conversion ; au-delà, le processus est tué | `120` |
+| `FC_MATCH_BINARY` | Binaire fontconfig, pour contrôler les polices d'un modèle à l'import | `fc-match` |
+
 ## Contrôle d'un modèle à l'import (`app/inspection.py`)
 
 Un modèle peut être valide et produire pourtant un PDF différent de ce que voit son auteur. `inspect_template` relève, **sans rien bloquer** :
@@ -62,7 +77,7 @@ Polices **installées dans l'image** : Liberation (Sans, Serif, Mono), Carlito, 
 
 - **docker-compose** : service `worker-document-render` (file `document_render`).
 - **Image** : construite par la CI (`ci.yml`, quand `worker/document_render/**` change) et publiée par le CD (`cd.yml`) sous `…-worker-document-render` ; versionnée par release-please avec les autres workers. Équivalents dans `.gitlab-ci-dso.yml` (lint, tests avec LibreOffice, build).
-- **Helm** (`digdigdoc/`) : composant `worker_render` (Deployment `digdigdoc-worker-render`), configuré dans `values/common-values.yaml`. Il lit les mêmes secrets que les autres workers (`digdigdoc-worker` : broker Celery ; `digdigdoc-s3` : stockage) et **n'appelle ni le backend ni le LLM**. Ressources adaptées à LibreOffice : 1 Gi demandé, **3 Gi** et 2 CPU en limite, pour deux conversions simultanées (`--concurrency=2`).
+- **Helm** (`digdigdoc/`) : composant `worker_render` (Deployment `digdigdoc-worker-render`), configuré dans `values/common-values.yaml`. Il ne lit que les secrets `digdigdoc-s3` (stockage) et `digdigdoc-redis` (`REDIS_URL` : broker et résultats Celery), **pas** `digdigdoc-worker` (jeton interne, clé du LLM) : il **n'appelle ni le backend ni le LLM**. Ressources adaptées à LibreOffice : 1 Gi demandé, **3 Gi** et 2 CPU en limite, pour deux conversions simultanées (`--concurrency=2`).
 - **Mise à l'échelle** : `ScaledObject` KEDA `digdigdoc-worker-render` sur la file Redis `document_render` (1 à 3 réplicas, seuil de 5 documents en attente).
 - **Sécurité du pod** : le chart impose un utilisateur non-root, un système de fichiers racine en lecture seule et aucune capacité ; seul `/tmp` est inscriptible (emptyDir monté par le chart). L'image **convertit dans ces conditions** (vérifié avec `docker run --read-only --tmpfs /tmp --user 1000 --cap-drop ALL`) : le profil LibreOffice est créé dans un dossier temporaire par conversion.
 - **Ordre de déploiement** : le backend appelle la tâche `inspect_template` : déployer le **worker avant (ou avec) le backend**, sinon l'import d'un modèle attend la fin du délai (30 s) puis répond « worker ne répond pas ».
