@@ -235,9 +235,9 @@ worker_async_api:
     LOG_LEVEL: "INFO"
     # async-api object storage (where files are uploaded before a task). Adapt to your environment.
     AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
-    S3_BUCKET_NAME: "brio-prod-api-data"
+    AWS_S3_BUCKET_NAME: "brio-prod-api-data"
     AWS_DEFAULT_REGION: "fr-par"
-    S3_VERIFY_SSL: "true"
+    AWS_S3_VERIFY: "true"
     # dig-dig-doc backend, reached through its ephemeral API.
     DIGDIGDOC_BASE_URL: "http://digdigdoc-backend:8000"
     DIGDIGDOC_REQUEST_TIMEOUT: "30"

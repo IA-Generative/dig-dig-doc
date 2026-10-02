@@ -47,7 +47,7 @@ Aucun secret propre : le worker réutilise les secrets Kubernetes `digdigdoc-s3`
 | --- | --- | --- |
 | `REDIS_URL` | URL Redis (avec mot de passe) : broker **et** résultats Celery. En Kubernetes, fournie par le secret `digdigdoc-redis` | `redis://localhost:6379/0` |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | Broker et résultats, **s'ils diffèrent** de `REDIS_URL` (docker-compose les définit) | `REDIS_URL` |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET` | Accès au bucket : lit les modèles, écrit les documents et aperçus. Secret `digdigdoc-s3` | `rustfsadmin`, `rustfsadmin`, `dig-dig-doc` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET_NAME` | Accès au bucket : lit les modèles, écrit les documents et aperçus. Secret `digdigdoc-s3` | `rustfsadmin`, `rustfsadmin`, `dig-dig-doc` |
 | `AWS_ENDPOINT_URL` | Endpoint S3 (défini par le chart ; RustFS en docker-compose). Un hôte sans schéma reçoit `https://` | `http://localhost:9000` |
 | `SOFFICE_BINARY` | Binaire LibreOffice | `soffice` |
 | `SOFFICE_TIMEOUT_SECONDS` | Délai maximal d'une conversion ; au-delà, le processus est tué | `120` |

@@ -57,7 +57,7 @@ Variables d'environnement (voir [`.env.example`](.env.example)) :
 | `IN_QUEUE_NAME` / `OUT_QUEUE_NAME` | `dig_dig_doc_queue_in` / `_out` | files du service |
 | `WORKER_CONCURRENCY` | `2` | tâches simultanées |
 | `SERVICE_CLASS` | (aucune) | classe de service d'async-api ; `long` pour émettre la progression |
-| `S3_*` | (obligatoires) | stockage objet d'AsyncTaskAPI (fichiers déposés avant la tâche) |
+| `AWS_*` | (obligatoires) | stockage objet d'AsyncTaskAPI (fichiers déposés avant la tâche) |
 | `DIGDIGDOC_BASE_URL` | (obligatoire) | backend dig-dig-doc |
 | `DIGDIGDOC_API_TOKEN` | (obligatoire) | token API (`X-App-Token`), créé via `POST /api/app-tokens` |
 | `MAX_FILE_SIZE_BYTES` / `MAX_TOTAL_SIZE_BYTES` / `MAX_FILES` | 50 Mo / 100 Mo / 20 | bornes mémoire |

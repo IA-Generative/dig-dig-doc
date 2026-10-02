@@ -21,8 +21,8 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
     AWS_DEFAULT_REGION: str = "fr-par"
-    S3_BUCKET_NAME: str
-    S3_VERIFY_SSL: bool = True
+    AWS_S3_BUCKET_NAME: str
+    AWS_S3_VERIFY: bool = True
 
     # API dig-dig-doc (l'API éphémère est appelée avec un token API : X-App-Token).
     DIGDIGDOC_BASE_URL: str

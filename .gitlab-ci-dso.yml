@@ -92,7 +92,7 @@ unit-tests-backend:
     AWS_ENDPOINT_URL: http://rustfs:9000
     AWS_ACCESS_KEY_ID: rustfsadmin
     AWS_SECRET_ACCESS_KEY: rustfsadmin
-    S3_BUCKET: dig-dig-doc
+    AWS_S3_BUCKET_NAME: dig-dig-doc
     RUSTFS_VOLUMES: /data/rustfs0
     RUSTFS_ADDRESS: 0.0.0.0:9000
     RUSTFS_ACCESS_KEY: rustfsadmin

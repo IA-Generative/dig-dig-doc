@@ -35,7 +35,7 @@ Variables attendues dans Vault :
 | ----------------- | ------------------------------------------------ | -------------------------------- |
 | `AWS_ACCESS_KEY_ID`   | Clé d'accès S3 (access key ID)                    | `AKIA...`                        |
 | `AWS_SECRET_ACCESS_KEY`   | Clé secrète S3 (secret access key)               | `xxxxxxxxxxxx`                   |
-| `S3_BUCKET`       | Nom du bucket S3                                 | `digdigdoc-prod`                 |
+| `AWS_S3_BUCKET_NAME`       | Nom du bucket S3                                 | `digdigdoc-prod`                 |
 | `AWS_DEFAULT_REGION`       | Région S3                                        | `fr-par`                         |
 | `AWS_ENDPOINT_URL` | Endpoint S3 (un hôte sans scheme reçoit `https://` côté worker_render) | `s3.fr-par.scw.cloud`         |
 
@@ -43,7 +43,7 @@ Variables attendues dans Vault :
 > Seules les credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) et le bucket/région viennent du secret.
 
 **Consommateurs** : backend (`StorageSettings`), worker_document (`WorkerSettings`),
-worker_agent (`WorkerSettings`), worker_render (`WorkerSettings` : `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`).
+worker_agent (`WorkerSettings`), worker_render (`WorkerSettings` : `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET_NAME`).
 Ce dernier lit le modèle ODT et **écrit** les documents générés et les aperçus dans le bucket. Il ajoute
 `https://` à un `AWS_ENDPOINT_URL` sans schéma (`s3.fr-par.scw.cloud`) : boto3 refuse un hôte nu.
 
@@ -141,7 +141,7 @@ variables suivantes. **Aucun secret propre** : il réutilise `digdigdoc-s3` et `
 | `CELERY_RESULT_BACKEND` | Backend de résultats, si différent de `REDIS_URL` | non défini | `REDIS_URL` |
 | `AWS_ACCESS_KEY_ID` | Clé d'accès S3 | secret `digdigdoc-s3` | `rustfsadmin` |
 | `AWS_SECRET_ACCESS_KEY` | Clé secrète S3 | secret `digdigdoc-s3` | `rustfsadmin` |
-| `S3_BUCKET` | Bucket (modèles lus ; documents et aperçus écrits) | secret `digdigdoc-s3` | `dig-dig-doc` |
+| `AWS_S3_BUCKET_NAME` | Bucket (modèles lus ; documents et aperçus écrits) | secret `digdigdoc-s3` | `dig-dig-doc` |
 | `AWS_ENDPOINT_URL` | Endpoint S3 (docker-compose : RustFS) ; un hôte sans schéma reçoit `https://` | `values/common-values.yaml` (en clair) | `http://localhost:9000` |
 | `CELERY_QUEUE_NAME` | Nom de la file (indicatif : l'image écoute `document_render`) | `values/common-values.yaml` | — |
 | `SOFFICE_BINARY` | Binaire LibreOffice | image | `soffice` |
@@ -319,7 +319,7 @@ vault kv get mirai/digdigdoc-s3
 vault kv put mirai/digdigdoc-s3 \
   AWS_ACCESS_KEY_ID="AKIA..." \
   AWS_SECRET_ACCESS_KEY="xxxxxxxxxxxx" \
-  S3_BUCKET="digdigdoc-prod" \
+  AWS_S3_BUCKET_NAME="digdigdoc-prod" \
   AWS_DEFAULT_REGION="fr-par" \
   AWS_ENDPOINT_URL="s3.fr-par.scw.cloud"
 
