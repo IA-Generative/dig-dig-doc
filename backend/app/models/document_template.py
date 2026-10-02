@@ -58,6 +58,9 @@ class DocumentTemplateVersion(UUIDMixin, TimestampMixin, Base):
     fields: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
     # Placeholders trouvés dans le fichier par le worker, au moment de l'import.
     placeholders: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    # Avertissements du contrôle à l'import (issue #148) : polices absentes de l'image, champs natifs LibreOffice,
+    # images. Jamais bloquants ; conservés pour les revoir à la réouverture du modèle.
+    warnings: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     # Le fichier est partagé entre les versions qui ne le changent pas (définition seule, restauration).
     file_key: Mapped[str] = mapped_column(String, nullable=False)
     file_name: Mapped[str] = mapped_column(String, nullable=False)

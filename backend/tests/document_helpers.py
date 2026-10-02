@@ -61,6 +61,7 @@ def make_template(client: TestClient, fields: list[dict[str, Any]], name: str = 
             generation_instructions="",
             fields=definitions,
             placeholders=[d.name for d in definitions],
+            warnings=[],
             file_key_for=lambda tid: f"document-templates/{tid}/v1.odt",
             file_name="m.odt",
             file_size=1,

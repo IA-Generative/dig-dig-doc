@@ -10,7 +10,8 @@ Remplit un **modèle ODT** avec des valeurs, puis produit un **PDF** avec LibreO
 
 | Tâche | Rôle |
 | --- | --- |
-| `extract_template_fields(template_key)` | Liste les champs du modèle (triés, variables de boucle exclues). |
+| `inspect_template(template_key)` | **Contrôle d'un modèle à l'import** : ses champs (triés, variables de boucle exclues), les polices qu'il utilise et des avertissements (voir plus bas). Un modèle invalide est une erreur. |
+| `extract_template_fields(template_key)` | Liste seulement les champs du modèle (ancienne tâche, conservée ; le backend utilise `inspect_template`). |
 | `render_document(template_key, values, output_prefix, with_pdf=True)` | Dépose `<prefix>.odt` (et `<prefix>.pdf`) dans S3, renvoie les clés. |
 | `render_preview(template_key, values, output_key)` | Dépose seulement le PDF. |
 
@@ -38,20 +39,46 @@ Un champ sans valeur est une **erreur** (`MissingValueError` nommant le champ) :
 | Concurrence | Un profil LibreOffice temporaire par conversion : 3 conversions simultanées OK. |
 | Sécurité | Macros désactivées, délai maximal (groupe de processus tué), entrée vérifiée avant LibreOffice (qui convertirait sinon n'importe quel texte en PDF). |
 
-## Limites connues (à traiter dans les issues suivantes)
+## Contrôle d'un modèle à l'import (`app/inspection.py`)
 
-- **Fidélité** : celle des polices installées dans l'image. Une police propriétaire absente est remplacée sans erreur ; à vérifier avec les vrais modèles de la DDT (non disponibles pour ce spike). Penser à un contrôle des polices du modèle.
-- Seuls `content.xml` et `styles.xml` sont rendus : pas de champ dans les métadonnées ni dans les en-têtes d'objets/cadres hors flux non testés.
-- Les champs de formulaire LibreOffice natifs (champs utilisateur, variables) ne sont pas supportés : uniquement la syntaxe `{{ … }}`.
-- Images dynamiques (signature, logo variable) : non traité.
-- Déploiement (images CD, Helm/KEDA, release-please) : non fait, voir l'issue de suivi.
+Un modèle peut être valide et produire pourtant un PDF différent de ce que voit son auteur. `inspect_template` relève, **sans rien bloquer** :
+
+- les **polices** référencées par les styles du modèle et **absentes de l'image** (fontconfig, `fc-match`) : LibreOffice les remplace sans prévenir. Une police dont l'image a un équivalent de **mêmes métriques** (Arial → Liberation Sans, Times New Roman → Liberation Serif, Courier New → Liberation Mono, Calibri → Carlito, Cambria → Caladea) ne déclenche rien ;
+- les **champs natifs LibreOffice** (champs utilisateur, variables, champs de saisie, texte conditionnel) : non remplis ;
+- les **images** : conservées, mais une image variable (signature) n'est pas prise en charge.
+
+Polices **installées dans l'image** : Liberation (Sans, Serif, Mono), Carlito, Caladea, DejaVu (Sans, Serif, Sans Mono), OpenSymbol. Pour en ajouter (par exemple **Marianne**, la police de l'État, si les modèles de la DDT l'utilisent) : ajouter le paquet ou copier les fichiers `.ttf` dans le `Dockerfile` (stage `runtime`), reconstruire l'image, puis rouvrir les modèles concernés : l'avertissement disparaît.
+
+## Décisions (issue #148)
+
+| Sujet | Décision |
+| --- | --- |
+| Placeholders dans un **cadre** (zone de texte), un **en-tête** ou un **pied de page** | Pris en charge (testé : champs trouvés et remplis). Les **boucles** `{%p`/`{%tr` dans un cadre ne sont pas testées. |
+| **Champs natifs LibreOffice** | **Non pris en charge** : signalés à l'import, pas remplis. La syntaxe `{{ nom }}` est la seule. |
+| **Images dynamiques** (signature, logo variable) | **Non pris en charge** pour l'instant, signalées à l'import. À reprendre si les modèles réels en ont besoin. |
+| Police absente de l'image | Avertissement non bloquant ; on ajoute la police à l'image. |
+
+## Déploiement
+
+- **docker-compose** : service `worker-document-render` (file `document_render`).
+- **Image** : construite par la CI (`ci.yml`, quand `worker/document_render/**` change) et publiée par le CD (`cd.yml`) sous `…-worker-document-render` ; versionnée par release-please avec les autres workers. Équivalents dans `.gitlab-ci-dso.yml` (lint, tests avec LibreOffice, build).
+- **Helm** (`digdigdoc/`) : composant `worker_render` (Deployment `digdigdoc-worker-render`), configuré dans `values/common-values.yaml`. Il lit les mêmes secrets que les autres workers (`digdigdoc-worker` : broker Celery ; `digdigdoc-s3` : stockage) et **n'appelle ni le backend ni le LLM**. Ressources adaptées à LibreOffice : 1 Gi demandé, **3 Gi** et 2 CPU en limite, pour deux conversions simultanées (`--concurrency=2`).
+- **Mise à l'échelle** : `ScaledObject` KEDA `digdigdoc-worker-render` sur la file Redis `document_render` (1 à 3 réplicas, seuil de 5 documents en attente).
+- **Sécurité du pod** : le chart impose un utilisateur non-root, un système de fichiers racine en lecture seule et aucune capacité ; seul `/tmp` est inscriptible (emptyDir monté par le chart). L'image **convertit dans ces conditions** (vérifié avec `docker run --read-only --tmpfs /tmp --user 1000 --cap-drop ALL`) : le profil LibreOffice est créé dans un dossier temporaire par conversion.
+- **Ordre de déploiement** : le backend appelle la tâche `inspect_template` : déployer le **worker avant (ou avec) le backend**, sinon l'import d'un modèle attend la fin du délai (30 s) puis répond « worker ne répond pas ».
+
+## Limites connues
+
+- **Fidélité** : celle des polices de l'image ; elle n'a pu être vérifiée qu'avec des modèles de test, **pas avec les vrais modèles de la DDT** (non disponibles). Procédure à suivre quand ils le seront : les importer (les avertissements disent quelles polices manquent), comparer le PDF au rendu de l'auteur, ajouter les polices manquantes à l'image.
+- Seuls `content.xml` et `styles.xml` sont rendus : pas de champ dans les métadonnées du fichier.
+- Boucles dans un cadre ou une zone de texte : non testées.
 
 ## Développement
 
 ```bash
 cd worker/document_render
 uv sync --group dev
-uv run pytest                 # les tests marqués `libreoffice` sont ignorés sans soffice
+uv run pytest                 # les tests marqués `libreoffice` sont ignorés sans soffice (la CI les exécute)
 ```
 
 Tests avec LibreOffice réel, dans l'image :

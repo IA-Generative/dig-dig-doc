@@ -6,7 +6,7 @@ et où est enregistré le document, c'est l'affaire du backend (#140, #143)."""
 
 import logging
 
-from app import odt_template
+from app import inspection, odt_template
 from app.celery_app import celery_app
 from app.pdf import odt_to_pdf
 from app.storage import storage
@@ -21,6 +21,15 @@ def extract_template_fields(template_key: str) -> list[str]:
     """Champs utilisés par un modèle : le backend les compare à la définition de champs (#138).
     Un modèle invalide lève OdtTemplateError (visible dans le résultat de la tâche)."""
     return odt_template.extract_fields(storage.get_object(template_key))
+
+
+@celery_app.task(name="app.tasks.inspect_template")
+def inspect_template(template_key: str) -> dict:
+    """Contrôle d'un modèle à l'import (issue #148) : ses champs (comme ``extract_template_fields``), les polices
+    qu'il utilise et ce qui risque de surprendre. Un modèle invalide lève OdtTemplateError ; les avertissements
+    ne bloquent rien."""
+    odt = storage.get_object(template_key)
+    return {"fields": odt_template.extract_fields(odt), **inspection.inspect(odt)}
 
 
 @celery_app.task(name="app.tasks.render_document")

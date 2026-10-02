@@ -78,6 +78,21 @@ export interface SourcesReport {
   unknownSources: UnknownSource[];
 }
 
+/** Avertissement du contrôle d'un modèle à l'import (backend issue #148) : à lire, jamais bloquant. */
+export interface ImportWarning {
+  /** font_substituted, native_field, images, fonts_unchecked. */
+  code: string;
+  level: "warning" | "info";
+  message: string;
+}
+
+export interface FontReport {
+  name: string;
+  /** installed, compatible (mêmes métriques), substituted (la mise en page change) ou unknown. */
+  status: "installed" | "compatible" | "substituted" | "unknown";
+  replacedBy: string | null;
+}
+
 export interface DocumentTemplate {
   id: string;
   /** Analyse à laquelle appartient le modèle : il ne sert qu'aux dossiers de cette analyse. */
@@ -93,6 +108,8 @@ export interface DocumentTemplate {
   fields: FieldDefinition[];
   /** Placeholders trouvés dans le fichier par le worker, à l'import. */
   placeholders: string[];
+  /** Avertissements du contrôle à l'import (polices absentes de l'image, champs natifs, images). */
+  warnings: ImportWarning[];
   fileName: string;
   fileSize: number;
   lastAuthorId: string;
@@ -117,6 +134,8 @@ export interface TemplateInspection {
   placeholders: string[];
   fileName: string;
   fileSize: number;
+  fonts: FontReport[];
+  warnings: ImportWarning[];
 }
 
 /** Rapport renvoyé par le serveur quand les champs ne correspondent pas au fichier (422). */

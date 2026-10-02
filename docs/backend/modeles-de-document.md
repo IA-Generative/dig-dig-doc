@@ -29,6 +29,8 @@ Les placeholders sont lus par le worker `document_render` (tâche `extract_templ
 {"detail": {"message": "…", "unknown_placeholders": ["adresse"], "unused_fields": ["motif"]}}
 ```
 
+**Contrôle à l'import (#148)** : le worker renvoie aussi, **sans rien bloquer**, des `warnings` (`code`, `level`, `message`) et la liste des polices du modèle : police absente de l'image (`font_substituted`), champ natif LibreOffice non rempli (`native_field`), images (`images`), polices non vérifiables (`fonts_unchecked`). `POST /inspect` les renvoie ; ils sont conservés avec chaque version (`warnings`), reprise avec le fichier quand une version ne le change pas et à la restauration.
+
 Fichier illisible pour le worker : 422 avec son message. Worker injoignable : 503. Le backend vérifie avant tout que le fichier est un ODT (zip + type), 10 Mo maximum.
 
 ## Routes

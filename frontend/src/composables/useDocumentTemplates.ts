@@ -52,6 +52,7 @@ function mapTemplate(api: any): DocumentTemplate {
     generationInstructions: api.generation_instructions,
     fields: (api.fields ?? []).map(mapField),
     placeholders: api.placeholders ?? [],
+    warnings: api.warnings ?? [],
     fileName: api.file_name,
     fileSize: api.file_size,
     lastAuthorId: api.last_author_id,
@@ -191,7 +192,13 @@ export function useDocumentTemplates() {
     const form = new FormData();
     form.append("file", file);
     const data = await apiFetch<any>(`${BASE}/inspect`, { method: "POST", body: form });
-    return { placeholders: data.placeholders, fileName: data.file_name, fileSize: data.file_size };
+    return {
+      placeholders: data.placeholders,
+      fileName: data.file_name,
+      fileSize: data.file_size,
+      fonts: (data.fonts ?? []).map((f: any) => ({ name: f.name, status: f.status, replacedBy: f.replaced_by })),
+      warnings: data.warnings ?? [],
+    };
   }
 
   async function createTemplate(draft: TemplateDraft): Promise<DocumentTemplate> {
