@@ -6,6 +6,7 @@ import {
   FIELD_TYPE_LABELS,
   METADATA_KEY_LABELS,
   SOURCE_KIND_LABELS,
+  type AnalyseDefinitions,
   type ElementKind,
   type FieldDefinition,
   type FieldType,
@@ -23,6 +24,8 @@ const braces = (name: string) => `{{ ${name} }}`;
 // Un champ d'un modèle de document : son libellé, son type, sa source et sa consigne de génération.
 const props = defineProps<{
   modelValue: FieldDefinition;
+  /** Ce que l'analyse du modèle définit : les choix possibles pour l'élément source (entités, labels, agents). */
+  definitions?: AnalyseDefinitions | null;
   /** Nom du modèle, pour contextualiser l'aide à la rédaction de la consigne. */
   templateName?: string;
   /** Le fichier contient le placeholder {{ nom }}. */
@@ -65,6 +68,27 @@ function suggestInstruction(draft: string, model: string | null) {
     model,
   );
 }
+
+/** Noms proposés pour l'élément source, selon son type ; vide pour une relation ou un champ renseigné (texte libre). */
+const elementChoices = computed<string[] | null>(() => {
+  const source = analysisSource.value;
+  if (!source || !props.definitions) return null;
+  if (source.elementKind === "entity" || source.elementKind === "classification" || source.elementKind === "synthesis") {
+    return props.definitions[source.elementKind];
+  }
+  return null;
+});
+
+/** Options du choix de l'élément : celles de l'analyse, plus la valeur actuelle si l'analyse ne la définit plus. */
+const elementOptions = computed(() => {
+  const current = analysisSource.value?.definitionName ?? "";
+  const names = elementChoices.value ?? [];
+  const options = [{ value: "", text: names.length ? "Choisir un élément…" : "L'analyse n'en définit aucun" }];
+  if (current && !names.some((n) => n.toLowerCase() === current.trim().toLowerCase())) {
+    options.push({ value: current, text: `${current} (inconnu dans l'analyse)` });
+  }
+  return [...options, ...names.map((n) => ({ value: n, text: n }))];
+});
 
 const metadataSource = computed(() => (props.modelValue.source.kind === "dossier_metadata" ? props.modelValue.source : null));
 </script>
@@ -134,15 +158,24 @@ const metadataSource = computed(() => (props.modelValue.source.kind === "dossier
             label="Type d'élément"
             label-visible
             :options="elementKindOptions"
-            @update:model-value="update({ source: { ...analysisSource, elementKind: $event as ElementKind } })"
+            @update:model-value="update({ source: { ...analysisSource, elementKind: $event as ElementKind, definitionName: '' } })"
           />
         </div>
         <div>
+          <DsfrSelect
+            v-if="elementChoices"
+            :model-value="analysisSource.definitionName"
+            label="Élément de l'analyse"
+            label-visible
+            :options="elementOptions"
+            @update:model-value="update({ source: { ...analysisSource, definitionName: String($event) } })"
+          />
           <DsfrInput
+            v-else
             :model-value="analysisSource.definitionName"
             label="Nom de l'élément"
             label-visible
-            hint="Nom de la définition dans l'analyse"
+            hint="Relation ou champ renseigné : nom libre"
             @update:model-value="update({ source: { ...analysisSource, definitionName: String($event) } })"
           />
         </div>

@@ -59,8 +59,34 @@ export interface FieldDefinition {
   source: FieldSource;
 }
 
+/** Ce que l'analyse d'un modèle définit : les éléments que la source d'un champ peut désigner. */
+export interface AnalyseDefinitions {
+  entity: string[];
+  classification: string[];
+  synthesis: string[];
+}
+
+/** Un champ dont la source désigne un élément que l'analyse ne définit pas (rapport du serveur, 422). */
+export interface UnknownSource {
+  field: string;
+  elementKind: ElementKind;
+  definitionName: string;
+}
+
+export interface SourcesReport {
+  message: string;
+  unknownSources: UnknownSource[];
+}
+
+export interface AnalyseOption {
+  id: string;
+  name: string;
+}
+
 export interface DocumentTemplate {
   id: string;
+  /** Analyse à laquelle appartient le modèle : il ne sert qu'aux dossiers de cette analyse. */
+  analyseId: string | null;
   archived: boolean;
   createdBy: string;
   createdAt: string;

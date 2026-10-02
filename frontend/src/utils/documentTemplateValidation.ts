@@ -1,4 +1,4 @@
-import type { FieldDefinition } from "@/types/documentTemplate";
+import type { AnalyseDefinitions, FieldDefinition } from "@/types/documentTemplate";
 
 // Validation côté client d'un modèle de document, affichée avant l'enregistrement. Elle reprend les règles du
 // serveur (backend issue #138), qui reste l'autorité : tout placeholder du fichier doit avoir un champ défini,
@@ -11,6 +11,7 @@ export type IssueKind =
   | "duplicate_name"
   | "missing_label"
   | "incomplete_source"
+  | "unknown_source"
   | "missing_name";
 
 export interface ValidationIssue {
@@ -28,7 +29,11 @@ export function isValidFieldName(name: string): boolean {
   return FIELD_NAME.test(name) && !RESERVED.has(name);
 }
 
-export function validateTemplate(placeholders: string[], fields: FieldDefinition[]): ValidationIssue[] {
+export function validateTemplate(
+  placeholders: string[],
+  fields: FieldDefinition[],
+  definitions: AnalyseDefinitions | null = null,
+): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const names = new Set<string>();
   const seen = new Set<string>();
@@ -59,6 +64,21 @@ export function validateTemplate(placeholders: string[], fields: FieldDefinition
         name: field.name,
         message: `Le champ « ${field.name} » tire sa valeur de l'analyse : indiquez le nom de l'élément.`,
       });
+    }
+    // Un modèle appartient à une analyse : la source ne peut désigner qu'un élément que cette analyse définit
+    // (les relations et les champs « renseignés » n'ont pas de définition à vérifier).
+    if (definitions && field.source.kind === "analysis" && field.source.definitionName.trim()) {
+      const kind = field.source.elementKind;
+      if (kind === "entity" || kind === "classification" || kind === "synthesis") {
+        const known = definitions[kind].map((n) => n.trim().toLowerCase());
+        if (!known.includes(field.source.definitionName.trim().toLowerCase())) {
+          issues.push({
+            kind: "unknown_source",
+            name: field.name,
+            message: `Le champ « ${field.name} » désigne « ${field.source.definitionName} », que l'analyse ne définit pas.`,
+          });
+        }
+      }
     }
     if (!placeholders.includes(field.name)) {
       issues.push({
