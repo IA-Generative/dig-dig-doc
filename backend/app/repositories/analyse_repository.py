@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -7,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.connectors import s3_connector
 from app.core.security.share_token import generate_token, hash_token
 from app.models.analyse import (
     Agent,
@@ -18,6 +20,7 @@ from app.models.analyse import (
     VersionedField,
 )
 from app.models.analyse_share import AnalyseShare, AnalyseShareKind
+from app.models.document_template import DocumentTemplate, DocumentTemplateVersion
 
 if TYPE_CHECKING:
     from app.schemas.analyse import AgentOut, AnalyseOut
@@ -93,9 +96,22 @@ class AnalyseRepository:
     async def delete(self, analyse: Analyse) -> None:
         """Lève sqlalchemy.exc.IntegrityError si un Dossier référence encore
         cette analyse (FK Dossier.analyse_id, ondelete="RESTRICT") - à
-        l'appelant de la traduire en réponse HTTP (409)."""
+        l'appelant de la traduire en réponse HTTP (409).
+
+        Les modèles de document de l'analyse partent avec elle (cascade) ; leurs fichiers S3, qui ne
+        sont pas des lignes, sont supprimés ensuite (issue #139)."""
+        keys = (
+            await self.db.execute(
+                select(DocumentTemplateVersion.file_key)
+                .join(DocumentTemplate, DocumentTemplate.id == DocumentTemplateVersion.template_id)
+                .where(DocumentTemplate.analyse_id == analyse.id)
+            )
+        ).scalars()
+        template_files = set(keys)
         await self.db.delete(analyse)
         await self.db.commit()
+        for key in template_files:
+            await asyncio.to_thread(s3_connector.delete, key)
 
     # --- Versioning: a single mechanism reused for every editable field ---
 

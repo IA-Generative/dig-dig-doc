@@ -32,6 +32,7 @@ def template_out(template: DocumentTemplate) -> TemplateOut:
     current = template.current
     return TemplateOut(
         id=template.id,
+        analyse_id=template.analyse_id,
         archived=template.archived,
         created_by=template.created_by,
         created_at=template.created_at,
@@ -61,8 +62,13 @@ class DocumentTemplateRepository:
             .execution_options(populate_existing=True)
         )
 
-    async def list_all(self, *, include_archived: bool = False) -> list[DocumentTemplate]:
+    async def list_all(
+        self, *, analyse_id: uuid.UUID | None = None, include_archived: bool = False
+    ) -> list[DocumentTemplate]:
+        """Modèles, tous ou ceux d'une analyse (les plus récents d'abord)."""
         query = self._query()
+        if analyse_id is not None:
+            query = query.where(DocumentTemplate.analyse_id == analyse_id)
         if not include_archived:
             query = query.where(DocumentTemplate.archived.is_(False))
         result = await self.db.execute(query.order_by(DocumentTemplate.created_at.desc(), DocumentTemplate.id))
@@ -72,8 +78,9 @@ class DocumentTemplateRepository:
         result = await self.db.execute(self._query().where(DocumentTemplate.id == template_id))
         return result.scalar_one_or_none()
 
-    async def _check_name(self, name: str, *, except_id: uuid.UUID | None = None) -> None:
-        for template in await self.list_all(include_archived=True):
+    async def _check_name(self, name: str, *, analyse_id: uuid.UUID | None, except_id: uuid.UUID | None = None) -> None:
+        """Le nom est unique **dans l'analyse** (casse ignorée) : deux analyses peuvent avoir un « Courrier »."""
+        for template in await self.list_all(analyse_id=analyse_id, include_archived=True):
             if template.id != except_id and template.current.name.casefold() == name.casefold():
                 raise TemplateNameTakenError(name)
 
@@ -81,6 +88,7 @@ class DocumentTemplateRepository:
         self,
         *,
         user_id: str,
+        analyse_id: uuid.UUID,
         name: str,
         description: str,
         generation_instructions: str,
@@ -91,8 +99,8 @@ class DocumentTemplateRepository:
         file_size: int,
     ) -> DocumentTemplate:
         """``file_key_for(template_id)`` donne la clé S3 du fichier (elle contient l'identifiant du modèle)."""
-        await self._check_name(name)
-        template = DocumentTemplate(id=uuid.uuid4(), created_by=user_id)
+        await self._check_name(name, analyse_id=analyse_id)
+        template = DocumentTemplate(id=uuid.uuid4(), analyse_id=analyse_id, created_by=user_id)
         template.versions = [
             DocumentTemplateVersion(
                 version_number=1,
@@ -128,7 +136,7 @@ class DocumentTemplateRepository:
     ) -> DocumentTemplate:
         if template.archived:
             raise TemplateArchivedError()
-        await self._check_name(name, except_id=template.id)
+        await self._check_name(name, analyse_id=template.analyse_id, except_id=template.id)
         self.db.add(
             DocumentTemplateVersion(
                 template_id=template.id,

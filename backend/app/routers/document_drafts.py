@@ -25,7 +25,7 @@ from app.repositories.document_draft_repository import (
     ValidatedFieldError,
     template_definitions,
 )
-from app.repositories.document_template_repository import DocumentTemplateRepository
+from app.repositories.document_template_repository import DocumentTemplateRepository, template_out
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.document_draft import (
@@ -42,7 +42,7 @@ from app.schemas.document_draft import (
     GenerateIn,
     RegenerateIn,
 )
-from app.schemas.document_template import FieldDefinition, MetadataSource
+from app.schemas.document_template import FieldDefinition, MetadataSource, TemplateOut
 from app.services.document_fields import FieldValueError
 
 router = APIRouter(prefix="/dossiers", tags=["Documents"], dependencies=[Depends(get_current_user)])
@@ -73,6 +73,18 @@ async def _definition(db: AsyncSession, draft: DocumentDraft, name: str) -> Fiel
     return definition
 
 
+@router.get("/{dossier_id}/document-templates", response_model=list[TemplateOut])
+async def list_dossier_templates(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Les modèles que ce dossier peut utiliser : ceux, non archivés, de **son** analyse."""
+    dossier = await DossierRepository(db).get(dossier_id)
+    if dossier is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    if dossier.analyse_id is None:
+        return []
+    templates = await DocumentTemplateRepository(db).list_all(analyse_id=dossier.analyse_id)
+    return [template_out(t) for t in templates]
+
+
 @router.get("/{dossier_id}/document-drafts", response_model=list[DraftSummaryOut])
 async def list_drafts(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
     if await DossierRepository(db).get(dossier_id) is None:
@@ -97,6 +109,11 @@ async def create_draft(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Modèle introuvable")
     if template.archived:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ce modèle est archivé")
+    if template.analyse_id is None or template.analyse_id != dossier.analyse_id:
+        # Un modèle appartient à une analyse : il ne sert qu'aux dossiers de cette analyse.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Ce modèle n'appartient pas à l'analyse de ce dossier"
+        )
 
     analyses = DossierAnalysisRepository(db)
     if body.revision_id is None:

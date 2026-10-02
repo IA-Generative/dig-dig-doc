@@ -22,6 +22,7 @@ from app.core.security.admin import require_admin
 from app.core.security.factory import RequestContext
 from app.db import get_db
 from app.models.document_template import DocumentTemplate
+from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.document_template_repository import (
     DocumentTemplateRepository,
     TemplateArchivedError,
@@ -37,6 +38,7 @@ from app.schemas.document_template import (
     TemplateRestoreIn,
     TemplateVersionOut,
 )
+from app.services.document_template_sources import definitions_of, unknown_sources
 
 ODT_MIME = "application/vnd.oasis.opendocument.text"
 MAX_TEMPLATE_BYTES = 10 * 1024 * 1024
@@ -106,6 +108,18 @@ def _check_placeholders(placeholders: list[str], fields: list[FieldDefinition]) 
         )
 
 
+def _check_sources(analyse, definitions: list[FieldDefinition]) -> None:
+    """Chaque source « analyse » doit désigner un élément que l'analyse du modèle définit."""
+    unknown = unknown_sources(analyse, definitions)
+    if unknown:
+        raise _unprocessable(
+            {
+                "message": "Des champs désignent des éléments que l'analyse ne définit pas",
+                "unknown_sources": unknown,
+            }
+        )
+
+
 def _file_key(template_id: uuid.UUID, version_number: int) -> str:
     return f"document-templates/{template_id}/v{version_number}.odt"
 
@@ -122,22 +136,40 @@ async def inspect_template_file(file: Annotated[UploadFile, File()]):
 
 @router.get("", response_model=list[TemplateOut])
 async def list_templates(
-    db: Annotated[AsyncSession, Depends(get_db)], include_archived: Annotated[bool, Query()] = False
+    db: Annotated[AsyncSession, Depends(get_db)],
+    analyse_id: Annotated[uuid.UUID | None, Query(description="Seulement les modèles de cette analyse")] = None,
+    include_archived: Annotated[bool, Query()] = False,
 ):
-    return [template_out(t) for t in await DocumentTemplateRepository(db).list_all(include_archived=include_archived)]
+    templates = await DocumentTemplateRepository(db).list_all(analyse_id=analyse_id, include_archived=include_archived)
+    return [template_out(t) for t in templates]
+
+
+@router.get("/analyses/{analyse_id}/definitions")
+async def analyse_definitions(analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Les éléments que l'analyse définit (entités, labels, agents) : les choix possibles pour la source d'un champ."""
+    analyse = await AnalyseRepository(db).get(analyse_id)
+    if analyse is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable")
+    return definitions_of(analyse)
 
 
 @router.post("", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
 async def create_template(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[RequestContext, Depends(require_admin)],
+    analyse_id: Annotated[uuid.UUID, Form(description="Analyse à laquelle appartient le modèle")],
     name: Annotated[str, Form(min_length=1, max_length=200)],
     fields: Annotated[str, Form(description="Liste JSON de définitions de champs")],
     file: Annotated[UploadFile, File()],
     description: Annotated[str, Form(max_length=2000)] = "",
     generation_instructions: Annotated[str, Form(max_length=5000)] = "",
 ):
+    """Crée un modèle **dans une analyse** : il ne servira qu'aux dossiers de cette analyse."""
+    analyse = await AnalyseRepository(db).get(analyse_id)
+    if analyse is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analyse introuvable")
     definitions = _parse_fields(fields)
+    _check_sources(analyse, definitions)
     data = await _read_odt(file)
     placeholders = await _extract_placeholders(data)
     _check_placeholders(placeholders, definitions)
@@ -152,6 +184,7 @@ async def create_template(
     try:
         template = await DocumentTemplateRepository(db).create(
             user_id=user.user_id,
+            analyse_id=analyse_id,
             name=name.strip(),
             description=description.strip(),
             generation_instructions=generation_instructions.strip(),
@@ -194,6 +227,10 @@ async def add_template_version(
     template = await _template_or_404(db, template_id)
     definitions = _parse_fields(fields)
     current = template.current
+    if template.analyse_id is not None:
+        analyse = await AnalyseRepository(db).get(template.analyse_id)
+        if analyse is not None:
+            _check_sources(analyse, definitions)
     data: bytes | None = None
     if file is not None and file.filename:
         data = await _read_odt(file)
