@@ -219,6 +219,50 @@ def finish_note_analysis(
     client.post(f"/notes/{note_id}/analysis", json=body).raise_for_status()
 
 
+# --- Brouillons de document : génération des valeurs de champs (issue #141) ---
+
+
+def get_draft_context(client: httpx.Client, draft_id: str) -> dict:
+    """Champs, éléments de la révision figée, notes, métadonnées et prompt en vigueur d'un brouillon."""
+    response = client.get(f"/document-drafts/{draft_id}/context")
+    response.raise_for_status()
+    return response.json()
+
+
+def propose_draft_field(client: httpx.Client, draft_id: str, name: str, body: dict) -> str:
+    """Dépose la proposition de l'agent pour un champ. Renvoie « ok », « validated » (valeur validée : jamais
+    réécrite) ou « invalid » (valeur refusée : ne correspond pas au type) ; toute autre erreur est levée."""
+    response = client.post(f"/document-drafts/{draft_id}/fields/{name}/propose", json=body)
+    if response.status_code == 409:
+        return "validated"
+    if response.status_code == 422:
+        return "invalid"
+    response.raise_for_status()
+    return "ok"
+
+
+def finish_draft_generation(
+    client: httpx.Client,
+    draft_id: str,
+    *,
+    status: str,
+    proposal_count: int | None = None,
+    missing: list[str] | None = None,
+    truncated: bool = False,
+    prompt_version: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Signale la fin de la génération (terminée ou en échec) sur le brouillon."""
+    body: dict = {"status": status, "missing": missing or [], "truncated": truncated}
+    if proposal_count is not None:
+        body["proposal_count"] = proposal_count
+    if prompt_version is not None:
+        body["prompt_version"] = prompt_version
+    if error is not None:
+        body["error"] = error[:2000]
+    client.post(f"/document-drafts/{draft_id}/generation", json=body).raise_for_status()
+
+
 # --- Conversations & chat events ---
 
 

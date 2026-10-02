@@ -17,6 +17,7 @@ from openai import OpenAI
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.document_generation import GeneratedFields
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,21 @@ def propose_updates_from_note(*, note: str, elements: str) -> ProposedUpdates:
         temperature=0.1,
     )
     return response.choices[0].message.parsed or ProposedUpdates()
+
+
+# ---------------------------------------------------------------------------
+# LLM : valeurs des champs d'un document (issue #141)
+# ---------------------------------------------------------------------------
+
+
+def generate_field_values(messages: list[dict[str, str]]) -> GeneratedFields:
+    """Demande au LLM une valeur par champ (structured output). Les messages sont construits par
+    ``app.document_generation`` (prompt versionné + garde-fous, contexte borné) ; la réponse est ensuite
+    filtrée : seuls les champs demandés, avec des sources connues, sont retenus."""
+    response = _client().beta.chat.completions.parse(
+        model=settings.LLM_MODEL, messages=messages, response_format=GeneratedFields, temperature=0.1
+    )
+    return response.choices[0].message.parsed or GeneratedFields()
 
 
 # ---------------------------------------------------------------------------
