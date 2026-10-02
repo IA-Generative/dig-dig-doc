@@ -533,7 +533,7 @@ extraObjects:
         name: digdigdoc-worker-document
         kind: Deployment
         apiVersion: apps/v1
-      minReplicaCount: 2
+      minReplicaCount: 1
       maxReplicaCount: 4
       pollingInterval: 30
       triggers:
@@ -557,7 +557,7 @@ extraObjects:
         name: digdigdoc-worker-agent
         kind: Deployment
         apiVersion: apps/v1
-      minReplicaCount: 2
+      minReplicaCount: 1
       maxReplicaCount: 4
       pollingInterval: 30
       triggers:
