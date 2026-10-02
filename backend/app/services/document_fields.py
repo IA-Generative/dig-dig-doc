@@ -19,6 +19,7 @@ from app.models.dossier_analysis import (
     AnalysisElement,
     AnalysisElementKind,
     AnalysisElementVersion,
+    AnalysisRevision,
     AnalysisRevisionItem,
 )
 from app.schemas.document_template import AnalysisSource, FieldDefinition, InstructionSource, MetadataSource
@@ -102,7 +103,7 @@ def _lenient(field_type: str, texts: list[str]) -> Any:
         return texts[0]
 
 
-def _metadata(key: str, dossier: Dossier, user: RequestContext) -> Any | None:
+def _metadata(key: str, dossier: Dossier, user: RequestContext, revision_number: int | None) -> Any | None:
     def day(moment: datetime | None) -> str | None:
         return moment.date().isoformat() if moment else None
 
@@ -121,8 +122,10 @@ def _metadata(key: str, dossier: Dossier, user: RequestContext) -> Any | None:
             return " ".join(p for p in (user.first_name, user.last_name) if p) or user.email or user.user_id
         case "instructor_email":
             return user.email or None
+        case "analysis_revision":
+            return str(revision_number) if revision_number is not None else None
         case _:
-            # « generated_at » : posée à l'assemblage du fichier (#143), pas au brouillon.
+            # « generated_at », « document_version » : posées à l'assemblage du fichier (#143).
             return None
 
 
@@ -174,6 +177,7 @@ async def resolve_initial_values(
 ) -> dict[str, InitialValue]:
     """Valeur de départ de chaque champ, tirée de la révision de l'analyse."""
     elements = await load_revision_elements(db, revision_id)
+    revision = await db.get(AnalysisRevision, revision_id)
 
     def candidates(kind: AnalysisElementKind, name: str) -> list[RevisionElement]:
         return [
@@ -211,7 +215,7 @@ async def resolve_initial_values(
             # Valeur déjà renseignée pour ce dossier (même nom) : reprise, à confirmer.
             result[definition.name] = from_analysis(definition, AnalysisElementKind.FIELD, definition.name)
         elif isinstance(source, MetadataSource):
-            value = _metadata(source.key, dossier, user)
+            value = _metadata(source.key, dossier, user, revision.number if revision else None)
             result[definition.name] = InitialValue(
                 value,
                 FieldStatus.VALIDE if value is not None else FieldStatus.NON_RENSEIGNE,

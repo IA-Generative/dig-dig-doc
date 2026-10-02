@@ -145,3 +145,24 @@ def extract_template_fields(template_key: str, timeout: int = 30) -> list[str]:
         raise RenderWorkerUnavailableError() from error
     except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique
         raise TemplateExtractionError(str(error)) from error
+
+
+class RenderFailedError(Exception):
+    """Le worker de rendu a échoué (modèle illisible, LibreOffice en erreur) : message pour l'administrateur."""
+
+
+def render_document(template_key: str, values: dict, output_prefix: str, timeout: int = 180) -> dict[str, str]:
+    """Demande au worker ``document_render`` de remplir le modèle (déposé dans S3) et de déposer l'ODT et le PDF
+    sous ``output_prefix`` (issue #143). Renvoie ``{"odt_key", "pdf_key"}``. Bloquant : à appeler hors de la
+    boucle d'événements. Aucun LLM : l'assemblage est déterministe."""
+    from celery.exceptions import TimeoutError as CeleryTimeoutError
+
+    result = celery_client.send_task(
+        "app.tasks.render_document", args=[template_key, values, output_prefix, True], queue="document_render"
+    )
+    try:
+        return dict(result.get(timeout=timeout))
+    except CeleryTimeoutError as error:
+        raise RenderWorkerUnavailableError() from error
+    except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique
+        raise RenderFailedError(str(error)) from error

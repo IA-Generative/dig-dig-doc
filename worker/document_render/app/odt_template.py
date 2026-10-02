@@ -234,6 +234,9 @@ def _odt_escape(value: Any) -> str:
     rendus par les éléments ODT qui leur correspondent."""
     if value is None:
         return ""
+    if isinstance(value, list | tuple):
+        # Une liste dans un champ simple (hors boucle) s'écrit « a, b », pas comme une liste Python.
+        value = ", ".join("" if item is None else str(item) for item in value)
     text = _XML_FORBIDDEN.sub("", str(value))
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     text = re.sub(r"\r\n|\r|\n", "<text:line-break/>", text)
