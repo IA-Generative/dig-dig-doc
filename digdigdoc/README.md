@@ -1,6 +1,6 @@
 # digdigdoc
 
-![Version: 0.6.0-rc](https://img.shields.io/badge/Version-0.6.0--rc-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.8.0-rc](https://img.shields.io/badge/AppVersion-0.8.0--rc-informational?style=flat-square)
+![Version: 0.6.0-rc.1](https://img.shields.io/badge/Version-0.6.0--rc.1-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.8.0-rc.1](https://img.shields.io/badge/AppVersion-0.8.0--rc.1-informational?style=flat-square)
 
 A Helm chart to deploy digdigdoc.
 
@@ -1392,9 +1392,9 @@ Kubernetes: `>=1.25.0-0`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | worker_render.resources.limits.cpu | string | `"2"` | CPU limit for the app. |
-| worker_render.resources.limits.memory | string | `"3Gi"` | Memory limit for the app. |
+| worker_render.resources.limits.memory | string | `"3Gi"` | Memory limit for the app: two concurrent LibreOffice conversions (see `--concurrency` in the image CMD). |
 | worker_render.resources.requests.cpu | string | `"250m"` | CPU request for the app. |
-| worker_render.resources.requests.memory | string | `"1Gi"` | Memory request for the app. |
+| worker_render.resources.requests.memory | string | `"1Gi"` | Memory request for the app. LibreOffice starts a process per conversion (a few hundred MB each). |
 
 #### Service
 
