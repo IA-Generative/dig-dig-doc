@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 import GenerationPromptPanel from "@/components/admin/GenerationPromptPanel.vue";
 import DocumentTemplateEditor from "@/components/admin/documentTemplates/DocumentTemplateEditor.vue";
 import { errorMessage, useDocumentTemplates } from "@/composables/useDocumentTemplates";
-import type { DocumentTemplate } from "@/types/documentTemplate";
+import type { AnalyseOption, DocumentTemplate } from "@/types/documentTemplate";
 
 /** Écrit un placeholder comme dans le fichier : {{ nom }} (hors gabarit, où « }} » fermerait l'interpolation). */
 const braces = (name: string) => `{{ ${name} }}`;
@@ -13,6 +13,9 @@ const braces = (name: string) => `{{ ${name} }}`;
 // avec rapport de validation, historique des versions, et prompt de l'agent de génération.
 const api = useDocumentTemplates();
 
+const analyses = ref<AnalyseOption[]>([]);
+// Les modèles se gèrent **par analyse** : tout part de l'analyse choisie.
+const analyseId = ref("");
 const templates = ref<DocumentTemplate[]>([]);
 const includeArchived = ref(false);
 const loading = ref(false);
@@ -21,11 +24,35 @@ const editing = ref<DocumentTemplate | null>(null);
 const creating = ref(false);
 const promptPanel = ref<InstanceType<typeof GenerationPromptPanel>>();
 
+const analyseName = computed(() => analyses.value.find((a) => a.id === analyseId.value)?.name ?? "");
+const analyseOptions = computed(() => [
+  { value: "", text: analyses.value.length ? "Choisir une analyse…" : "Aucune analyse" },
+  ...analyses.value.map((a) => ({ value: a.id, text: a.name })),
+]);
+
+async function loadTemplates() {
+  if (!analyseId.value) {
+    templates.value = [];
+    return;
+  }
+  loading.value = true;
+  error.value = "";
+  try {
+    templates.value = await api.fetchTemplates(analyseId.value, includeArchived.value);
+  } catch (e) {
+    error.value = errorMessage(e, "Impossible de charger les modèles de document.");
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function reload() {
   loading.value = true;
   error.value = "";
   try {
-    templates.value = await api.fetchTemplates(includeArchived.value);
+    analyses.value = await api.fetchAnalyses();
+    if (!analyses.value.some((a) => a.id === analyseId.value)) analyseId.value = analyses.value[0]?.id ?? "";
+    templates.value = analyseId.value ? await api.fetchTemplates(analyseId.value, includeArchived.value) : [];
   } catch (e) {
     error.value = errorMessage(e, "Impossible de charger les modèles de document.");
   } finally {
@@ -51,6 +78,8 @@ defineExpose({ reload });
       v-if="creating || editing"
       :key="editing?.id ?? 'new'"
       :template="editing"
+      :analyse-id="editing?.analyseId ?? analyseId"
+      :analyse-name="analyseName"
       @cancel="closeEditor"
       @changed="reload"
       @saved="reload"
@@ -59,23 +88,33 @@ defineExpose({ reload });
     <template v-else>
       <div class="templates-admin__header">
         <h2 class="fr-h4">Modèles de document</h2>
-        <DsfrButton label="Nouveau modèle" icon="ri-add-line" @click="creating = true" />
+        <DsfrButton label="Nouveau modèle" icon="ri-add-line" :disabled="!analyseId" @click="creating = true" />
       </div>
       <p class="fr-text--sm">
-        Un modèle est un fichier ODT avec des champs <code>{{ braces("nom") }}</code> et la définition de ces champs. Les
-        documents de fin d'instruction sont produits à partir d'un modèle.
+        Un modèle est un fichier ODT avec des champs <code>{{ braces("nom") }}</code> et la définition de ces champs. Il
+        appartient à <strong>une analyse</strong> : il ne sert qu'aux dossiers de cette analyse, et ses champs puisent dans
+        ce qu'elle définit (entités, labels, agents).
       </p>
+
+      <DsfrSelect
+        v-model="analyseId"
+        label="Analyse"
+        label-visible
+        :options="analyseOptions"
+        @update:model-value="loadTemplates"
+      />
 
       <DsfrAlert v-if="error" type="error" :description="error" small />
       <DsfrCheckbox
         v-model="includeArchived"
         name="include-archived"
         label="Afficher les modèles archivés"
-        @update:model-value="reload"
+        @update:model-value="loadTemplates"
       />
 
       <p v-if="loading" class="fr-text--sm">Chargement…</p>
-      <p v-else-if="templates.length === 0" class="fr-text--sm">Aucun modèle de document pour le moment.</p>
+      <p v-else-if="!analyseId" class="fr-text--sm">Choisissez une analyse pour voir ses modèles.</p>
+      <p v-else-if="templates.length === 0" class="fr-text--sm">Cette analyse n'a pas encore de modèle de document.</p>
       <ul v-else class="templates-admin__list">
         <li v-for="t in templates" :key="t.id" class="templates-admin__item">
           <div class="templates-admin__item-main">

@@ -2,14 +2,21 @@
 import { computed, ref, watch } from "vue";
 
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
-import { errorMessage, placeholderReportFrom, useDocumentTemplates } from "@/composables/useDocumentTemplates";
+import {
+  errorMessage,
+  placeholderReportFrom,
+  sourcesReportFrom,
+  useDocumentTemplates,
+} from "@/composables/useDocumentTemplates";
 import { suggestTemplateDescription, suggestTemplateInstructions } from "@/composables/useLlmAssist";
 import type { Version } from "@/types/analyse";
 import type {
+  AnalyseDefinitions,
   DocumentTemplate,
   DocumentTemplateVersion,
   FieldDefinition,
   PlaceholderReport,
+  SourcesReport,
 } from "@/types/documentTemplate";
 import { defaultField, isValidFieldName, validateTemplate } from "@/utils/documentTemplateValidation";
 
@@ -21,7 +28,7 @@ const braces = (name: string) => `{{ ${name} }}`;
 
 // Création et modification d'un modèle de document : import du fichier ODT, définition des champs, rapport de
 // validation (bloquant) et historique des versions. Enregistrer ajoute une version, rien n'est écrasé.
-const props = defineProps<{ template: DocumentTemplate | null }>();
+const props = defineProps<{ template: DocumentTemplate | null; analyseId: string; analyseName: string }>();
 const emit = defineEmits<{ saved: [DocumentTemplate]; cancel: []; changed: [] }>();
 
 const api = useDocumentTemplates();
@@ -45,6 +52,13 @@ const saving = ref(false);
 const error = ref("");
 const info = ref("");
 const serverReport = ref<PlaceholderReport | null>(null);
+const sourcesReport = ref<SourcesReport | null>(null);
+// Ce que l'analyse du modèle définit : les choix de la source d'un champ, et de quoi vérifier ceux déjà posés.
+const definitions = ref<AnalyseDefinitions | null>(null);
+api
+  .fetchDefinitions(props.analyseId)
+  .then((d) => (definitions.value = d))
+  .catch(() => (definitions.value = null));
 const newFieldName = ref("");
 const versions = ref<DocumentTemplateVersion[]>([]);
 
@@ -58,7 +72,7 @@ watch(
   },
 );
 
-const issues = computed(() => validateTemplate(placeholders.value, fields.value));
+const issues = computed(() => validateTemplate(placeholders.value, fields.value, definitions.value));
 const issuesByField = (fieldName: string) => issues.value.filter((i) => i.name === fieldName && i.kind !== "unknown_placeholder");
 const unknownPlaceholders = computed(() => issues.value.filter((i) => i.kind === "unknown_placeholder"));
 const fieldHasIssue = (fieldName: string) => issuesByField(fieldName).length > 0;
@@ -97,6 +111,7 @@ async function onFileChange(event: Event) {
   error.value = "";
   info.value = "";
   serverReport.value = null;
+  sourcesReport.value = null;
   if (!chosen) return;
   inspecting.value = true;
   try {
@@ -161,7 +176,9 @@ async function save() {
   error.value = "";
   info.value = "";
   serverReport.value = null;
+  sourcesReport.value = null;
   const draft = {
+    analyseId: props.analyseId,
     name: name.value,
     description: description.value,
     generationInstructions: generationInstructions.value,
@@ -175,7 +192,8 @@ async function save() {
     emit("saved", saved);
   } catch (e) {
     serverReport.value = placeholderReportFrom(e);
-    error.value = serverReport.value ? "" : errorMessage(e, "Erreur lors de l'enregistrement.");
+    sourcesReport.value = sourcesReportFrom(e);
+    error.value = serverReport.value || sourcesReport.value ? "" : errorMessage(e, "Erreur lors de l'enregistrement.");
   } finally {
     saving.value = false;
   }
@@ -228,6 +246,7 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
       <h3 class="fr-h5 template-editor__title">
         {{ isNew ? "Nouveau modèle de document" : name || "Modèle" }}
         <DsfrBadge v-if="current" :label="`Version ${current.versionNumber}`" small />
+        <DsfrBadge :label="analyseName" type="info" small />
         <DsfrBadge v-if="current?.archived" label="Archivé" type="warning" small />
       </h3>
     </div>
@@ -247,8 +266,20 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
       </ul>
     </div>
 
+    <div v-if="sourcesReport" class="template-editor__report" role="alert">
+      <p class="fr-text--bold">{{ sourcesReport.message }}</p>
+      <ul>
+        <li v-for="u in sourcesReport.unknownSources" :key="u.field">
+          Le champ <code>{{ u.field }}</code> désigne « {{ u.definitionName }} », que l'analyse ne définit pas.
+        </li>
+      </ul>
+    </div>
+
     <fieldset class="template-editor__block">
       <legend class="fr-h6">Le modèle</legend>
+      <p class="fr-text--sm template-editor__analyse">
+        Analyse : <strong>{{ analyseName }}</strong> — ce modèle ne sert qu'aux dossiers de cette analyse.
+      </p>
       <DsfrInput v-model="name" label="Nom" label-visible hint="Unique, majuscules et accents ignorés" />
       <AssistedTextarea
         v-model="description"
@@ -366,6 +397,7 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
           <TemplateFieldRow
             :model-value="activeField"
             :template-name="name"
+            :definitions="definitions"
             :in-file="placeholders.includes(activeField.name)"
             :issues="issuesByField(activeField.name)"
             @update:model-value="updateField(activeIndex, $event)"
@@ -426,6 +458,10 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
   border: 1px solid var(--border-default-grey);
   border-radius: 0.375rem;
   padding: 1rem;
+  margin: 0;
+}
+
+.template-editor__analyse {
   margin: 0;
 }
 
@@ -529,6 +565,13 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
   border-color: var(--background-action-high-blue-france);
   color: #fff;
   font-weight: 700;
+}
+
+/* Pastille active **et** en erreur : fond d'erreur plein, pour rester lisible. */
+.template-editor__chip--active.template-editor__chip--ko {
+  background: var(--background-flat-error, #ce0500);
+  border-color: var(--background-flat-error, #ce0500);
+  color: #fff;
 }
 
 .template-editor__carousel-caption {
