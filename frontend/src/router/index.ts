@@ -6,6 +6,7 @@ import AdministrationPage from "@/pages/AdministrationPage.vue";
 import AnalyseAgentsTab from "@/pages/analyse/AnalyseAgentsTab.vue";
 import AnalyseClassificationTab from "@/pages/analyse/AnalyseClassificationTab.vue";
 import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
+import AnalyseDocumentsTab from "@/pages/analyse/AnalyseDocumentsTab.vue";
 import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
 import DossierAnalysisPage from "@/pages/DossierAnalysisPage.vue";
@@ -40,6 +41,13 @@ export const router = createRouter({
           path: "agents",
           name: "analyse-agents",
           component: AnalyseAgentsTab,
+        },
+        {
+          path: "documents",
+          name: "analyse-documents",
+          component: AnalyseDocumentsTab,
+          // Modèles de document : réservés aux administrateurs (backend issue #138).
+          meta: { requiresAdmin: true },
         },
       ],
     },

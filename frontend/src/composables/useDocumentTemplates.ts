@@ -2,7 +2,6 @@ import { ref } from "vue";
 
 import type {
   AnalyseDefinitions,
-  AnalyseOption,
   DocumentTemplate,
   DocumentTemplateVersion,
   ElementKind,
@@ -174,12 +173,6 @@ export function useDocumentTemplates() {
     return templates.value;
   }
 
-  /** Les analyses, pour choisir celle d'un modèle. */
-  async function fetchAnalyses(): Promise<AnalyseOption[]> {
-    const data = await apiFetch<{ items: any[] }>("/api/analyses?page=1&page_size=100");
-    return data.items.map((a) => ({ id: a.id, name: a.name }));
-  }
-
   /** Entités, labels et agents que l'analyse définit : les choix possibles pour la source d'un champ. */
   async function fetchDefinitions(analyseId: string): Promise<AnalyseDefinitions> {
     return apiFetch<AnalyseDefinitions>(`${BASE}/analyses/${analyseId}/definitions`);
@@ -248,7 +241,6 @@ export function useDocumentTemplates() {
   return {
     templates,
     fetchTemplates,
-    fetchAnalyses,
     fetchDefinitions,
     fetchTemplate,
     fetchVersions,

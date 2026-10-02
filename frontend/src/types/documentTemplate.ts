@@ -78,11 +78,6 @@ export interface SourcesReport {
   unknownSources: UnknownSource[];
 }
 
-export interface AnalyseOption {
-  id: string;
-  name: string;
-}
-
 export interface DocumentTemplate {
   id: string;
   /** Analyse à laquelle appartient le modèle : il ne sert qu'aux dossiers de cette analyse. */
