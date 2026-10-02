@@ -41,6 +41,7 @@ def setup(client: TestClient) -> dict[str, Any]:
             field("motif"),
             field("dossier", {"kind": "dossier_metadata", "key": "dossier_name"}),
         ],
+        dossier_id=dossier_id,
     )
     draft = create_draft(client, dossier_id, template_id)
     return {"dossier_id": dossier_id, "analysis": analysis, "draft": draft, "base": url(dossier_id, draft["id"])}
@@ -301,7 +302,7 @@ def test_the_worker_can_never_rewrite_a_validated_value(client: TestClient, setu
 
 
 def test_the_worker_proposal_must_match_the_field_type(client: TestClient, setup: dict) -> None:
-    template_id = make_template(client, [field("montant", type="number")])
+    template_id = make_template(client, [field("montant", type="number")], dossier_id=setup["dossier_id"])
     draft = create_draft(client, setup["dossier_id"], template_id)
     path = f"/api/internal/document-drafts/{draft['id']}/fields/montant/propose"
     assert client.post(path, headers=INTERNAL, json={"value": "beaucoup"}).status_code == 422

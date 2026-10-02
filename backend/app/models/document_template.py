@@ -20,6 +20,12 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 class DocumentTemplate(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "document_templates"
 
+    # Un modèle appartient à **une** analyse (issue #139) : ses champs puisent dans les définitions de cette
+    # analyse et seuls ses dossiers peuvent s'en servir. Vide seulement pour un modèle créé avant ce rattachement :
+    # il n'est proposé à aucun dossier. Supprimer une analyse (sans dossier) supprime ses modèles.
+    analyse_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     created_by: Mapped[str] = mapped_column(String, nullable=False)
     # « Supprimer » un modèle l'archive : les documents déjà générés (#143) y font référence.
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
