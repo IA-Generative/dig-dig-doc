@@ -25,11 +25,11 @@ voir `.env.example` à la racine du repo et la section _Configuration_ du
 
 | Variable          | Défaut                  | Description                                       |
 | ----------------- | ----------------------- | ------------------------------------------------- |
-| `S3_ENDPOINT_URL` | `http://localhost:9000` | RustFS en local/dev, un vrai endpoint S3 en prod. |
-| `S3_ACCESS_KEY`   | `rustfsadmin`           |                                                   |
-| `S3_SECRET_KEY`   | `rustfsadmin`           |                                                   |
+| `AWS_ENDPOINT_URL` | `http://localhost:9000` | RustFS en local/dev, un vrai endpoint S3 en prod. |
+| `AWS_ACCESS_KEY_ID`   | `rustfsadmin`           |                                                   |
+| `AWS_SECRET_ACCESS_KEY`   | `rustfsadmin`           |                                                   |
 | `S3_BUCKET`       | `dig-dig-doc`           |                                                   |
-| `S3_REGION`       | `us-east-1`             |                                                   |
+| `AWS_DEFAULT_REGION`       | `us-east-1`             |                                                   |
 
 ### Keycloak / sessions (`KeycloakSettings`)
 

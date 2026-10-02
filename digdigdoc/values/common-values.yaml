@@ -158,8 +158,7 @@ worker_render:
       name: "digdigdoc-redis"
   env:
     CELERY_QUEUE_NAME: "document_render"
-    # Full endpoint (with scheme), same as the other workers: the worker prefers it to the `S3_ENDPOINT_URL` of
-    # the secret, which may be a bare host.
+    # Full endpoint (with scheme), same as the other workers.
     AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
 
 # Celery worker - agentic research/chat execution (worker/agent_execution).
@@ -216,7 +215,7 @@ worker_async_api:
   #
   # Secret `digdigdoc-async-api-worker` (Vault, see docs/secrets.md section 12) holds credentials ONLY:
   #   BROKER_URL             amqp://<user>:<password>@<rabbitmq host>:5672
-  #   S3_ACCESS_KEY, S3_SECRET_KEY   async-api object storage credentials
+  #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY   async-api object storage credentials
   #   DIGDIGDOC_API_TOKEN    API token (X-App-Token) created via POST /api/app-tokens
   envFrom:
   - secretRef:
@@ -235,9 +234,9 @@ worker_async_api:
     HEALTH_CHECK_PORT: "8084"
     LOG_LEVEL: "INFO"
     # async-api object storage (where files are uploaded before a task). Adapt to your environment.
-    S3_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
     S3_BUCKET_NAME: "brio-prod-api-data"
-    S3_REGION_NAME: "fr-par"
+    AWS_DEFAULT_REGION: "fr-par"
     S3_VERIFY_SSL: "true"
     # dig-dig-doc backend, reached through its ephemeral API.
     DIGDIGDOC_BASE_URL: "http://digdigdoc-backend:8000"

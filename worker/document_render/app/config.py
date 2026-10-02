@@ -11,12 +11,11 @@ class WorkerSettings(BaseSettings):
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
 
-    # RustFS en local/dev, un bucket S3 réel en prod. En Kubernetes, l'endpoint complet est `AWS_ENDPOINT_URL`
-    # (défini par le chart) ; le secret `digdigdoc-s3` peut fournir `S3_ENDPOINT_URL`, parfois sans schéma.
+    # RustFS en local/dev, un bucket S3 réel en prod. Variables standard AWS : `AWS_ENDPOINT_URL` est défini par le
+    # chart en Kubernetes (le secret `digdigdoc-s3` peut aussi le fournir, parfois sans schéma).
     AWS_ENDPOINT_URL: str = ""
-    S3_ENDPOINT_URL: str = ""
-    S3_ACCESS_KEY: str = "rustfsadmin"
-    S3_SECRET_KEY: str = "rustfsadmin"
+    AWS_ACCESS_KEY_ID: str = "rustfsadmin"
+    AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
     S3_BUCKET: str = "dig-dig-doc"
 
     # LibreOffice en ligne de commande (conversion en PDF).
@@ -39,7 +38,7 @@ class WorkerSettings(BaseSettings):
     @property
     def s3_endpoint_url(self) -> str:
         """Endpoint S3 avec son schéma : boto3 refuse un hôte nu (`s3.fr-par.scw.cloud`)."""
-        url = self.AWS_ENDPOINT_URL or self.S3_ENDPOINT_URL or DEFAULT_S3_ENDPOINT_URL
+        url = self.AWS_ENDPOINT_URL or DEFAULT_S3_ENDPOINT_URL
         return url if "://" in url else f"https://{url}"
 
 

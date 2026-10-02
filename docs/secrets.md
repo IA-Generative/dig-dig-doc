@@ -33,20 +33,19 @@ Variables attendues dans Vault :
 
 | Variable          | Description                                      | Exemple                          |
 | ----------------- | ------------------------------------------------ | -------------------------------- |
-| `S3_ACCESS_KEY`   | Clé d'accès S3 (access key ID)                    | `AKIA...`                        |
-| `S3_SECRET_KEY`   | Clé secrète S3 (secret access key)               | `xxxxxxxxxxxx`                   |
+| `AWS_ACCESS_KEY_ID`   | Clé d'accès S3 (access key ID)                    | `AKIA...`                        |
+| `AWS_SECRET_ACCESS_KEY`   | Clé secrète S3 (secret access key)               | `xxxxxxxxxxxx`                   |
 | `S3_BUCKET`       | Nom du bucket S3                                 | `digdigdoc-prod`                 |
-| `S3_REGION`       | Région S3                                        | `fr-par`                         |
-| `S3_ENDPOINT_URL` | Endpoint S3 (sans scheme si via `AWS_ENDPOINT_URL`) | `s3.fr-par.scw.cloud`         |
+| `AWS_DEFAULT_REGION`       | Région S3                                        | `fr-par`                         |
+| `AWS_ENDPOINT_URL` | Endpoint S3 (un hôte sans scheme reçoit `https://` côté worker_render) | `s3.fr-par.scw.cloud`         |
 
 > **Note** : `AWS_ENDPOINT_URL` est défini en clair dans `common-values.yaml` (`https://s3.fr-par.scw.cloud`).
-> Seules les credentials (`S3_ACCESS_KEY`, `S3_SECRET_KEY`) et le bucket/région viennent du secret.
+> Seules les credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) et le bucket/région viennent du secret.
 
 **Consommateurs** : backend (`StorageSettings`), worker_document (`WorkerSettings`),
-worker_agent (`WorkerSettings`), worker_render (`WorkerSettings` : `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`).
-Ce dernier lit le modèle ODT et **écrit** les documents générés et les aperçus dans le bucket. Il préfère
-`AWS_ENDPOINT_URL` (endpoint complet, défini par le chart) au `S3_ENDPOINT_URL` du secret, et ajoute `https://` à un
-hôte sans schéma (`s3.fr-par.scw.cloud`) : boto3 refuse un hôte nu.
+worker_agent (`WorkerSettings`), worker_render (`WorkerSettings` : `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`).
+Ce dernier lit le modèle ODT et **écrit** les documents générés et les aperçus dans le bucket. Il ajoute
+`https://` à un `AWS_ENDPOINT_URL` sans schéma (`s3.fr-par.scw.cloud`) : boto3 refuse un hôte nu.
 
 ---
 
@@ -140,17 +139,16 @@ variables suivantes. **Aucun secret propre** : il réutilise `digdigdoc-s3` et `
 | `REDIS_URL` | URL Redis (avec mot de passe) : broker **et** résultats Celery | secret `digdigdoc-redis` (champ calculé par VSO) | `redis://localhost:6379/0` |
 | `CELERY_BROKER_URL` | Broker Celery, si différent de `REDIS_URL` | non défini | `REDIS_URL` |
 | `CELERY_RESULT_BACKEND` | Backend de résultats, si différent de `REDIS_URL` | non défini | `REDIS_URL` |
-| `S3_ACCESS_KEY` | Clé d'accès S3 | secret `digdigdoc-s3` | `rustfsadmin` |
-| `S3_SECRET_KEY` | Clé secrète S3 | secret `digdigdoc-s3` | `rustfsadmin` |
+| `AWS_ACCESS_KEY_ID` | Clé d'accès S3 | secret `digdigdoc-s3` | `rustfsadmin` |
+| `AWS_SECRET_ACCESS_KEY` | Clé secrète S3 | secret `digdigdoc-s3` | `rustfsadmin` |
 | `S3_BUCKET` | Bucket (modèles lus ; documents et aperçus écrits) | secret `digdigdoc-s3` | `dig-dig-doc` |
-| `AWS_ENDPOINT_URL` | Endpoint S3 complet, avec schéma | `values/common-values.yaml` (en clair) | — |
-| `S3_ENDPOINT_URL` | Endpoint S3 si `AWS_ENDPOINT_URL` est absent (docker-compose : RustFS) ; un hôte sans schéma reçoit `https://` | secret `digdigdoc-s3` | `http://localhost:9000` |
+| `AWS_ENDPOINT_URL` | Endpoint S3 (docker-compose : RustFS) ; un hôte sans schéma reçoit `https://` | `values/common-values.yaml` (en clair) | `http://localhost:9000` |
 | `CELERY_QUEUE_NAME` | Nom de la file (indicatif : l'image écoute `document_render`) | `values/common-values.yaml` | — |
 | `SOFFICE_BINARY` | Binaire LibreOffice | image | `soffice` |
 | `SOFFICE_TIMEOUT_SECONDS` | Délai maximal d'une conversion (au-delà, le processus est tué) | image | `120` |
 | `FC_MATCH_BINARY` | Binaire fontconfig (contrôle des polices à l'import) | image | `fc-match` |
 
-> `S3_REGION` du secret n'est pas utilisé par ce worker. `digdigdoc-worker` (jeton interne, clé du LLM) **n'est pas fourni** à ce
+> `AWS_DEFAULT_REGION` du secret n'est pas utilisé par ce worker. `digdigdoc-worker` (jeton interne, clé du LLM) **n'est pas fourni** à ce
 > pod : il n'en a pas besoin.
 
 ---
@@ -276,8 +274,8 @@ Variables attendues dans Vault :
 | Variable              | Description                                                                   | Exemple                                  |
 | --------------------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
 | `BROKER_URL`          | URL RabbitMQ d'AsyncTaskAPI, identifiants compris                              | `amqps://user:password@rabbitmq:5672`    |
-| `S3_ACCESS_KEY`       | Clé d'accès au stockage objet **d'AsyncTaskAPI** (lecture seule suffit : lecture des objets et `HEAD` du bucket) | `SCW...` |
-| `S3_SECRET_KEY`       | Clé secrète associée                                                           | `xxxxxxxx`                               |
+| `AWS_ACCESS_KEY_ID`       | Clé d'accès au stockage objet **d'AsyncTaskAPI** (lecture seule suffit : lecture des objets et `HEAD` du bucket) | `SCW...` |
+| `AWS_SECRET_ACCESS_KEY`       | Clé secrète associée                                                           | `xxxxxxxx`                               |
 | `DIGDIGDOC_API_TOKEN` | Token API de dig-dig-doc (en-tête `X-App-Token`), voir ci-dessous              | `ddd_...`                                |
 
 > **Ce n'est pas le stockage de dig-dig-doc** : `digdigdoc-s3` ne sert pas ici. Le worker lit les fichiers dans le
@@ -319,11 +317,11 @@ vault kv get mirai/digdigdoc-s3
 ```bash
 # Exemple : digdigdoc-s3
 vault kv put mirai/digdigdoc-s3 \
-  S3_ACCESS_KEY="AKIA..." \
-  S3_SECRET_KEY="xxxxxxxxxxxx" \
+  AWS_ACCESS_KEY_ID="AKIA..." \
+  AWS_SECRET_ACCESS_KEY="xxxxxxxxxxxx" \
   S3_BUCKET="digdigdoc-prod" \
-  S3_REGION="fr-par" \
-  S3_ENDPOINT_URL="s3.fr-par.scw.cloud"
+  AWS_DEFAULT_REGION="fr-par" \
+  AWS_ENDPOINT_URL="s3.fr-par.scw.cloud"
 
 # Exemple : digdigdoc-keycloak
 vault kv put mirai/digdigdoc-keycloak \
@@ -351,8 +349,8 @@ vault kv put mirai/digdigdoc-worker \
 # Exemple : digdigdoc-async-api-worker (worker AsyncTaskAPI, optionnel)
 vault kv put mirai/digdigdoc-async-api-worker \
   BROKER_URL="amqps://user:password@rabbitmq.example.com:5672" \
-  S3_ACCESS_KEY="SCW..." \
-  S3_SECRET_KEY="xxxxxxxx" \
+  AWS_ACCESS_KEY_ID="SCW..." \
+  AWS_SECRET_ACCESS_KEY="xxxxxxxx" \
   DIGDIGDOC_API_TOKEN="ddd_..."
 
 # Exemple : digdigdoc-redis
