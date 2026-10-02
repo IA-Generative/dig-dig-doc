@@ -76,6 +76,7 @@ jobs:
           BACKEND: ${{ steps.filter.outputs.backend }}
           WORKER_DOCUMENT_PROCESS: ${{ steps.filter.outputs.worker_document_process }}
           WORKER_AGENT_EXECUTION: ${{ steps.filter.outputs.worker_agent_execution }}
+          WORKER_DOCUMENT_RENDER: ${{ steps.filter.outputs.worker_document_render }}
           WORKER_ASYNC_API: ${{ steps.filter.outputs.worker_async_api }}
           # Sans ce jeton (lecture sur le dépôt privé async-api), l'image du worker async_api ne peut pas être construite.
           ASYNC_API_TOKEN: ${{ secrets.ASYNC_API_TOKEN }}
@@ -97,6 +98,9 @@ jobs:
           fi
           if [ "$WORKER_AGENT_EXECUTION" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"worker-agent-execution","context":"worker/agent_execution","dockerfile":"worker/agent_execution/Dockerfile","target":"runtime"}'
+          fi
+          if [ "$WORKER_DOCUMENT_RENDER" = "true" ] || [ "$CI" = "true" ]; then
+            add '{"name":"worker-document-render","context":"worker/document_render","dockerfile":"worker/document_render/Dockerfile","target":"runtime"}'
           fi
           if [ "$WORKER_ASYNC_API" = "true" ] || [ "$CI" = "true" ]; then
             if [ -n "$ASYNC_API_TOKEN" ]; then

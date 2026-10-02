@@ -113,6 +113,9 @@ jobs:
           - name: worker-agent-execution
             context: worker/agent_execution
             dockerfile: worker/agent_execution/Dockerfile
+          - name: worker-document-render
+            context: worker/document_render
+            dockerfile: worker/document_render/Dockerfile
     with:
       IMAGE_NAME: ${{ needs.expose-vars.outputs.IMAGE_BASE }}-${{ matrix.service.name }}
       IMAGE_TAG: ${{ needs.release.outputs.version }}

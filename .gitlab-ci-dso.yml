@@ -59,6 +59,17 @@ lint-worker-agent-execution:
     - uv run ruff check .
     - uv run ruff format --check .
 
+lint-worker-document-render:
+  stage: lint
+  image: python:3.12-slim
+  before_script:
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/document_render
+    - uv sync
+    - uv run ruff check .
+    - uv run ruff format --check .
+
 lint-frontend:
   stage: lint
   image: node:22-slim
@@ -124,6 +135,20 @@ unit-tests-worker-agent-execution:
     - cd worker/agent_execution
     - uv sync
     - uv run pytest -q
+
+# Avec LibreOffice (même jeu de paquets et de polices que l'image du worker) : les tests marqués
+# `libreoffice` convertissent réellement un modèle en PDF au lieu d'être ignorés.
+unit-tests-worker-document-render:
+  stage: test
+  image: python:3.12-slim
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends libreoffice-writer-nogui fonts-liberation fonts-dejavu-core fonts-crosextra-carlito fonts-crosextra-caladea
+    - pip install --no-cache-dir uv
+  script:
+    - cd worker/document_render
+    - uv sync
+    - uv run pytest -q -rs
 
 .docker-build-common:
   stage: docker-build
@@ -232,6 +257,29 @@ docker-build-worker-agent-execution:
       TAGS="$TAGS dig-dig-doc-worker-agent-execution:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
         TAGS="$TAGS dig-dig-doc-worker-agent-execution:latest"
+      fi
+      export IMAGE_NAMES="$TAGS"
+      echo "Building with tags: $IMAGE_NAMES"
+
+docker-build-worker-document-render:
+  extends:
+    - .docker-build-common
+  variables:
+    DOCKERFILE: "worker/document_render/Dockerfile"
+    WORKING_DIR: "worker/document_render"
+  before_script:
+    - |
+      SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
+      APP_VERSION=$(grep '^version' backend/pyproject.toml | head -1 | cut -d'"' -f2)
+      if [ -z "$APP_VERSION" ]; then
+        echo "Error: Could not extract version from backend/pyproject.toml"
+        exit 1
+      fi
+      TAGS="dig-dig-doc-worker-document-render:$SHORT_SHA"
+      TAGS="$TAGS dig-dig-doc-worker-document-render:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS dig-dig-doc-worker-document-render:$APP_VERSION"
+      if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        TAGS="$TAGS dig-dig-doc-worker-document-render:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"
