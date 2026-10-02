@@ -85,6 +85,14 @@ class DraftOut(BaseModel):
     created_at: datetime
     fields: list[DraftFieldOut]
     completeness: CompletenessOut
+    # Génération des valeurs par l'agent (#141).
+    generation_status: str | None = None
+    generation_requested_at: datetime | None = None
+    generation_error: str | None = None
+    generation_proposal_count: int | None = None
+    generation_missing: list[str] | None = None
+    generation_truncated: bool = False
+    generation_prompt_version: str | None = None
 
 
 class DraftSummaryOut(BaseModel):
@@ -112,3 +120,110 @@ class FieldEventOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# --- Génération par l'agent (#141) ---
+
+
+class GenerateIn(BaseModel):
+    """Champs à générer ; sans liste, tous ceux qui ne sont pas validés."""
+
+    names: list[str] | None = None
+
+
+class RegenerateIn(BaseModel):
+    """Consigne facultative de l'instructeur pour cette régénération (« plus court », « ton neutre »)."""
+
+    instruction: str | None = Field(default=None, max_length=2000)
+
+
+class PromptVersionOut(BaseModel):
+    id: uuid.UUID
+    version_number: int
+    content: str
+    author_id: str
+    restored_from_version_id: uuid.UUID | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class PromptCurrentOut(BaseModel):
+    """Prompt en vigueur ; ``version_number`` est vide tant que le prompt par défaut s'applique."""
+
+    version_number: int | None
+    label: str
+    content: str
+    is_default: bool
+
+
+class PromptCreateIn(BaseModel):
+    content: str = Field(min_length=20, max_length=20000)
+
+
+class PromptRestoreIn(BaseModel):
+    version_id: uuid.UUID
+
+
+class InternalFieldOut(BaseModel):
+    name: str
+    label: str
+    type: str
+    required: bool
+    instruction: str
+    source: dict[str, Any]
+    status: str
+    value: Any | None
+    origin: str
+
+
+class InternalElementOut(BaseModel):
+    id: uuid.UUID
+    version_id: uuid.UUID
+    kind: str
+    name: str | None
+    text: str
+    page: int | None
+    document_id: uuid.UUID | None
+
+
+class InternalDraftNoteOut(BaseModel):
+    id: uuid.UUID
+    version_number: int
+    content: str
+
+
+class InternalDraftContextOut(BaseModel):
+    """Tout ce dont le worker a besoin pour générer : définition des champs, éléments de la révision figée,
+    notes internes, métadonnées du dossier et prompt en vigueur."""
+
+    draft_id: uuid.UUID
+    dossier_id: uuid.UUID
+    status: str
+    requested_by: str | None
+    template_name: str
+    generation_instructions: str
+    fields: list[InternalFieldOut]
+    elements: list[InternalElementOut]
+    notes: list[InternalDraftNoteOut]
+    metadata: dict[str, str | None]
+    prompt_version_number: int | None
+    prompt_label: str
+    prompt: str
+
+
+class InternalProposeIn(BaseModel):
+    value: Any
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    prompt_version: str | None = None
+    model: str | None = None
+    instruction: str | None = None
+
+
+class InternalGenerationIn(BaseModel):
+    status: str = Field(pattern="^(terminé|échec)$")
+    proposal_count: int | None = Field(default=None, ge=0)
+    missing: list[str] = Field(default_factory=list)
+    truncated: bool = False
+    prompt_version: str | None = None
+    error: str | None = Field(default=None, max_length=2000)

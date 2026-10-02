@@ -11,7 +11,7 @@ Règles portées ici :
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from pydantic import TypeAdapter
@@ -20,6 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.factory import RequestContext
 from app.models.document_draft import (
+    GENERATION_DONE,
+    GENERATION_FAILED,
+    GENERATION_RUNNING,
     DocumentDraft,
     DocumentFieldEvent,
     DocumentFieldVersion,
@@ -68,6 +71,14 @@ class ValidatedFieldError(DraftError):
 
 class NothingToValidateError(DraftError):
     pass
+
+
+class GenerationRunningError(DraftError):
+    pass
+
+
+# Une génération « en cours » depuis plus longtemps est considérée perdue (worker arrêté) : on peut relancer.
+GENERATION_STALE_AFTER = timedelta(minutes=15)
 
 
 def template_definitions(template_version: DocumentTemplateVersion) -> list[FieldDefinition]:
@@ -186,6 +197,13 @@ class DocumentDraftRepository:
                 for d in definitions
             ],
             completeness=self.completeness(definitions, current),
+            generation_status=draft.generation_status,
+            generation_requested_at=draft.generation_requested_at,
+            generation_error=draft.generation_error,
+            generation_proposal_count=draft.generation_proposal_count,
+            generation_missing=draft.generation_missing,
+            generation_truncated=draft.generation_truncated,
+            generation_prompt_version=draft.generation_prompt_version,
         )
 
     # --- Création ---
@@ -593,3 +611,51 @@ class DocumentDraftRepository:
         draft.status = status
         await self.db.commit()
         return draft
+
+    # --- Génération par l'agent (#141) ---
+
+    async def start_generation(self, draft: DocumentDraft, *, user_id: str) -> DocumentDraft:
+        """Marque la génération « en cours » (une seule à la fois par brouillon)."""
+        await self._lock(draft)
+        self._check_editable(draft)
+        recent = (
+            draft.generation_requested_at and datetime.now(UTC) - draft.generation_requested_at < GENERATION_STALE_AFTER
+        )
+        if draft.generation_status == GENERATION_RUNNING and recent:
+            raise GenerationRunningError("Une génération est déjà en cours pour ce brouillon")
+        draft.generation_status = GENERATION_RUNNING
+        draft.generation_requested_by = user_id
+        draft.generation_requested_at = datetime.now(UTC)
+        draft.generation_error = None
+        draft.generation_proposal_count = None
+        draft.generation_missing = None
+        draft.generation_truncated = False
+        draft.generation_prompt_version = None
+        await self.db.commit()
+        return draft
+
+    async def finish_generation(
+        self,
+        draft: DocumentDraft,
+        *,
+        status: str,
+        proposal_count: int | None,
+        missing: list[str],
+        truncated: bool,
+        prompt_version: str | None,
+        error: str | None,
+    ) -> DocumentDraft:
+        draft.generation_status = GENERATION_DONE if status == GENERATION_DONE else GENERATION_FAILED
+        draft.generation_proposal_count = proposal_count
+        draft.generation_missing = missing
+        draft.generation_truncated = truncated
+        draft.generation_prompt_version = prompt_version
+        draft.generation_error = error
+        await self.db.commit()
+        return draft
+
+    async def get_by_id(self, draft_id: uuid.UUID) -> DocumentDraft | None:
+        result = await self.db.execute(
+            select(DocumentDraft).where(DocumentDraft.id == draft_id).execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()

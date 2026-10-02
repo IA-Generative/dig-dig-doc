@@ -62,6 +62,17 @@ def dispatch_note_proposals(note_id: str) -> str:
     return celery_client.send_task("app.tasks.propose_from_note", args=[note_id], queue="agent_execution").id
 
 
+def dispatch_document_generation(draft_id: str, names: list[str] | None = None, instruction: str | None = None) -> str:
+    """Dépose la génération des valeurs d'un brouillon de document sur la file agent_execution (issue #141) :
+    le worker lit le brouillon, la révision figée de l'analyse et les notes, demande au LLM une valeur par champ
+    et dépose des **propositions** (une valeur validée n'est jamais réécrite). ``names`` limite les champs
+    (régénération) ; ``instruction`` est la consigne facultative de l'instructeur. Le suivi est porté par le
+    brouillon (generation_status)."""
+    return celery_client.send_task(
+        "app.tasks.generate_document_fields", args=[draft_id, names, instruction], queue="agent_execution"
+    ).id
+
+
 def dispatch_helper_chat_response(conversation_id: str, model: str | None = None) -> str:
     """Dépose la tâche de réponse de l'agent helper sur la file
     agent_execution (issue #50). Contrairement à dispatch_chat_response, pas
