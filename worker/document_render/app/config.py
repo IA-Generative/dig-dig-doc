@@ -16,6 +16,8 @@ class WorkerSettings(BaseSettings):
     SOFFICE_BINARY: str = "soffice"
     # Délai maximal d'une conversion : au-delà, le processus LibreOffice (et ses
     # enfants) est tué.
+    # Fontconfig : sert à savoir si une police du modèle est installée dans l'image (issue #148).
+    FC_MATCH_BINARY: str = "fc-match"
     SOFFICE_TIMEOUT_SECONDS: int = 120
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")

@@ -15,6 +15,7 @@ import type {
   DocumentTemplate,
   DocumentTemplateVersion,
   FieldDefinition,
+  ImportWarning,
   PlaceholderReport,
   SourcesReport,
 } from "@/types/documentTemplate";
@@ -42,6 +43,9 @@ const isNew = computed(() => current.value === null);
 const name = ref(props.template?.name ?? "");
 const description = ref(props.template?.description ?? "");
 const generationInstructions = ref(props.template?.generationInstructions ?? "");
+// Contrôle à l'import : ce qui risque de surprendre (police absente de l'image, champ natif LibreOffice, image).
+// À lire, jamais bloquant.
+const importWarnings = ref<ImportWarning[]>([...(props.template?.warnings ?? [])]);
 const fields = ref<FieldDefinition[]>(clone(props.template?.fields ?? []));
 const placeholders = ref<string[]>([...(props.template?.placeholders ?? [])]);
 const file = ref<File | null>(null);
@@ -119,6 +123,7 @@ async function onFileChange(event: Event) {
     file.value = chosen;
     fileLabel.value = `${chosen.name} (nouveau fichier)`;
     placeholders.value = result.placeholders;
+    importWarnings.value = result.warnings;
     // Un champ par placeholder détecté ; ceux déjà définis sont conservés tels quels.
     const known = new Set(fields.value.map((f) => f.name));
     const added = result.placeholders.filter((p) => !known.has(p));
@@ -165,6 +170,7 @@ function load(template: DocumentTemplate) {
   generationInstructions.value = template.generationInstructions;
   fields.value = clone(template.fields);
   placeholders.value = [...template.placeholders];
+  importWarnings.value = [...template.warnings];
   activeIndex.value = Math.min(activeIndex.value, Math.max(0, template.fields.length - 1));
   file.value = null;
   fileLabel.value = `${template.fileName} (version ${template.versionNumber})`;
@@ -304,6 +310,14 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
         {{ fileLabel }}
         <a v-if="current && !file" :href="downloadUrl" class="fr-link fr-link--sm" download>Télécharger</a>
       </p>
+      <div v-if="importWarnings.length" class="template-editor__warnings" role="status">
+        <p class="fr-text--sm fr-text--bold">À vérifier dans ce fichier (n'empêche pas l'enregistrement) :</p>
+        <ul>
+          <li v-for="w in importWarnings" :key="w.code + w.message" :class="`template-editor__warning--${w.level}`">
+            <span aria-hidden="true">{{ w.level === "warning" ? "⚠" : "ℹ" }}</span> {{ w.message }}
+          </li>
+        </ul>
+      </div>
       <div class="fr-upload-group">
         <label class="fr-label" for="template-file">
           {{ isNew ? "Fichier du modèle (ODT)" : "Remplacer le fichier (ODT)" }}
@@ -459,6 +473,34 @@ const downloadUrl = computed(() => (current.value ? api.fileUrl(current.value.id
   border-radius: 0.375rem;
   padding: 1rem;
   margin: 0;
+}
+
+.template-editor__warnings {
+  border-left: 4px solid var(--border-plain-warning, #b34000);
+  background: var(--background-alt-grey);
+  padding: 0.5rem 1rem;
+}
+
+.template-editor__warnings p {
+  margin: 0 0 0.25rem;
+}
+
+.template-editor__warnings ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: none;
+}
+
+.template-editor__warnings li {
+  margin: 0.25rem 0;
+}
+
+.template-editor__warning--warning {
+  color: var(--text-default-warning, #b34000);
+}
+
+.template-editor__warning--info {
+  color: var(--text-mention-grey);
 }
 
 .template-editor__analyse {

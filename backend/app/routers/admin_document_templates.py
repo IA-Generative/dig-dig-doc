@@ -16,7 +16,7 @@ from fastapi.responses import Response
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.celery_client import RenderWorkerUnavailableError, TemplateExtractionError, extract_template_fields
+from app.celery_client import RenderWorkerUnavailableError, TemplateExtractionError, inspect_template
 from app.connectors import s3_connector
 from app.core.security.admin import require_admin
 from app.core.security.factory import RequestContext
@@ -79,12 +79,13 @@ def _parse_fields(raw: str) -> list[FieldDefinition]:
         raise _unprocessable([{"loc": e["loc"][1:], "msg": e["msg"]} for e in error.errors()]) from error
 
 
-async def _extract_placeholders(data: bytes) -> list[str]:
-    """Fait lire le fichier par le worker (il en connaît la syntaxe) : dépôt temporaire dans S3."""
+async def _inspect_file(data: bytes) -> dict:
+    """Fait contrôler le fichier par le worker (il en connaît la syntaxe et les polices) : dépôt temporaire dans S3.
+    Renvoie ses champs, ses polices et ses avertissements (jamais bloquants, issue #148)."""
     key = f"document-templates/tmp/{uuid.uuid4()}.odt"
     await asyncio.to_thread(s3_connector.upload, key, data, ODT_MIME)
     try:
-        return await asyncio.to_thread(extract_template_fields, key)
+        return await asyncio.to_thread(inspect_template, key)
     except RenderWorkerUnavailableError:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -129,8 +130,13 @@ async def inspect_template_file(file: Annotated[UploadFile, File()]):
     """Lit un fichier sans rien enregistrer : renvoie ses placeholders, point de départ de la
     définition des champs (il faut les connaître pour les définir)."""
     data = await _read_odt(file)
+    report = await _inspect_file(data)
     return TemplateInspectOut(
-        placeholders=await _extract_placeholders(data), file_name=file.filename or "modele.odt", file_size=len(data)
+        placeholders=report["fields"],
+        file_name=file.filename or "modele.odt",
+        file_size=len(data),
+        fonts=report.get("fonts", []),
+        warnings=report.get("warnings", []),
     )
 
 
@@ -171,7 +177,8 @@ async def create_template(
     definitions = _parse_fields(fields)
     _check_sources(analyse, definitions)
     data = await _read_odt(file)
-    placeholders = await _extract_placeholders(data)
+    report = await _inspect_file(data)
+    placeholders = report["fields"]
     _check_placeholders(placeholders, definitions)
 
     uploaded: list[str] = []
@@ -190,6 +197,7 @@ async def create_template(
             generation_instructions=generation_instructions.strip(),
             fields=definitions,
             placeholders=placeholders,
+            warnings=report.get("warnings", []),
             file_key_for=key_for,
             file_name=file.filename or "modele.odt",
             file_size=len(data),
@@ -234,12 +242,14 @@ async def add_template_version(
     data: bytes | None = None
     if file is not None and file.filename:
         data = await _read_odt(file)
-        placeholders = await _extract_placeholders(data)
+        report = await _inspect_file(data)
+        placeholders, warnings = report["fields"], report.get("warnings", [])
         file_key = _file_key(template.id, current.version_number + 1)
         file_name, file_size = file.filename, len(data)
     else:
-        placeholders, file_key, file_name, file_size = (
+        placeholders, warnings, file_key, file_name, file_size = (
             current.placeholders,
+            current.warnings,
             current.file_key,
             current.file_name,
             current.file_size,
@@ -254,6 +264,7 @@ async def add_template_version(
             generation_instructions=generation_instructions.strip(),
             fields=definitions,
             placeholders=placeholders,
+            warnings=warnings,
             file_key=file_key,
             file_name=file_name,
             file_size=file_size,
@@ -288,6 +299,7 @@ async def restore_template_version(
             generation_instructions=version.generation_instructions,
             fields=TypeAdapter(FieldList).validate_python({"fields": version.fields}).fields,
             placeholders=version.placeholders,
+            warnings=version.warnings,
             file_key=version.file_key,
             file_name=version.file_name,
             file_size=version.file_size,

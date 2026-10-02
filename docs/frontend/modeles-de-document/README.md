@@ -38,6 +38,18 @@ Pour chaque champ :
 
 Le bouton violet (✦) à droite d'une zone de texte propose une rédaction par le LLM, comme ailleurs dans l'application : **la description**, **les consignes générales** et **la consigne de chaque champ**. Il tient compte de ce qui est déjà écrit (pour l'améliorer), du nom et de la description du modèle, et pour un champ de son libellé, de son type et de sa source. La suggestion **remplace le texte dans la zone, reste modifiable** et n'est enregistrée qu'avec le modèle. Si le LLM n'est pas disponible, un message s'affiche sous la zone et le texte n'est pas touché.
 
+## Contrôle du fichier à l'import
+
+![Contrôle du fichier à l'import](10-controle-a-l-import.png)
+
+À l'import, le serveur ne se contente pas de lire les champs : il **contrôle le fichier** et signale, **sans rien bloquer**, ce qui risque de donner un PDF différent de ce que voit l'auteur :
+
+- **Police absente de l'image** : LibreOffice la remplace sans prévenir (« Marianne » deviendrait « DejaVu Sans »). Les polices d'usage courant dont l'image a un équivalent de **mêmes métriques** (Arial, Times New Roman, Calibri, Cambria…) ne déclenchent pas d'avertissement.
+- **Champs natifs LibreOffice** (champs utilisateur, variables, champs de saisie) : l'application ne les remplit pas ; seule la syntaxe `{{ nom }}` l'est.
+- **Images** : conservées telles quelles (un logo). Une image qui change selon le dossier (signature) n'est pas prise en charge.
+
+Les avertissements sont **conservés avec la version** : on les retrouve en rouvrant le modèle.
+
 ## Le rapport de validation
 
 Il se met à jour **en direct** et **bloque l'enregistrement** tant qu'il reste un point :
