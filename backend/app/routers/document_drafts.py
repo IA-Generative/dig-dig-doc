@@ -10,14 +10,16 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_client import dispatch_document_generation
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
-from app.models.document_draft import DocumentDraft, DraftStatus
+from app.models.document_draft import DocumentDraft, DraftStatus, FieldStatus
 from app.models.dossier_analysis import AnalysisRevision, DossierAnalysis
 from app.repositories.document_draft_repository import (
     DocumentDraftRepository,
     DraftError,
     DraftNotEditableError,
+    GenerationRunningError,
     NothingToValidateError,
     UnknownFieldError,
     ValidatedFieldError,
@@ -37,8 +39,10 @@ from app.schemas.document_draft import (
     FieldsValidateIn,
     FieldValueIn,
     FieldVersionOut,
+    GenerateIn,
+    RegenerateIn,
 )
-from app.schemas.document_template import FieldDefinition
+from app.schemas.document_template import FieldDefinition, MetadataSource
 from app.services.document_fields import FieldValueError
 
 router = APIRouter(prefix="/dossiers", tags=["Documents"], dependencies=[Depends(get_current_user)])
@@ -47,7 +51,7 @@ router = APIRouter(prefix="/dossiers", tags=["Documents"], dependencies=[Depends
 def _error(error: Exception) -> HTTPException:
     if isinstance(error, UnknownFieldError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error))
-    if isinstance(error, DraftNotEditableError | ValidatedFieldError | NothingToValidateError):
+    if isinstance(error, DraftNotEditableError | ValidatedFieldError | NothingToValidateError | GenerationRunningError):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error))
     return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
 
@@ -247,3 +251,83 @@ async def list_events(
     """Journal des décisions (interne), du plus ancien au plus récent ; ``field`` filtre sur un champ."""
     draft = await _draft_or_404(db, dossier_id, draft_id)
     return await DocumentDraftRepository(db).events(draft.id, field)
+
+
+def _generation_targets(definitions: list[FieldDefinition], current: dict, names: list[str] | None) -> list[str]:
+    """Champs à générer : ceux donnés, ou tous ceux qui ne sont pas validés. Un champ validé n'est jamais
+    réécrit ; une métadonnée du dossier est un fait, l'agent n'a rien à en dire."""
+    by_name = {d.name: d for d in definitions}
+    if names is not None:
+        unknown = [n for n in names if n not in by_name]
+        if unknown:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Champ inconnu : {', '.join(unknown)}")
+        wanted = [by_name[n] for n in dict.fromkeys(names)]
+    else:
+        wanted = definitions
+    return [
+        d.name
+        for d in wanted
+        if current[d.name].status != FieldStatus.VALIDE and not isinstance(d.source, MetadataSource)
+    ]
+
+
+async def _start_generation(
+    db: AsyncSession, draft: DocumentDraft, user: RequestContext, names: list[str] | None, instruction: str | None
+) -> DraftOut:
+    repository = DocumentDraftRepository(db)
+    definitions = template_definitions(await repository.template_version(draft))
+    targets = _generation_targets(definitions, await repository.current_versions(draft.id), names)
+    if not targets:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Aucun champ à générer : les champs validés ne sont jamais réécrits automatiquement",
+        )
+    try:
+        await repository.start_generation(draft, user_id=user.user_id)
+    except DraftError as error:
+        raise _error(error) from error
+    dispatch_document_generation(str(draft.id), None if names is None else targets, instruction)
+    return await repository.build_out(draft)
+
+
+@router.post(
+    "/{dossier_id}/document-drafts/{draft_id}/generate", response_model=DraftOut, status_code=status.HTTP_202_ACCEPTED
+)
+async def generate_fields(
+    dossier_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    body: GenerateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    """**Sur demande** : l'agent propose une valeur pour chaque champ (ou ceux donnés) qui n'est pas validé.
+    Rien n'est validé : ce sont des propositions. Le suivi est porté par le brouillon (``generation_status``)."""
+    draft = await _draft_or_404(db, dossier_id, draft_id)
+    return await _start_generation(db, draft, user, body.names, None)
+
+
+@router.post(
+    "/{dossier_id}/document-drafts/{draft_id}/fields/{name}/regenerate",
+    response_model=DraftOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def regenerate_field(
+    dossier_id: uuid.UUID,
+    draft_id: uuid.UUID,
+    name: str,
+    body: RegenerateIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+):
+    """Régénère un seul champ, avec une consigne facultative ; les autres ne bougent pas. Un champ validé
+    ne se régénère pas : il se modifie à la main."""
+    draft = await _draft_or_404(db, dossier_id, draft_id)
+    definition = await _definition(db, draft, name)
+    current = (await DocumentDraftRepository(db).current_versions(draft.id))[name]
+    if current.status == FieldStatus.VALIDE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"« {definition.label} » est validé : modifiez-le à la main, il ne se réécrit pas automatiquement",
+        )
+    instruction = (body.instruction or "").strip() or None
+    return await _start_generation(db, draft, user, [name], instruction)

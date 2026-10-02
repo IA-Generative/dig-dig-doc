@@ -11,11 +11,27 @@ from app.models.dossier import DossierStatus, ExecutionStep
 from app.models.dossier_analysis import AnalysisUnitStatus, DossierAnalysisStatus
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_proposal_repository import AnalysisProposalRepository, ProposalTargetError
+from app.repositories.document_draft_repository import (
+    DocumentDraftRepository,
+    DraftError,
+    UnknownFieldError,
+    ValidatedFieldError,
+    template_definitions,
+)
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_note_repository import DossierNoteRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.ephemeral_repository import EphemeralRepository
 from app.schemas.analysis_proposal import InternalProposalCreateIn, ProposalOut
+from app.schemas.document_draft import (
+    FieldVersionOut,
+    InternalDraftContextOut,
+    InternalDraftNoteOut,
+    InternalElementOut,
+    InternalFieldOut,
+    InternalGenerationIn,
+    InternalProposeIn,
+)
 from app.schemas.dossier import (
     BoundingBoxIn,
     BoundingBoxOut,
@@ -59,7 +75,8 @@ from app.schemas.dossier_analysis import (
 )
 from app.schemas.dossier_note import InternalNoteAnalysisIn, InternalNoteOut
 from app.schemas.user_task import UserTaskOut, UserTaskUpdateIn
-from app.services import analysis_builder, analysis_carryover
+from app.services import analysis_builder, analysis_carryover, generation_prompt
+from app.services.document_fields import FieldValueError, load_revision_elements
 from app.services.ephemeral_run_service import finalize_run
 from app.services.user_task_service import update_task
 
@@ -593,3 +610,125 @@ async def update_user_task(
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tâche introuvable")
     return task
+
+
+# --- Génération des valeurs d'un brouillon de document (issue #141) ---
+
+
+async def _draft_or_404(db: AsyncSession, draft_id: uuid.UUID):
+    draft = await DocumentDraftRepository(db).get_by_id(draft_id)
+    if draft is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brouillon introuvable")
+    return draft
+
+
+@router.get("/document-drafts/{draft_id}/context", response_model=InternalDraftContextOut)
+async def get_draft_generation_context(draft_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Ce qu'il faut au worker pour générer : champs et états courants, éléments de la **révision figée** du
+    brouillon, notes internes non archivées, métadonnées du dossier et prompt en vigueur."""
+    repository = DocumentDraftRepository(db)
+    draft = await _draft_or_404(db, draft_id)
+    template_version = await repository.template_version(draft)
+    current = await repository.current_versions(draft.id)
+    dossier = await DossierRepository(db).get(draft.dossier_id)
+    prompt_number, prompt = await generation_prompt.current(db)
+    notes = await DossierNoteRepository(db).list(draft.dossier_id)
+
+    def day(moment) -> str | None:
+        return moment.date().isoformat() if moment else None
+
+    return InternalDraftContextOut(
+        draft_id=draft.id,
+        dossier_id=draft.dossier_id,
+        status=draft.status,
+        requested_by=draft.generation_requested_by,
+        template_name=template_version.name,
+        generation_instructions=template_version.generation_instructions,
+        fields=[
+            InternalFieldOut(
+                name=d.name,
+                label=d.label,
+                type=d.type,
+                required=d.required,
+                instruction=d.instruction,
+                source=d.source.model_dump(),
+                status=current[d.name].status,
+                value=current[d.name].value,
+                origin=current[d.name].origin,
+            )
+            for d in template_definitions(template_version)
+        ],
+        elements=[
+            InternalElementOut(
+                id=e.element.id,
+                version_id=e.version.id,
+                kind=e.element.kind,
+                name=e.element.definition_name,
+                text=e.text,
+                page=e.element.first_page_number,
+                document_id=e.element.document_id,
+            )
+            for e in await load_revision_elements(db, draft.revision_id)
+        ],
+        notes=[
+            InternalDraftNoteOut(id=n.id, version_number=n.current.version_number, content=n.current.content)
+            for n in notes
+        ],
+        metadata={
+            "dossier_name": dossier.name if dossier else None,
+            "dossier_created_at": day(dossier.created_at) if dossier else None,
+            "dossier_started_at": day(dossier.started_at) if dossier else None,
+            "dossier_ended_at": day(dossier.ended_at) if dossier else None,
+        },
+        prompt_version_number=prompt_number,
+        prompt_label=generation_prompt.version_label(prompt_number),
+        prompt=prompt,
+    )
+
+
+@router.post("/document-drafts/{draft_id}/fields/{name}/propose", response_model=FieldVersionOut)
+async def propose_draft_field(
+    draft_id: uuid.UUID, name: str, body: InternalProposeIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """Le worker dépose la proposition de l'agent pour un champ. **409** si le champ est validé : une valeur
+    validée n'est jamais réécrite automatiquement ; **422** si la valeur ne correspond pas au type du champ."""
+    repository = DocumentDraftRepository(db)
+    draft = await _draft_or_404(db, draft_id)
+    definition = next(
+        (d for d in template_definitions(await repository.template_version(draft)) if d.name == name), None
+    )
+    if definition is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Champ inconnu : {name}")
+    try:
+        return await repository.propose(
+            draft,
+            definition,
+            body.value,
+            sources=body.sources,
+            prompt_version=body.prompt_version,
+            model=body.model,
+            instruction=body.instruction,
+        )
+    except ValidatedFieldError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+    except UnknownFieldError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    except (DraftError, FieldValueError) as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+
+
+@router.post("/document-drafts/{draft_id}/generation", status_code=status.HTTP_204_NO_CONTENT)
+async def finish_draft_generation(
+    draft_id: uuid.UUID, body: InternalGenerationIn, db: Annotated[AsyncSession, Depends(get_db)]
+):
+    """Le worker signale la fin de la génération (terminée ou en échec), avec les champs sans valeur trouvée."""
+    draft = await _draft_or_404(db, draft_id)
+    await DocumentDraftRepository(db).finish_generation(
+        draft,
+        status=body.status,
+        proposal_count=body.proposal_count,
+        missing=body.missing,
+        truncated=body.truncated,
+        prompt_version=body.prompt_version,
+        error=body.error,
+    )

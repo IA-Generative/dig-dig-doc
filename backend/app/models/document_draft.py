@@ -10,9 +10,21 @@
 
 import enum
 import uuid
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Float, ForeignKey, Identity, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Identity,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -72,6 +84,22 @@ class DocumentDraft(UUIDMixin, TimestampMixin, Base):
     )
     status: Mapped[DraftStatus] = mapped_column(String, nullable=False, default=DraftStatus.BROUILLON)
     created_by: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Génération des valeurs par l'agent (#141), suivie ici comme l'analyse d'une note : une seule à la fois.
+    generation_status: Mapped[str | None] = mapped_column(String, nullable=True)
+    generation_requested_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    generation_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    generation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generation_proposal_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Champs pour lesquels l'agent n'a rien trouvé (jamais inventé), et contexte tronqué faute de place.
+    generation_missing: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    generation_truncated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    generation_prompt_version: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+GENERATION_RUNNING = "en_cours"
+GENERATION_DONE = "terminé"
+GENERATION_FAILED = "échec"
 
 
 class DocumentFieldVersion(UUIDMixin, TimestampMixin, Base):

@@ -126,15 +126,17 @@ def _metadata(key: str, dossier: Dossier, user: RequestContext) -> Any | None:
             return None
 
 
-async def resolve_initial_values(
-    db: AsyncSession,
-    *,
-    dossier: Dossier,
-    revision_id: uuid.UUID,
-    fields: list[FieldDefinition],
-    user: RequestContext,
-) -> dict[str, InitialValue]:
-    """Valeur de départ de chaque champ, tirée de la révision de l'analyse."""
+@dataclass
+class RevisionElement:
+    """Un élément de l'analyse, tel que figé dans une révision (version retenue à ce moment-là)."""
+
+    element: AnalysisElement
+    version: AnalysisElementVersion
+    text: str
+
+
+async def load_revision_elements(db: AsyncSession, revision_id: uuid.UUID) -> list[RevisionElement]:
+    """Éléments d'une révision, par page puis par date de création (ordre stable)."""
     rows = (
         await db.execute(
             select(AnalysisElement, AnalysisElementVersion)
@@ -150,20 +152,37 @@ async def resolve_initial_values(
         )
     ).all()
     text_of = {element.id: element_text(element.kind, version.value) for element, version in rows}
+    result = []
+    for element, version in rows:
+        if element.kind == AnalysisElementKind.RELATION:
+            source = text_of.get(uuid.UUID(version.value["source_element_id"]), "?")
+            target = text_of.get(uuid.UUID(version.value["target_element_id"]), "?")
+            text = f"{source} {version.value.get('type', '')} {target}".strip()
+        else:
+            text = text_of[element.id]
+        result.append(RevisionElement(element, version, text))
+    return result
 
-    def relation_text(element: AnalysisElement, version: AnalysisElementVersion) -> str:
-        source = text_of.get(uuid.UUID(version.value["source_element_id"]), "?")
-        target = text_of.get(uuid.UUID(version.value["target_element_id"]), "?")
-        return f"{source} {version.value.get('type', '')} {target}".strip()
 
-    def candidates(kind: AnalysisElementKind, name: str) -> list[tuple[AnalysisElement, AnalysisElementVersion, str]]:
-        found = []
-        for element, version in rows:
-            if element.kind == kind and (element.definition_name or "").casefold() == name.casefold():
-                text = relation_text(element, version) if kind == AnalysisElementKind.RELATION else text_of[element.id]
-                if text.strip():
-                    found.append((element, version, text))
-        return found
+async def resolve_initial_values(
+    db: AsyncSession,
+    *,
+    dossier: Dossier,
+    revision_id: uuid.UUID,
+    fields: list[FieldDefinition],
+    user: RequestContext,
+) -> dict[str, InitialValue]:
+    """Valeur de départ de chaque champ, tirée de la révision de l'analyse."""
+    elements = await load_revision_elements(db, revision_id)
+
+    def candidates(kind: AnalysisElementKind, name: str) -> list[RevisionElement]:
+        return [
+            e
+            for e in elements
+            if e.element.kind == kind
+            and (e.element.definition_name or "").casefold() == name.casefold()
+            and e.text.strip()
+        ]
 
     def from_analysis(definition: FieldDefinition, kind: AnalysisElementKind, name: str) -> InitialValue:
         found = candidates(kind, name)
@@ -172,10 +191,13 @@ async def resolve_initial_values(
         # Un champ « liste » reprend toutes les occurrences ; les autres, la première (page la plus basse).
         used = found if definition.type == "list" else found[:1]
         return InitialValue(
-            _lenient(definition.type, [text for _, _, text in used]),
+            _lenient(definition.type, [e.text for e in used]),
             FieldStatus.PROPOSE,
             FieldOrigin.ANALYSIS,
-            [{"type": "analysis_element", "element_id": str(e.id), "version_id": str(v.id)} for e, v, _ in used],
+            [
+                {"type": "analysis_element", "element_id": str(e.element.id), "version_id": str(e.version.id)}
+                for e in used
+            ],
         )
 
     result: dict[str, InitialValue] = {}
