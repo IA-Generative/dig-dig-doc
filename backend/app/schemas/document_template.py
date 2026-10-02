@@ -112,12 +112,29 @@ class PlaceholderReport(BaseModel):
         return not self.unknown_placeholders and not self.unused_fields
 
 
+class ImportWarning(BaseModel):
+    """Avertissement du contrôle d'un modèle à l'import (#148) : à lire, jamais bloquant."""
+
+    code: str
+    level: str
+    message: str
+
+
+class FontReport(BaseModel):
+    name: str
+    # installed, compatible (mêmes métriques), substituted (la mise en page change) ou unknown.
+    status: str
+    replaced_by: str | None = None
+
+
 class TemplateInspectOut(BaseModel):
     """Résultat de la lecture d'un fichier, avant toute définition de champs."""
 
     placeholders: list[str]
     file_name: str
     file_size: int
+    fonts: list[FontReport] = []
+    warnings: list[ImportWarning] = []
 
 
 class TemplateRestoreIn(BaseModel):
@@ -132,6 +149,7 @@ class TemplateVersionOut(BaseModel):
     generation_instructions: str
     fields: list[FieldDefinition]
     placeholders: list[str]
+    warnings: list[ImportWarning] = []
     file_name: str
     file_size: int
     author_id: str
@@ -156,6 +174,7 @@ class TemplateOut(BaseModel):
     generation_instructions: str
     fields: list[FieldDefinition]
     placeholders: list[str]
+    warnings: list[ImportWarning] = []
     file_name: str
     file_size: int
     last_author_id: str

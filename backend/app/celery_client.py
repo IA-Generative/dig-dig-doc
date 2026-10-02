@@ -133,14 +133,15 @@ class RenderWorkerUnavailableError(Exception):
     """Le worker de rendu n'a pas répondu dans le délai."""
 
 
-def extract_template_fields(template_key: str, timeout: int = 30) -> list[str]:
-    """Demande au worker ``document_render`` la liste des champs d'un modèle ODT déposé dans S3
-    (issue #138). Bloquant : à appeler hors de la boucle d'événements."""
+def inspect_template(template_key: str, timeout: int = 30) -> dict:
+    """Demande au worker ``document_render`` de contrôler un modèle ODT déposé dans S3 (issues #138, #148) :
+    ses champs, les polices qu'il utilise et les avertissements à l'import (polices absentes de l'image, champs
+    natifs LibreOffice, images). Bloquant : à appeler hors de la boucle d'événements."""
     from celery.exceptions import TimeoutError as CeleryTimeoutError
 
-    result = celery_client.send_task("app.tasks.extract_template_fields", args=[template_key], queue="document_render")
+    result = celery_client.send_task("app.tasks.inspect_template", args=[template_key], queue="document_render")
     try:
-        return list(result.get(timeout=timeout))
+        return dict(result.get(timeout=timeout))
     except CeleryTimeoutError as error:
         raise RenderWorkerUnavailableError() from error
     except Exception as error:  # noqa: BLE001 - l'exception du worker revient sous un type générique

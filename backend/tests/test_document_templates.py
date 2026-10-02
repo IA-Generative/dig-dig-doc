@@ -66,9 +66,9 @@ def analyse(client: TestClient) -> str:
 @pytest.fixture(autouse=True)
 def worker(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Remplace le worker de rendu : il « lit » les placeholders écrits entre {{ }} dans le fichier."""
-    state: dict[str, Any] = {"calls": 0, "error": None}
+    state: dict[str, Any] = {"calls": 0, "error": None, "warnings": [], "fonts": []}
 
-    def fake_extract(key: str, timeout: int = 30) -> list[str]:
+    def fake_extract(key: str, timeout: int = 30) -> dict[str, Any]:
         from app.connectors import s3_connector
 
         state["calls"] += 1
@@ -76,9 +76,10 @@ def worker(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             raise state["error"]
         data, _ = s3_connector.download(key)
         content = zipfile.ZipFile(io.BytesIO(data)).read("content.xml").decode()
-        return sorted({p.strip() for p in content.replace("{{", "\0").replace("}}", "\0").split("\0")[1::2]})
+        fields = sorted({p.strip() for p in content.replace("{{", "\0").replace("}}", "\0").split("\0")[1::2]})
+        return {"fields": fields, "fonts": state["fonts"], "warnings": state["warnings"]}
 
-    monkeypatch.setattr("app.routers.admin_document_templates.extract_template_fields", fake_extract)
+    monkeypatch.setattr("app.routers.admin_document_templates.inspect_template", fake_extract)
     return state
 
 
@@ -193,7 +194,13 @@ def test_inspect_lists_placeholders_without_saving(client: TestClient) -> None:
     before = len(client.get(URL, params={"include_archived": True}).json())
     response = client.post(f"{URL}/inspect", files={"file": ("m.odt", odt("b", "a"), ODT_MIME)})
     assert response.status_code == 200
-    assert response.json() == {"placeholders": ["a", "b"], "file_name": "m.odt", "file_size": len(odt("b", "a"))}
+    assert response.json() == {
+        "placeholders": ["a", "b"],
+        "file_name": "m.odt",
+        "file_size": len(odt("b", "a")),
+        "fonts": [],
+        "warnings": [],
+    }
     assert len(client.get(URL, params={"include_archived": True}).json()) == before
 
 
@@ -519,3 +526,68 @@ def test_deleting_an_analysis_deletes_its_templates_and_their_files(client: Test
     assert client.get(f"{URL}/{template['id']}").status_code == 404
     with pytest.raises(Exception):  # noqa: B017, PT011 - le fichier du modèle a été supprimé avec lui
         s3_connector.download(key)
+
+
+# --- Contrôle à l'import : polices, champs natifs, images (issue #148) ---
+
+FONT_WARNING = {
+    "code": "font_substituted",
+    "level": "warning",
+    "message": "La police « Marianne » n'est pas installée dans l'image : remplacée par « DejaVu Sans ».",
+}
+
+
+def test_inspect_returns_the_fonts_and_warnings_of_the_worker(client: TestClient, worker: dict) -> None:
+    worker["fonts"] = [{"name": "Marianne", "status": "substituted", "replaced_by": "DejaVu Sans"}]
+    worker["warnings"] = [FONT_WARNING]
+
+    body = client.post(f"{URL}/inspect", files={"file": ("m.odt", odt("nom"), ODT_MIME)}).json()
+
+    assert body["placeholders"] == ["nom"]
+    assert body["fonts"] == [{"name": "Marianne", "status": "substituted", "replaced_by": "DejaVu Sans"}]
+    assert body["warnings"] == [FONT_WARNING]
+
+
+def test_a_clean_template_has_no_warnings(client: TestClient) -> None:
+    body = client.post(f"{URL}/inspect", files={"file": ("m.odt", odt("nom"), ODT_MIME)}).json()
+    assert body["warnings"] == [] and body["fonts"] == []
+
+
+def test_warnings_never_block_and_are_kept_with_the_version(client: TestClient, worker: dict) -> None:
+    worker["warnings"] = [FONT_WARNING]
+
+    created = create(client, "Décision W")
+
+    assert created.status_code == 201
+    assert created.json()["warnings"] == [FONT_WARNING]
+    assert client.get(f"{URL}/{created.json()['id']}").json()["warnings"] == [FONT_WARNING]
+    versions = client.get(f"{URL}/{created.json()['id']}/versions").json()
+    assert versions[0]["warnings"] == [FONT_WARNING]
+
+
+def test_a_definition_only_version_keeps_the_warnings_of_the_file(client: TestClient, worker: dict) -> None:
+    worker["warnings"] = [FONT_WARNING]
+    template = create(client, "Décision X").json()
+    worker["warnings"] = []  # le worker n'est pas relu : le fichier n'a pas changé
+
+    updated = new_version(client, template["id"], "Décision X", [field("nom", label="Nom complet")]).json()
+
+    assert updated["warnings"] == [FONT_WARNING]
+
+
+def test_a_new_file_replaces_the_warnings_and_restoring_brings_them_back(client: TestClient, worker: dict) -> None:
+    worker["warnings"] = [FONT_WARNING]
+    template = create(client, "Décision Y").json()
+    first = client.get(f"{URL}/{template['id']}/versions").json()[0]
+    worker["warnings"] = []
+
+    clean = new_version(client, template["id"], "Décision Y", [field("nom")], odt("nom")).json()
+    assert clean["warnings"] == []
+
+    restored = client.post(f"{URL}/{template['id']}/restore", json={"version_id": first["id"]}).json()
+    assert restored["warnings"] == [FONT_WARNING]
+
+
+def test_an_invalid_template_is_still_refused_not_just_warned(client: TestClient, worker: dict) -> None:
+    worker["error"] = TemplateExtractionError("Balise invalide : {% for e in %}")
+    assert create(client, "Décision Z").status_code == 422

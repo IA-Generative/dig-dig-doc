@@ -8,7 +8,10 @@ NS = (
     'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
     'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" '
     'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
-    'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"'
+    'xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" '
+    'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" '
+    'xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" '
+    'xmlns:xlink="http://www.w3.org/1999/xlink"'
 )
 MANIFEST = (
     '<?xml version="1.0" encoding="UTF-8"?>'
@@ -26,12 +29,29 @@ STYLES_AUTOMATIC = (
 )
 
 
-def make_odt(body: str, *, header: str = "", extra: dict[str, bytes] | None = None) -> bytes:
+def font_styles(*families: str) -> str:
+    """Déclarations de polices et un style de texte par police (comme LibreOffice les écrit)."""
+    faces = "".join(f'<style:font-face style:name="{f}" svg:font-family="\'{f}\'"/>' for f in families)
+    styles = "".join(
+        f'<style:style style:name="F{i}" style:family="text">'
+        f'<style:text-properties style:font-name="{f}"/></style:style>'
+        for i, f in enumerate(families)
+    )
+    return (
+        f"<office:font-face-decls>{faces}</office:font-face-decls>"
+        f"<office:automatic-styles>{styles}</office:automatic-styles>"
+    )
+
+
+def make_odt(
+    body: str, *, header: str = "", extra: dict[str, bytes] | None = None, content_prefix: str | None = None
+) -> bytes:
     """Un ODT minimal mais valide : ``body`` est le contenu de ``office:text`` ; ``header`` celui de
     l'en-tête de page (dans ``styles.xml``) ; ``extra`` des fichiers supplémentaires (images…)."""
     content = (
         f'<?xml version="1.0" encoding="UTF-8"?><office:document-content {NS} office:version="1.3">'
-        f"{STYLES_AUTOMATIC}<office:body><office:text>{body}</office:text></office:body></office:document-content>"
+        f"{STYLES_AUTOMATIC if content_prefix is None else content_prefix}"
+        f"<office:body><office:text>{body}</office:text></office:body></office:document-content>"
     )
     styles = (
         f'<?xml version="1.0" encoding="UTF-8"?><office:document-styles {NS} office:version="1.3">'
