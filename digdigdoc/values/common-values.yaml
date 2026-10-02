@@ -148,17 +148,19 @@ worker_render:
     limits:
       memory: "3Gi"
       cpu: "2"
-  # Broker (CELERY_BROKER_URL / CELERY_RESULT_BACKEND) from `digdigdoc-worker`, S3 credentials, bucket
-  # and endpoint from `digdigdoc-s3`: nothing else - this worker calls neither the backend nor the LLM.
+  # Only what this worker needs: the Redis URL (Celery broker and results, `REDIS_URL` from `digdigdoc-redis`) and
+  # the S3 credentials, bucket and region (`digdigdoc-s3`). NOT `digdigdoc-worker`: it holds the internal
+  # token and the LLM key, and this worker calls neither the backend nor the LLM. See docs/secrets.md.
   envFrom:
   - secretRef:
       name: "digdigdoc-s3"
   - secretRef:
-      name: "digdigdoc-worker"
-  - secretRef:
       name: "digdigdoc-redis"
   env:
     CELERY_QUEUE_NAME: "document_render"
+    # Full endpoint (with scheme), same as the other workers: the worker prefers it to the `S3_ENDPOINT_URL` of
+    # the secret, which may be a bare host.
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
 
 # Celery worker - agentic research/chat execution (worker/agent_execution).
 # NOTE: this worker's LangGraph checkpointer needs RediSearch (redis-stack), which is why
