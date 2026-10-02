@@ -9,7 +9,9 @@ import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
 import AnalyseDocumentsTab from "@/pages/analyse/AnalyseDocumentsTab.vue";
 import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
+import DocumentReviewPage from "@/pages/DocumentReviewPage.vue";
 import DossierAnalysisPage from "@/pages/DossierAnalysisPage.vue";
+import DossierDocumentsPage from "@/pages/DossierDocumentsPage.vue";
 import DossierDetailPage from "@/pages/DossierDetailPage.vue";
 import DossiersPage from "@/pages/DossiersPage.vue";
 import ProfilePage from "@/pages/ProfilePage.vue";
@@ -54,6 +56,8 @@ export const router = createRouter({
     { path: "/dossiers", name: "dossiers", component: DossiersPage },
     { path: "/dossiers/:id", name: "dossier-detail", component: DossierDetailPage },
     { path: "/dossiers/:id/analyse", name: "dossier-analysis", component: DossierAnalysisPage },
+    { path: "/dossiers/:id/documents", name: "dossier-documents", component: DossierDocumentsPage },
+    { path: "/dossiers/:id/documents/:draftId", name: "document-review", component: DocumentReviewPage },
     { path: "/profile", name: "profile", component: ProfilePage },
     {
       path: "/administration",

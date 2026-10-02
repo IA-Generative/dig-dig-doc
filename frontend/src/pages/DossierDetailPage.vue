@@ -242,6 +242,14 @@ async function onDeleteConversation() {
         >
           <VIcon name="ri-file-list-3-line" />
         </RouterLink>
+        <RouterLink
+          :to="`/dossiers/${dossierId}/documents`"
+          class="dossier-detail__icon-button"
+          aria-label="Voir les documents du dossier"
+          title="Documents de fin d'instruction : créer, relire, générer et télécharger"
+        >
+          <VIcon name="ri-file-word-2-line" />
+        </RouterLink>
         <button
           type="button"
           class="dossier-detail__icon-button"
