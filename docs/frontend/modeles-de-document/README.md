@@ -14,7 +14,11 @@ Nom, version, nombre de champs, fichier et date de modification. « Afficher les
 
 « Nouveau modèle », puis le fichier ODT : il est **lu par le serveur** pour détecter ses champs, et un champ est créé pour chaque placeholder trouvé.
 
-![Nouveau modèle, fichier lu](02-nouveau-modele-fichier-lu.png)
+### Les champs, en carrousel
+
+![Nouveau modèle : les champs en carrousel](02-nouveau-modele-carrousel.png)
+
+Un seul champ est édité à la fois. Une **pastille par placeholder** donne son état (✔ complet, ⚠ à corriger) et permet d'y aller directement ; **Précédent / Suivant** parcourent les champs, et « Champ 2 sur 4 » indique la position. Quand il reste des points à corriger, « Aller au premier point à corriger » y emmène.
 
 Pour chaque champ :
 
@@ -26,11 +30,17 @@ Pour chaque champ :
 | **D'où vient la valeur** | *Donnée de l'analyse* (type d'élément et nom de l'élément), *renseigné au fil de l'instruction* (décision, motif, commentaire) ou *métadonnée du dossier* (nom, dates, instructeur, version de l'analyse, version du document…). |
 | **Consigne de génération** | Pour l'agent : format de date, longueur, ton. Facultative. |
 
+## Aide à la rédaction
+
+![Aide à la rédaction de la description, des consignes et d'une consigne de champ](03-aide-a-la-redaction.png)
+
+Le bouton violet (✦) à droite d'une zone de texte propose une rédaction par le LLM, comme ailleurs dans l'application : **la description**, **les consignes générales** et **la consigne de chaque champ**. Il tient compte de ce qui est déjà écrit (pour l'améliorer), du nom et de la description du modèle, et pour un champ de son libellé, de son type et de sa source. La suggestion **remplace le texte dans la zone, reste modifiable** et n'est enregistrée qu'avec le modèle. Si le LLM n'est pas disponible, un message s'affiche sous la zone et le texte n'est pas touché.
+
 ## Le rapport de validation
 
 Il se met à jour **en direct** et **bloque l'enregistrement** tant qu'il reste un point :
 
-![Points à corriger](03-points-a-corriger.png)
+![Points à corriger](04-points-a-corriger.png)
 
 - un placeholder du fichier **sans champ** défini (bouton « Définir ce champ ») ;
 - un champ **sans placeholder** dans le fichier (badge « Absent du fichier », bouton « Supprimer ») ;
@@ -38,11 +48,11 @@ Il se met à jour **en direct** et **bloque l'enregistrement** tant qu'il reste 
 
 Le serveur refait la même vérification, dans les deux sens, et reste l'autorité : si ses écarts diffèrent, ils s'affichent tels quels.
 
-![Rapport renvoyé par le serveur](05-rapport-du-serveur.png)
+![Rapport renvoyé par le serveur](06-rapport-du-serveur.png)
 
 ## Modifier, versions, restaurer
 
-![Modèle existant et historique](04-modele-existant-et-historique.png)
+![Modèle existant et historique](05-modele-existant-et-historique.png)
 
 « Enregistrer une nouvelle version » **ajoute** une version (nom, description, consignes, champs, fichier) : rien n'est écrasé. Sans nouveau fichier, la version garde celui de la version courante ; choisir un fichier le remplace pour cette version (et les champs sont réconciliés : ceux déjà définis sont conservés, les nouveaux placeholders créent des champs à définir). **Télécharger** donne le fichier de la version courante.
 
@@ -55,7 +65,8 @@ En bas de la liste, le prompt qui guide l'agent proposant une valeur pour chaque
 ## Choix et limites
 
 - Les captures sont prises avec une **API simulée** (le backend de développement n'était pas à jour) : elles montrent l'interface, pas des données réelles.
-- Pas d'**aperçu** du modèle rempli ni d'**aide à la rédaction** des consignes (`LlmAssistButton`) : hors de cette première version.
+- Pas d'**aperçu** du modèle rempli : hors de cette première version.
+- L'aide à la rédaction a été vue avec un LLM simulé ; avec le vrai LLM, la qualité des suggestions n'est pas évaluée.
 - Les consignes de champ ne sont éditables que par les **administrateurs** (pas de rôle intermédiaire pour l'instant).
 - Une « liste » est une **liste de textes** (pas de tableau à plusieurs colonnes).
 - Ajouter un champ à la main ne sert qu'à le préparer : il doit exister dans le fichier pour pouvoir enregistrer.
