@@ -1,59 +1,73 @@
 import { computed, ref } from "vue";
 
-import { mockDossierName } from "@/mocks/dossiers";
 import type { AppNotification } from "@/types/dashboard";
 import type { SlotDraft } from "@/types/schedule";
+import { apiFetch } from "@/utils/api";
 import { occurrenceStarts } from "@/utils/recurrence";
 
-// MOCK (issue #174, partie UI) : état partagé au niveau du module pour que
-// la pastille de la sidebar et le tableau de bord restent synchronisés.
-// À remplacer par l'API de notifications (table `notification`, `read_at`).
+// Notifications (issue #174) : les notifications d'affectation, d'échéance, de statut et d'analyse viennent de
+// l'API (`GET /api/notifications`, interrogée toutes les 60 s tant que la page est visible : chaque lecture met
+// à jour les notifications côté serveur). Les rappels de créneau restent déclenchés localement par le navigateur.
+// État partagé au niveau du module pour que la pastille de la barre latérale et le tableau de bord restent
+// synchronisés.
 
-const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+const POLL_MS = 60_000;
 
-const notifications = ref<AppNotification[]>([
-  {
-    id: "n-1",
-    kind: "overdue",
-    dossierId: "dos-5",
-    dossierName: mockDossierName("dos-5"),
-    message: "L'échéance du dossier est dépassée.",
-    createdAt: hoursAgo(2),
-  },
-  {
-    id: "n-2",
-    kind: "assigned",
-    dossierId: "dos-9",
-    dossierName: mockDossierName("dos-9"),
-    message: "Ce dossier vous a été affecté par Camille D.",
-    createdAt: hoursAgo(5),
-  },
-  {
-    id: "n-3",
-    kind: "analysis_done",
-    dossierId: "dos-13",
-    dossierName: mockDossierName("dos-13"),
-    message: "L'analyse que vous avez lancée est terminée.",
-    createdAt: hoursAgo(26),
-  },
-  {
-    id: "n-5",
-    kind: "reminder",
-    dossierId: "dos-17",
-    dossierName: mockDossierName("dos-17"),
-    message: "Rappel : créneau de traitement à 09:00.",
-    createdAt: hoursAgo(1),
-  },
-  {
-    id: "n-4",
-    kind: "status_changed",
-    dossierId: "dos-21",
-    dossierName: mockDossierName("dos-21"),
-    message: "Statut passé à « À valider » par Samir B.",
-    createdAt: hoursAgo(50),
-    readAt: hoursAgo(40),
-  },
-]);
+/** Notifications du serveur, de la plus récente à la plus ancienne. */
+const serverNotifications = ref<AppNotification[]>([]);
+/** Rappels de créneau déclenchés dans ce navigateur (pas encore côté serveur). */
+const localReminders = ref<AppNotification[]>([]);
+const notifications = computed(() =>
+  [...localReminders.value, ...serverNotifications.value].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
+);
+
+/** Identifiants déjà vus : seules les nouvelles notifications déclenchent une alerte du navigateur. */
+const knownIds = new Set<string>();
+let firstLoad = true;
+let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+function mapNotification(api: any): AppNotification {
+  return {
+    id: api.id,
+    kind: api.kind,
+    dossierId: api.dossier_id,
+    dossierName: api.dossier_name,
+    message: api.message,
+    createdAt: api.created_at,
+    readAt: api.read_at ?? undefined,
+  };
+}
+
+async function fetchNotifications() {
+  try {
+    const items = (await apiFetch<any[]>("/api/notifications?limit=100")).map(mapNotification);
+    for (const n of items) {
+      if (!knownIds.has(n.id) && !firstLoad && !n.readAt) showBrowserNotification(n);
+      knownIds.add(n.id);
+    }
+    firstLoad = false;
+    serverNotifications.value = items;
+  } catch {
+    // Hors ligne ou session expirée : on garde l'état précédent et on réessaiera au prochain passage.
+  }
+}
+
+/** Démarre l'interrogation périodique (idempotent) : à appeler quand la personne est connectée. */
+function startPolling() {
+  if (pollTimer) return;
+  fetchNotifications();
+  pollTimer = setInterval(() => {
+    if (document.visibilityState === "visible") fetchNotifications();
+  }, POLL_MS);
+}
+
+function stopPolling() {
+  clearInterval(pollTimer);
+  pollTimer = undefined;
+  serverNotifications.value = [];
+  knownIds.clear();
+  firstLoad = true;
+}
 
 // --- Notifications du navigateur --------------------------------------------
 // API Notification : l'alerte système s'affiche tant que l'application est
@@ -146,7 +160,7 @@ function fireDueReminders() {
           message: `Rappel : créneau de traitement à ${time}.`,
           createdAt: new Date().toISOString(),
         };
-        notifications.value.unshift(reminder);
+        localReminders.value.unshift(reminder);
         showBrowserNotification(reminder);
       }
     }
@@ -168,17 +182,43 @@ export function useNotifications() {
   /** Libellé de la pastille, plafonné à « 99+ ». */
   const badgeLabel = computed(() => (unreadCount.value > 99 ? "99+" : String(unreadCount.value)));
 
+  /** Marque une notification comme lue (tout de suite à l'écran, puis côté serveur). */
   function markRead(id: string) {
-    const target = notifications.value.find((n) => n.id === id);
-    if (target && !target.readAt) target.readAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const local = localReminders.value.find((n) => n.id === id);
+    if (local) {
+      if (!local.readAt) local.readAt = now;
+      return;
+    }
+    const target = serverNotifications.value.find((n) => n.id === id);
+    if (!target || target.readAt) return;
+    target.readAt = now;
+    apiFetch<void>(`/api/notifications/${id}/read`, { method: "POST" }).catch(() => {
+      target.readAt = undefined; // l'enregistrement a échoué : elle redevient non lue
+    });
   }
 
   function markAllRead() {
     const now = new Date().toISOString();
-    for (const n of notifications.value) if (!n.readAt) n.readAt = now;
+    for (const n of localReminders.value) if (!n.readAt) n.readAt = now;
+    const pending = serverNotifications.value.filter((n) => !n.readAt);
+    for (const n of pending) n.readAt = now;
+    if (pending.length) {
+      apiFetch("/api/notifications/read-all", { method: "POST" }).catch(() => {
+        for (const n of pending) n.readAt = undefined;
+      });
+    }
   }
 
-  return { notifications, unreadCount, badgeLabel, markRead, markAllRead,
+  return {
+    notifications,
+    unreadCount,
+    badgeLabel,
+    markRead,
+    markAllRead,
+    startPolling,
+    stopPolling,
+    refresh: fetchNotifications,
     setReminders,
     browserPermission,
     browserEnabled,

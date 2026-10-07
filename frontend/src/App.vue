@@ -9,8 +9,8 @@ import { useMyConversations } from "@/composables/useMyConversations";
 import { useNotifications } from "@/composables/useNotifications";
 
 const route = useRoute();
-const { unreadCount, badgeLabel } = useNotifications();
-const { fetchProfile } = useAuth();
+const { unreadCount, badgeLabel, startPolling, stopPolling } = useNotifications();
+const { fetchProfile, isAuthenticated } = useAuth();
 const { list: conversations, fetchList: fetchConversations, deleteConversation } = useMyConversations();
 
 async function onDeleteConversation(dossierId: string, conversationId: string) {
@@ -22,6 +22,8 @@ async function onDeleteConversation(dossierId: string, conversationId: string) {
 // HttpOnly). Le route guard attend que `loading` passe à false avant de
 // décider de rediriger vers la page d'accueil.
 onMounted(() => fetchProfile());
+// Les notifications ne sont interrogées que pour une personne connectée.
+watch(isAuthenticated, (connected) => (connected ? startPolling() : stopPolling()), { immediate: true });
 onMounted(fetchConversations);
 // La conversation active peut changer de position (activité la plus
 // récente en tête) ou apparaître pour la première fois : on rafraîchit à
