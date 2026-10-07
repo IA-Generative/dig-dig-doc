@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.10.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.9.1...v0.10.0-rc) (2026-10-07)
+
+
+### Features
+
+* **backend:** accès aux dossiers appliqué partout, accès administrateur tracé ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ([98b887a](https://github.com/IA-Generative/dig-dig-doc/commit/98b887a603d8033b8518c884c600631a2518ea71))
+* **backend:** accès aux dossiers par groupe, première partie ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ([0b6a762](https://github.com/IA-Generative/dig-dig-doc/commit/0b6a762123c024a8162ecf18533dc82f44807205))
+* **backend:** affectation des dossiers et annuaire local des personnes ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)) ([887fd54](https://github.com/IA-Generative/dig-dig-doc/commit/887fd54e3df8961f33c22c05b0cd330f5514e71c))
+* **backend:** échéance des dossiers et seuils de couleur ([#172](https://github.com/IA-Generative/dig-dig-doc/issues/172)) ([1d96451](https://github.com/IA-Generative/dig-dig-doc/commit/1d9645140774e147a8ffc78821d31c6cb5befba2))
+* **backend:** journal d'événements du dossier ([#169](https://github.com/IA-Generative/dig-dig-doc/issues/169)) ([558b589](https://github.com/IA-Generative/dig-dig-doc/commit/558b589bc25b59aec93bfced70aa237f9208abd4))
+* **backend:** route du tableau de suivi et référence des dossiers ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)) ([132f5e8](https://github.com/IA-Generative/dig-dig-doc/commit/132f5e8346466595d14e25ce6e0dfd675ccbcd87))
+* **backend:** statuts de dossier par analyse et date de clôture ([#168](https://github.com/IA-Generative/dig-dig-doc/issues/168)) ([fd28fa5](https://github.com/IA-Generative/dig-dig-doc/commit/fd28fa565e2a33cf560e761319345c0539f5ba29))
+* colonnes personnalisées du suivi branchées sur l'API ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)) ([9499534](https://github.com/IA-Generative/dig-dig-doc/commit/94995341947343ade2a91dacb3b29a18ded7ba56))
+* créneaux de traitement personnels côté serveur ([#174](https://github.com/IA-Generative/dig-dig-doc/issues/174)) ([6f10f6d](https://github.com/IA-Generative/dig-dig-doc/commit/6f10f6db2c4d1ead367df99f581f7bef315d3883))
+* **frontend:** accès aux dossiers par groupe (partie UI, données simulées) ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ([ea8bd41](https://github.com/IA-Generative/dig-dig-doc/commit/ea8bd418041cb57b7b8433cc19f54564ede6bd9d))
+* **frontend:** configuration des statuts de dossier, liste et changement de statut ([#170](https://github.com/IA-Generative/dig-dig-doc/issues/170)) ([e7d5b91](https://github.com/IA-Generative/dig-dig-doc/commit/e7d5b91a8a9da3b2fc536ec87036832e069c74e1))
+* **frontend:** échéance du dossier et seuils de couleur ([#172](https://github.com/IA-Generative/dig-dig-doc/issues/172)) ([715a051](https://github.com/IA-Generative/dig-dig-doc/commit/715a0519cc79a05972458c57ad89f02c38247fb7))
+* **frontend:** onglet « Historique » du dossier ([#171](https://github.com/IA-Generative/dig-dig-doc/issues/171)) ([0c3dc1c](https://github.com/IA-Generative/dig-dig-doc/commit/0c3dc1c9abe32b1c85983f6b45b7e01911d4a6c8))
+* **frontend:** tableau de bord utilisateur (partie UI, données simulées) ([#174](https://github.com/IA-Generative/dig-dig-doc/issues/174)) ([63825b2](https://github.com/IA-Generative/dig-dig-doc/commit/63825b27d00ae07dc689d2070af40f48820c54ba))
+* **frontend:** tableau de suivi branché sur l'API ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)) ([cec4051](https://github.com/IA-Generative/dig-dig-doc/commit/cec4051b319998bf6684e0a34cc789f58bda90c5))
+* **frontend:** tableau de suivi des dossiers par analyse (partie UI, données simulées) ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)) ([a99e5c2](https://github.com/IA-Generative/dig-dig-doc/commit/a99e5c2145c5e9dbfb3fe55f7d1df9a1e4305bc9))
+* **frontend:** vue transversale du tableau de suivi et données communes ([#186](https://github.com/IA-Generative/dig-dig-doc/issues/186)) ([d3f533f](https://github.com/IA-Generative/dig-dig-doc/commit/d3f533f9e5984c42968afd5ca0cc2240b4809860))
+* interface d'accès aux dossiers par groupe branchée sur l'API ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ([62c597f](https://github.com/IA-Generative/dig-dig-doc/commit/62c597f3524559d9f723ef36a54a7ced3febaf7f))
+* notifications des personnes fabriquées à la lecture ([#174](https://github.com/IA-Generative/dig-dig-doc/issues/174)) ([ea7924e](https://github.com/IA-Generative/dig-dig-doc/commit/ea7924ec94b59474c53b7f3d5ae594473f02f12f))
+* rappels de créneau générés côté serveur ([#219](https://github.com/IA-Generative/dig-dig-doc/issues/219)) ([ec5a54a](https://github.com/IA-Generative/dig-dig-doc/commit/ec5a54a40cff68d30924fcb3830e42b5a3bee293))
+* tableau de bord branché sur une route de lecture ([#174](https://github.com/IA-Generative/dig-dig-doc/issues/174)) ([4bbf787](https://github.com/IA-Generative/dig-dig-doc/commit/4bbf787c154876b4c498b12687bbad579bd2c1a9))
+
+
+### Bug Fixes
+
+* **backend:** l'agent assistant agit avec les droits de la personne ([#222](https://github.com/IA-Generative/dig-dig-doc/issues/222)) ([63e6ef6](https://github.com/IA-Generative/dig-dig-doc/commit/63e6ef686f4e0b7fbf09801ac0c47c6cd3450cd6))
+* **frontend:** cache corepack partagé dans Dockerfile.dev ([1a1cc10](https://github.com/IA-Generative/dig-dig-doc/commit/1a1cc1031ec3f3130f42ee73dff02d200e3c535a))
+
+
+### Code Refactoring
+
+* **frontend:** « échéance » remplace « péremption » dans le suivi des dossiers ([8762df6](https://github.com/IA-Generative/dig-dig-doc/commit/8762df6b38020928a8d2c2956c7e22addd364fff))
+
 ## [0.9.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.9.0...v0.9.1) (2026-10-02)
 
 
