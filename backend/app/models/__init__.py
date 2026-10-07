@@ -20,6 +20,7 @@ from .analysis_proposal import (
     ProposalStatus,
 )
 from .app_token import AppToken
+from .app_user import AppUser
 from .base import Base
 from .cgu import Cgu
 from .cgu_acceptance import CguAcceptance
@@ -92,6 +93,7 @@ __all__ = [
     "FieldOrigin",
     "FieldStatus",
     "DocumentTemplateVersion",
+    "AppUser",
     "DossierEvent",
     "DossierEventType",
     "DossierNote",

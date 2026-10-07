@@ -17,8 +17,10 @@ class DossierEventType(enum.StrEnum):
     CREATED = "created"
     CONSULTED = "consulted"
     STATUS_CHANGED = "status_changed"
-    # Le dossier entre dans un statut final (date de clôture posée) / en sort (réouverture).
     DUE_DATE_CHANGED = "due_date_changed"
+    # Affecté, réaffecté ou désaffecté (issue #173) ; `from` / `to` : {id, name} ou null.
+    ASSIGNEE_CHANGED = "assignee_changed"
+    # Le dossier entre dans un statut final (date de clôture posée) / en sort (réouverture).
     CLOSED = "closed"
     REOPENED = "reopened"
     ANALYSE_ASSIGNED = "analyse_assigned"

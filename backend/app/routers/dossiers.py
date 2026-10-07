@@ -31,6 +31,7 @@ from app.connectors import s3_connector
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.analyse import Analyse
+from app.models.app_user import AppUser
 from app.models.conversation import Message, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
 from app.models.dossier_event import DossierEventType
@@ -38,7 +39,11 @@ from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_collaboration_repository import ElementLockedError
 from app.repositories.dossier_event_repository import EventActor
 from app.repositories.dossier_repository import DossierRepository
+from app.repositories.user_directory_repository import UserDirectoryRepository
 from app.schemas.dossier import (
+    AssigneeUpdate,
+    BulkAssigneeResult,
+    BulkAssigneeUpdate,
     ChatEventOut,
     ConversationModelUpdate,
     ConversationOut,
@@ -73,6 +78,7 @@ async def _get_or_404(repository: DossierRepository, dossier_id: uuid.UUID) -> D
 @router.get("", response_model=Page[DossierOut])
 async def list_dossiers(
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     workflow_status_id: Annotated[
@@ -85,6 +91,10 @@ async def list_dossiers(
             "none (sans échéance)"
         ),
     ] = None,
+    assignee: Annotated[
+        str | None,
+        Query(description="Responsable : me (moi), none (non affectés) ou l'identifiant d'une personne"),
+    ] = None,
     sort: Annotated[
         Literal["created_at", "status", "due"],
         Query(
@@ -94,7 +104,12 @@ async def list_dossiers(
     ] = "created_at",
 ) -> Page[DossierOut]:
     dossiers, total = await DossierRepository(db).list_paginated(
-        page=page, page_size=page_size, workflow_status_id=workflow_status_id, due=due, sort=sort
+        page=page,
+        page_size=page_size,
+        workflow_status_id=workflow_status_id,
+        due=due,
+        assignee=user.user_id if assignee == "me" else assignee,
+        sort=sort,
     )
     return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
@@ -146,6 +161,58 @@ async def update_workflow_status(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Ce statut n'appartient pas à l'analyse du dossier."
         )
     await repository.set_workflow_status(dossier, new_status, actor=user)
+    return await _get_or_404(repository, dossier_id)
+
+
+async def _known_person(db: AsyncSession, person_id: str | None) -> AppUser | None:
+    """La personne à affecter, dans l'annuaire local ; ``None`` pour désaffecter. Une personne inconnue (jamais
+    connectée) ne peut pas recevoir de dossier : 422."""
+    if person_id is None:
+        return None
+    person = await UserDirectoryRepository(db).get(person_id)
+    if person is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "unknown_user", "message": "Cette personne n'est pas connue de l'application."},
+        )
+    return person
+
+
+# Les routes statiques (`bulk-assignee`) restent avant les routes `/{dossier_id}`.
+@router.put("/bulk-assignee", response_model=BulkAssigneeResult)
+async def assign_dossiers(
+    body: BulkAssigneeUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> BulkAssigneeResult:
+    """Affecte (ou désaffecte, avec ``assignee_id: null``) plusieurs dossiers **en une transaction** : si l'un
+    d'eux n'existe pas, aucun n'est modifié (404, avec la liste des identifiants introuvables)."""
+    repository = DossierRepository(db)
+    person = await _known_person(db, body.assignee_id)
+    wanted = list(dict.fromkeys(body.dossier_ids))
+    dossiers = await repository.get_many(wanted)
+    missing = sorted(str(i) for i in set(wanted) - {d.id for d in dossiers})
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dossiers_not_found", "message": "Dossiers introuvables.", "dossier_ids": missing},
+        )
+    updated = await repository.assign_many(dossiers, person, actor=user)
+    return BulkAssigneeResult(updated=updated, unchanged=len(dossiers) - updated)
+
+
+@router.put("/{dossier_id}/assignee", response_model=DossierOut)
+async def update_assignee(
+    dossier_id: uuid.UUID,
+    body: AssigneeUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
+    """Affecte le dossier à une personne de l'annuaire ; ``null`` le désaffecte. Le changement est tracé dans le
+    journal (#169)."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    await repository.set_assignee(dossier, await _known_person(db, body.assignee_id), actor=user)
     return await _get_or_404(repository, dossier_id)
 
 

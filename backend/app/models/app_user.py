@@ -1,0 +1,29 @@
+from datetime import datetime
+
+from sqlalchemy import DateTime, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base
+
+
+class AppUser(Base):
+    """Annuaire local des personnes connues de l'application (issue #173).
+
+    L'identité est dans Keycloak : il n'existe pas de table d'utilisateurs maîtresse. Cette table en garde une
+    **copie minimale** (identifiant, nom, e-mail), mise à jour à chaque connexion, pour pouvoir **proposer** des
+    personnes à l'affectation d'un dossier et afficher leur nom. Une personne qui ne s'est jamais connectée
+    n'y figure pas : elle ne peut pas recevoir de dossier.
+
+    ``user_id`` est le ``sub`` Keycloak (clé primaire)."""
+
+    __tablename__ = "app_users"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False, default="")
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    @property
+    def id(self) -> str:
+        """Nom d'exposition dans l'API (``PersonOut.id``)."""
+        return self.user_id

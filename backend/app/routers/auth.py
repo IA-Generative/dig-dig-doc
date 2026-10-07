@@ -6,12 +6,15 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import KeycloakSettings
 from app.core.security.claims import decode_access_token, extract_identity
 from app.core.security.factory import RequestContext, get_current_user
 from app.core.security.keycloak_client import keycloak_openid, session_store
 from app.core.security.session import PendingAuth
+from app.db import get_db
+from app.repositories.user_directory_repository import UserDirectoryRepository
 
 router = APIRouter(tags=["Auth"])
 
@@ -168,5 +171,10 @@ async def logout(request: Request, response: Response) -> dict:
 
 
 @router.get("/me", summary="Return the current user's profile")
-async def me(user: Annotated[RequestContext, Depends(get_current_user)]) -> RequestContext:
+async def me(
+    user: Annotated[RequestContext, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RequestContext:
+    # Appelé à chaque ouverture de l'application : sert à tenir l'annuaire local à jour (#173).
+    await UserDirectoryRepository(db).touch(user)
     return user
