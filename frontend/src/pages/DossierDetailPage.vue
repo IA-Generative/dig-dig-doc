@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
+import AccessBadge from "@/components/access/AccessBadge.vue";
+import AccessModal from "@/components/access/AccessModal.vue";
 import ModelPicker from "@/components/ModelPicker.vue";
 import ChatWindow, { type ChatWindowSource } from "@/components/ChatWindow.vue";
 import SourceViewerModal from "@/components/SourceViewerModal.vue";
@@ -73,6 +75,7 @@ const { isRunning: isChatRunning, start: startChatStream, stop: stopChatStream }
 });
 
 const isDetailsModalOpened = ref(false);
+const isAccessOpened = ref(false);
 
 // Source citée par l'assistant, ouverte dans une modale (page + passage surligné).
 const viewedSource = ref<ChatWindowSource | null>(null);
@@ -203,6 +206,7 @@ async function onDeleteConversation() {
       <div>
         <div class="dossier-detail__title">
           <h1 class="fr-h2">{{ dossier.name }}</h1>
+          <AccessBadge :dossier-id="dossier.id" />
           <button
             type="button"
             class="dossier-detail__icon-button"
@@ -234,6 +238,15 @@ async function onDeleteConversation() {
           align="right"
           @update:model-value="onModelChange"
         />
+        <button
+          type="button"
+          class="dossier-detail__icon-button"
+          aria-label="Accès au dossier"
+          title="Accès : qui peut voir ce dossier"
+          @click="isAccessOpened = true"
+        >
+          <VIcon name="ri-lock-line" />
+        </button>
         <RouterLink
           :to="`/dossiers/${dossierId}/analyse`"
           class="dossier-detail__icon-button"
@@ -403,6 +416,8 @@ async function onDeleteConversation() {
         </button>
       </template>
     </ChatWindow>
+
+    <AccessModal v-if="isAccessOpened" :dossier-id="dossier.id" :dossier-name="dossier.name" @close="isAccessOpened = false" />
 
     <SourceViewerModal
       :opened="isSourceOpened"

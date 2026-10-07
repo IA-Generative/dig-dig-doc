@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
 
+import AccessBadge from "@/components/access/AccessBadge.vue";
 import ColumnHelp from "@/components/tracking/ColumnHelp.vue";
 import CellEditor from "@/components/tracking/CellEditor.vue";
 import ExpiryBadge from "@/components/tracking/ExpiryBadge.vue";
@@ -18,6 +19,8 @@ const props = defineProps<{
   sort: TrackingSort;
   selected: string[];
   loading: boolean;
+  /** Une personne peut-elle être affectée à ce dossier ? (elle doit y avoir accès, #177) */
+  canAssign: (rowId: string, assigneeId: string) => boolean;
 }>();
 
 const emit = defineEmits<{
@@ -85,7 +88,10 @@ function formatDate(iso: string) {
             <input type="checkbox" :checked="selected.includes(r.id)" :aria-label="`Sélectionner ${r.reference}`" @change="toggleRow(r.id, ($event.target as HTMLInputElement).checked)" />
           </td>
           <td v-for="c in columns" :key="c.id">
-            <RouterLink v-if="c.id === 'reference'" :to="`/dossiers/${r.id}`" class="tt__ref">{{ r.reference }}</RouterLink>
+            <template v-if="c.id === 'reference'">
+              <RouterLink :to="`/dossiers/${r.id}`" class="tt__ref">{{ r.reference }}</RouterLink>
+              <AccessBadge :dossier-id="r.id" class="fr-ml-1w" />
+            </template>
             <StatusBadge v-else-if="c.id === 'status'" :status-id="r.statusId" />
             <select
               v-else-if="c.id === 'assignee'"
@@ -95,7 +101,7 @@ function formatDate(iso: string) {
               @change="emit('assign', r.id, ($event.target as HTMLSelectElement).value || null)"
             >
               <option value="">Non affecté</option>
-              <option v-for="a in assignees" :key="a.id" :value="a.id">{{ a.name }}</option>
+              <option v-for="a in assignees.filter((x) => canAssign(r.id, x.id) || x.id === r.assigneeId)" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
             <ExpiryBadge v-else-if="c.id === 'expiry'" :expires-at="r.expiresAt" />
             <template v-else-if="c.id === 'createdAt'">{{ formatDate(r.createdAt) }}</template>

@@ -14,6 +14,8 @@ interface UserProfile {
   lastName: string;
   roles: string[];
   isAdmin: boolean;
+  /** Groupes Keycloak de l'utilisateur (claim `groups`). */
+  groups: string[];
 }
 
 const profile = ref<UserProfile | null>(null);
@@ -43,6 +45,7 @@ export function useAuth() {
         lastName: raw.last_name as string,
         roles: raw.roles as string[],
         isAdmin: raw.is_admin as boolean,
+        groups: (raw.groups as string[] | undefined) ?? [],
       };
     } catch {
       profile.value = null;
