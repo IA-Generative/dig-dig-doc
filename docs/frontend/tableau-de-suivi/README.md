@@ -4,7 +4,7 @@ Issues : [#173](https://github.com/IA-Generative/dig-dig-doc/issues/173) (tablea
 
 Un **tableau de pilotage des dossiers** : qui s'en occupe, où ils en sont, quelle est leur échéance, plus des **colonnes personnalisées** définies par l'administrateur de l'analyse. Il existe **à deux niveaux** avec le même composant : dans chaque analyse, et en **vue transversale** sur toutes les analyses accessibles.
 
-> **Partie interface seulement.** Les données (60 dossiers sur 5 analyses) sont simulées en attendant le backend (statuts #168, échéance #172, affectations) : voir « Choix et limites ».
+> **Branché sur l'API** : la liste, les filtres, la recherche, le tri, la pagination, l'échéance et l'affectation viennent du serveur ([`tableau-de-suivi`](../../backend/tableau-de-suivi.md), [`affectation-des-dossiers`](../../backend/affectation-des-dossiers.md)). Les **colonnes personnalisées** et l'**accès par groupe** n'ont pas encore de backend : ils sont masqués. Voir « Choix et limites ».
 
 ## Y accéder
 
@@ -15,11 +15,12 @@ Un **tableau de pilotage des dossiers** : qui s'en occupe, où ils en sont, quel
 
 ![Onglet Suivi d'une analyse](01-onglet-suivi.png)
 
-Une ligne par dossier : **référence** (lien vers le dossier, avec la pastille « Restreint » le cas échéant), **nom**, statut, **affecté à**, **échéance**, dates de création et de dernière activité, puis les colonnes personnalisées de l'analyse.
+Une ligne par dossier : **référence** (« DOS-2026-0042 », lien vers le dossier), **nom**, statut, **affecté à**, **échéance**, dates de création et de dernière activité.
 
 - **Tri** : un clic sur un en-tête trie la colonne (le sens est annoncé aux lecteurs d'écran).
-- **Pagination** : 10 dossiers par page, avec le total au-dessus du tableau. Le tri, les filtres et la pagination sont faits « côté serveur » : les mêmes appels serviront avec l'API.
-- **Échéance** : badge coloré **et libellé** (« Échéance dans 8 j », « Échéance dépassée depuis 4 j ») ; la couleur suit les seuils de l'analyse et n'est jamais le seul signal.
+- **Pagination** : 10 dossiers par page, avec le total au-dessus du tableau. Le tri, les filtres et la pagination sont faits **côté serveur**.
+- **Échéance** : badge coloré **et libellé** (« Dans 8 j », « Dépassée de 4 j », « Dossier clos ») ; le **niveau et la couleur sont calculés par le serveur** selon les seuils de l'analyse de la ligne ([échéance](../echeance-du-dossier/README.md)), et la couleur n'est jamais le seul signal.
+- Une erreur de chargement s'affiche avec un bouton **Réessayer**.
 - **Définition d'une colonne** : le bouton « i » de chaque en-tête ouvre une bulle avec sa **définition**.
 
 ![Définition d'une colonne](04-definition-d-une-colonne.png)
@@ -32,7 +33,7 @@ Les pastilles du haut sont des **vues** : *Tous*, *Mes dossiers*, *Non affectés
 
 ![Filtres](02-filtres.png)
 
-« Filtres » déplie : la **recherche** (référence, nom, valeurs), le **statut**, **affecté à** (moi, non affectés, une personne), l'**échéance** (dépassées, ≤ 7 j, ≤ 30 j, sans échéance), l'**accès** (restreints, selon l'analyse), puis un filtre par **colonne personnalisée** adapté à son type : texte, liste, oui/non, plage pour un nombre, un montant ou une date. « Réinitialiser » efface tout.
+« Filtres » déplie : la **recherche** (nom ou référence), le **statut**, **affecté à** (moi, non affectés, une personne de l'annuaire) et l'**échéance** (dépassées, ≤ 7 j, ≤ 30 j, sans échéance ; dossiers non clos). « Réinitialiser » efface tout.
 
 ## Affecter
 
@@ -40,16 +41,18 @@ Dans la colonne « Affecté à », le menu de chaque ligne réaffecte directemen
 
 ![Affectation en lot](03-affectation-en-lot.png)
 
-- **Affecter à…** puis « Affecter », ou « **Retirer l'affectation** ».
-- On ne peut affecter qu'une personne **qui a accès au dossier** : le menu d'une ligne ne propose qu'elles, et en lot les dossiers refusés sont signalés.
-- « **Définir l'accès** » (administrateurs) applique un accès à la sélection : voir [accès aux dossiers](../acces-aux-dossiers/README.md).
-- Chaque affectation est confirmée dans une zone annoncée et notée comme **tracée dans l'historique** du dossier.
+- **Affecter à…** puis « Affecter », ou « **Retirer l'affectation** ». Les personnes proposées sont celles de l'**annuaire** : quiconque s'est déjà connecté à l'application.
+- L'affectation en lot est **une seule transaction** côté serveur : tout ou rien.
+
+![Affectation confirmée](12-affectation-confirmee.png)
+
+- Chaque affectation est confirmée dans une zone annoncée (« 2 dossiers affectés à Camille Durand. Tracé dans l'historique. ») ; si la personne était déjà responsable, le message le dit. L'événement figure dans l'[historique du dossier](../historique-du-dossier/README.md).
 
 ## Options
 
 ![Menu Options](05-menu-options.png)
 
-Le menu **Options** regroupe : **Colonnes**, **Champs personnalisés** (administrateurs, dans l'onglet d'une analyse) et **Exporter en CSV**.
+Le menu **Options** regroupe : **Colonnes** et **Exporter en CSV**.
 
 ### Colonnes
 
@@ -59,9 +62,11 @@ On coche les colonnes à afficher et on les **ordonne** avec les flèches (utili
 
 ### Exporter en CSV
 
-L'export reprend **la vue courante** : filtres, tri et colonnes visibles (séparateur « ; » et encodage lisible dans Excel). Il ne contient que les dossiers accessibles.
+L'export reprend **la vue courante** : filtres, tri et colonnes visibles (séparateur « ; » et encodage lisible dans Excel). Il est limité à **2 000 lignes** ; au-delà, l'interface le dit et invite à affiner les filtres.
 
 ## Les colonnes personnalisées
+
+> **Masquées pour l'instant** : leur backend (définitions versionnées, valeurs par dossier, validation, filtres) n'existe pas encore. L'écran ci-dessous a été validé sur données simulées et reste dans le code (`CUSTOM_FIELDS_ENABLED`) ; il réapparaîtra avec l'API. Les captures de cette section datent de cette validation.
 
 ![Colonnes personnalisées](07-champs-personnalises.png)
 
@@ -95,7 +100,7 @@ La page **Suivi** de la barre latérale reprend le même tableau sur **toutes le
 
 - Une colonne **Analyse** et un filtre **Analyse** (une ou plusieurs analyses) s'ajoutent.
 - **Statuts** : chaque analyse a les siens ; tant que plusieurs analyses sont concernées, le filtre propose des **catégories communes** (« À démarrer », « En cours », « Clos »). Avec une seule analyse filtrée, il propose ses statuts exacts.
-- **Colonnes personnalisées** : définies par analyse, elles n'apparaissent que lorsqu'**une seule analyse** est filtrée ; sinon une phrase l'explique.
+- **Colonnes personnalisées** : définies par analyse, elles n'apparaîtront que lorsqu'**une seule analyse** est filtrée (voir plus haut : masquées pour l'instant).
 
 ![Vue transversale filtrée sur une analyse](11-vue-transversale-une-analyse.png)
 
@@ -106,14 +111,15 @@ Les filtres se lisent dans l'URL, ce qui permet au tableau de bord et aux notifi
 | Paramètre | Effet |
 | --- | --- |
 | `assignee=me` ou `assignee=none` ou `assignee=<id>` | Mes dossiers, non affectés, ou une personne. |
-| `status=<id>` | Un statut précis. |
+| `status=<id>` | Un statut précis (l'identifiant d'un statut de l'analyse ; les liens encore simulés du tableau de bord sont ignorés). |
 | `due=overdue`, `7`, `30` ou `none` | Échéance dépassée, dans 7 jours, dans 30 jours ou sans échéance. |
 | `analyse=<id>,<id>` | Une ou plusieurs analyses (vue transversale). |
 
 ## Choix et limites
 
-- **Données simulées** (`src/mocks/dossiers.ts`), communes au tableau de bord : une affectation faite ici se retrouve dans le tableau de bord. Rien n'est enregistré au rechargement de la page, sauf les **vues** et les **colonnes** choisies, gardées dans le navigateur.
-- Les analyses simulées (Instruction subventions, Urbanisme…) ne correspondent pas à celles de l'application : l'onglet « Suivi » d'une analyse réelle prend l'analyse simulée **du même nom**, sinon la première. Les liens « Analyse » du tableau deviendront valides avec l'API.
-- Toutes les analyses simulées **partagent les mêmes statuts** ; dans l'application réelle ils sont propres à chaque analyse ([#168](https://github.com/IA-Generative/dig-dig-doc/issues/168)).
+- **Branché sur l'API** : liste, filtres, recherche, tri, pagination, échéance, affectation. Le **tableau de bord** utilise encore des données simulées ; ses liens vers le suivi seront rebranchés avec lui ([#174](https://github.com/IA-Generative/dig-dig-doc/issues/174)).
+- **Accès par groupe** ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) : tous les dossiers sont listés, et le filtre « Accès » et l'action en lot « Définir l'accès » sont masqués (`ACCESS_ENABLED`). Les personnes proposées à l'affectation ne sont pas encore filtrées par accès.
+- **Vues enregistrées et colonnes choisies** : gardées dans le navigateur, propres à l'utilisateur et à la portée (une analyse, ou la vue transversale). Leur persistance côté serveur vient plus tard ([#173](https://github.com/IA-Generative/dig-dig-doc/issues/173)).
+- La **recherche** porte sur le nom et la référence, pas sur les valeurs personnalisées.
 - L'export CSV et les droits de lecture des valeurs personnalisées restent à confirmer (données d'usagers, [#144](https://github.com/IA-Generative/dig-dig-doc/issues/144)).
-- Les captures sont prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée.
+- Pas de test automatisé côté interface ([#213](https://github.com/IA-Generative/dig-dig-doc/issues/213)) : l'écran est vérifié par ces captures, prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée (`node scripts/doc-screenshots.mjs <url> tracking`).

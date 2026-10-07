@@ -4,20 +4,20 @@ import {
   type Assignee,
   type CustomField,
   type FieldFilter,
-  type MockAnalyse,
   type StatusCategory,
   type TrackingFilters,
-  type TrackingStatus,
 } from "@/types/tracking";
 
 // Filtres du tableau : recherche, statut, affecté à, échéance, puis un
 // filtre par champ personnalisé adapté à son type.
 const props = defineProps<{
   modelValue: TrackingFilters;
-  statuses: TrackingStatus[];
+  statuses: { id: string; label: string }[];
   assignees: Assignee[];
-  analyses: MockAnalyse[];
+  analyses: { id: string; name: string }[];
   fields: CustomField[];
+  /** Le filtre « Accès » n'a pas encore d'API (#177) : masqué. */
+  showAccess?: boolean;
   /** Vue transversale : filtre « Analyse » et statuts regroupés par catégorie tant que plusieurs analyses sont concernées. */
   transversal: boolean;
 }>();
@@ -59,7 +59,7 @@ const rangeOf = (id: string) => {
   <div class="tf" role="search">
     <div class="tf__field tf__field--wide">
       <label for="tf-search">Rechercher</label>
-      <input id="tf-search" class="fr-input" type="search" placeholder="Référence, valeur…" :value="modelValue.search" @input="patch({ search: ($event.target as HTMLInputElement).value })" />
+      <input id="tf-search" class="fr-input" type="search" placeholder="Nom ou référence…" :value="modelValue.search" @input="patch({ search: ($event.target as HTMLInputElement).value })" />
     </div>
     <fieldset v-if="transversal" class="tf__field tf__field--analyses">
       <legend class="tf__label">Analyse</legend>
@@ -104,7 +104,7 @@ const rangeOf = (id: string) => {
       </select>
     </div>
 
-    <div class="tf__field">
+    <div v-if="showAccess" class="tf__field">
       <label for="tf-access">Accès</label>
       <select id="tf-access" class="fr-select" :value="modelValue.access" @change="patch({ access: ($event.target as HTMLSelectElement).value })">
         <option value="">Tous</option>
