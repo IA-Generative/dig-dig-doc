@@ -103,6 +103,21 @@ export interface WorkflowStatus {
 /** Statut en cours d'édition : `id` absent tant qu'il n'a pas été enregistré. */
 export type StatusDraft = Omit<WorkflowStatus, "id" | "position"> & { id: string | null };
 
+/** Échéance des dossiers d'une analyse (#172) : durée par défaut et couleurs selon le temps restant. */
+export interface DueSettings {
+  /** Durée par défaut en jours depuis la création ; null = pas d'échéance automatique. */
+  defaultDueDays: number | null;
+  thresholds: DueThresholds;
+}
+
+export interface DueThresholds {
+  /** Couleur quand l'échéance est loin. */
+  farColor: string;
+  /** « N jours restants ou moins » prend la couleur du seuil ; du plus large au plus serré. */
+  steps: { days: number; color: string }[];
+  overdueColor: string;
+}
+
 export interface Analyse {
   id: string;
   name: string;
@@ -112,6 +127,8 @@ export interface Analyse {
   extraction: Extraction;
   statuses: WorkflowStatus[];
   statusesVersions: Version<WorkflowStatus[]>[];
+  dueSettings: DueSettings;
+  dueSettingsVersions: Version<DueSettings>[];
   agents: Agent[];
 }
 

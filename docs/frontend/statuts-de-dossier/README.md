@@ -6,7 +6,7 @@ Chaque **analyse** définit les **statuts** que peuvent prendre ses dossiers («
 
 ## Configurer les statuts d'une analyse
 
-Onglet **« Statuts »** de l'analyse (`/analyses/<id>/statuts`).
+Onglet **« Statuts et échéance »** de l'analyse (`/analyses/<id>/statuts`) ; la section Échéance est décrite dans [l'échéance du dossier](../echeance-du-dossier/README.md).
 
 ![Onglet Statuts](01-onglet-statuts.png)
 

@@ -72,6 +72,9 @@ function mapDossier(api: any): Dossier {
         }
       : undefined,
     closedAt: api.closed_at ?? undefined,
+    dueAt: api.due_at ?? undefined,
+    due: api.due ? { level: api.due.level, daysLeft: api.due.days_left, color: api.due.color ?? undefined } : undefined,
+    closedBeforeDue: api.closed_before_due ?? undefined,
     analyseId: api.analyse_id ?? undefined,
     analyseVersion: api.analyse_version,
     createdAt: api.created_at,
@@ -97,15 +100,20 @@ const pageCount = ref(1);
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-/** Filtre et tri de la liste (issue #170) : par statut de dossier, tri par date (défaut) ou par statut. */
+/**
+ * Filtres et tri de la liste : par statut de dossier (#170), par échéance (#172 : dépassée, dans 7 ou 30 jours,
+ * sans échéance ; seuls les dossiers non clos), tri par date de création (défaut), par statut ou par échéance.
+ */
 export interface DossierListOptions {
   workflowStatusId?: string;
-  sort?: "created_at" | "status";
+  due?: "overdue" | "7" | "30" | "none";
+  sort?: "created_at" | "status" | "due";
 }
 
 async function fetchList(page = currentPage.value, size = pageSize.value, options: DossierListOptions = {}) {
   const query = new URLSearchParams({ page: String(page), page_size: String(size) });
   if (options.workflowStatusId) query.set("workflow_status_id", options.workflowStatusId);
+  if (options.due) query.set("due", options.due);
   if (options.sort && options.sort !== "created_at") query.set("sort", options.sort);
   const data = await apiFetch<{ items: any[]; total: number; page: number; page_size: number; pages: number }>(
     `/api/dossiers?${query}`,
@@ -154,6 +162,17 @@ export function useDossiers() {
     const data = await apiFetch<any>(`/api/dossiers/${dossierId}/workflow-status`, {
       method: "PUT",
       body: JSON.stringify({ status_id: statusId }),
+    });
+    const dossier = mapDossier(data);
+    upsert(dossier);
+    return dossier;
+  };
+
+  /** Change l'échéance (AAAA-MM-JJ) ; `null` la supprime. Le serveur recalcule le niveau d'échéance. */
+  const setDueAt = async (dossierId: string, dueAt: string | null) => {
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}/due-at`, {
+      method: "PUT",
+      body: JSON.stringify({ due_at: dueAt }),
     });
     const dossier = mapDossier(data);
     upsert(dossier);
@@ -261,6 +280,7 @@ export function useDossiers() {
     fetchList,
     create,
     setWorkflowStatus,
+    setDueAt,
     addDocuments,
     setDocumentLabel,
     launch,

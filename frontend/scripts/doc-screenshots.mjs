@@ -1,4 +1,4 @@
-// Prend les captures d'écran de la documentation du tableau de bord (#174), des statuts de dossier (#170), de l'historique du dossier (#171),
+// Prend les captures d'écran de la documentation du tableau de bord (#174), des statuts de dossier (#170), de l'historique du dossier (#171), de l'échéance (#172),
 // du tableau de suivi (#173, #186) et de l'accès par groupe (#177), sous
 // docs/frontend/<fonctionnalité>/.
 //
@@ -6,7 +6,8 @@
 // simulée ici (interception des appels /api/**) pour ne dépendre ni du
 // backend ni de Keycloak. Le serveur de dev doit tourner (pnpm dev).
 //
-// Usage : node scripts/doc-screenshots.mjs [url]   (défaut : http://localhost:5173)
+// Usage : node scripts/doc-screenshots.mjs [url] [fonctionnalité…]   (défaut : http://localhost:5173, toutes)
+//         ex. node scripts/doc-screenshots.mjs http://localhost:5173 due
 import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -58,11 +59,31 @@ const dossier = (n, name, extra = {}) => ({
   suggested_analyses: [],
   workflow_status: STATUSES[n % 3],
   closed_at: null,
+  due_at: null,
+  due: null,
+  closed_before_due: null,
   ...extra,
 });
 
+// Échéance (#172) : le serveur calcule le niveau selon les seuils de l'analyse ; l'API simulée en fait autant.
+const DEFAULT_DUE = {
+  default_due_days: 30,
+  thresholds: { far_color: "#18753c", steps: [{ days: 30, color: "#b34000" }, { days: 7, color: "#ce0500" }], overdue_color: "#8a0000" },
+};
+const dayKey = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+const daysUntil = (dueAt) => Math.round((Date.parse(`${dueAt}T00:00:00Z`) - Date.parse(`${dayKey(0)}T00:00:00Z`)) / 86_400_000);
+function dueOf(d, thresholds) {
+  if (!d.due_at) return null;
+  const days_left = daysUntil(d.due_at);
+  if (d.closed_at) return { level: "closed", days_left, color: null };
+  if (days_left < 0) return { level: "overdue", days_left, color: thresholds.overdue_color };
+  const step = [...thresholds.steps].sort((a, b) => a.days - b.days).find((s) => days_left <= s.days);
+  return { level: step ? "soon" : "ok", days_left, color: step ? step.color : thresholds.far_color };
+}
+
 const dossiers = [
   dossier(3, "Subvention association Les Mouettes n°102", {
+    due_at: dayKey(5),
     documents: [
       {
         id: "doc-1",
@@ -80,8 +101,8 @@ const dossiers = [
       },
     ],
   }),
-  dossier(1, "Convention de partenariat culturelle n°100"),
-  dossier(9, "Aide au projet sportif jeunesse n°108", { workflow_status: STATUSES[2] }),
+  dossier(1, "Convention de partenariat culturelle n°100", { due_at: dayKey(-4) }),
+  dossier(9, "Aide au projet sportif jeunesse n°108", { workflow_status: STATUSES[2], due_at: dayKey(40) }),
 ];
 
 // Journal d'événements d'un dossier (#169, #171), du plus récent au plus ancien.
@@ -122,6 +143,9 @@ function api(role) {
       content: STATUSES.filter((s) => s.id !== "st-3" && s.id !== "st-4").map((s, i) => ({ ...s, position: i, is_final: s.id === "st-5" })),
     },
   ];
+  let dueSettings = JSON.parse(JSON.stringify(DEFAULT_DUE));
+  let dueVersions = [{ id: "dv-1", created_at: iso(-20), content: { default_due_days: null, thresholds: { far_color: "#18753c", steps: [{ days: 10, color: "#ce0500" }], overdue_color: "#8a0000" } } }];
+  const withDue = (d) => ({ ...d, due: dueOf(d, dueSettings.thresholds), closed_before_due: null });
   const analyseOut = () => ({
     id: ANALYSE_ID,
     name: "Instruction subventions",
@@ -131,6 +155,8 @@ function api(role) {
     extraction: { prompt: "", prompt_versions: [], entities: [], entities_versions: [] },
     statuses,
     statuses_versions: versions,
+    due_settings: dueSettings,
+    due_settings_versions: dueVersions,
     agents: [],
   });
   return (route) => {
@@ -162,12 +188,38 @@ function api(role) {
       statuses = body.statuses.map((x, i) => ({ id: x.id ?? `st-new-${i}`, name: x.name, color: x.color, position: i, is_initial: x.is_initial, is_final: x.is_final }));
       return json(analyseOut());
     }
+    if (path === `/api/analyses/${ANALYSE_ID}/due-settings` && method === "PUT") {
+      const body = route.request().postDataJSON();
+      dueVersions = [{ id: `dv-${dueVersions.length + 1}`, created_at: new Date().toISOString(), content: dueSettings }, ...dueVersions];
+      dueSettings = body;
+      return json(analyseOut());
+    }
     if (path === "/api/dossiers" && method === "GET") {
       const wanted = url.searchParams.get("workflow_status_id");
-      return json(page_of(wanted ? dossiers.filter((d) => d.workflow_status?.id === wanted) : dossiers));
+      const due = url.searchParams.get("due");
+      let items = dossiers.map(withDue).filter((d) => !wanted || d.workflow_status?.id === wanted);
+      if (due) {
+        items = items.filter((d) => {
+          if (d.closed_at) return false;
+          if (due === "none") return !d.due_at;
+          if (!d.due_at) return false;
+          const days = daysUntil(d.due_at);
+          return due === "overdue" ? days < 0 : days >= 0 && days <= Number(due);
+        });
+      }
+      if (url.searchParams.get("sort") === "due") items.sort((a, b) => (a.due_at ?? "9999").localeCompare(b.due_at ?? "9999"));
+      return json(page_of(items));
+    }
+    const dueMatch = path.match(/^\/api\/dossiers\/(dos-\d+)\/due-at$/);
+    if (dueMatch && method === "PUT") {
+      const target = dossiers.find((d) => d.id === dueMatch[1]);
+      const next = route.request().postDataJSON().due_at;
+      EVENTS.unshift(event(100 + EVENTS.length, "due_date_changed", ALEX, new Date().toISOString(), { from: target.due_at, to: next }));
+      target.due_at = next;
+      return json(withDue(target));
     }
     const match = path.match(/^\/api\/dossiers\/(dos-\d+)$/);
-    if (match) return json(dossiers.find((d) => `dos-${match[1].slice(4)}` === d.id) ?? dossiers[0]);
+    if (match) return json(withDue(dossiers.find((d) => `dos-${match[1].slice(4)}` === d.id) ?? dossiers[0]));
     if (path === "/api/dossiers/dos-3/events/actors") return json([ALEX, CAMILLE].map(({ actor_id, actor_name }) => ({ actor_id, actor_name })));
     if (path === "/api/dossiers/dos-3/events") {
       const types = url.searchParams.getAll("type");
@@ -471,13 +523,63 @@ async function history(browser) {
   await page.context().close();
 }
 
+// ---------------------------------------------------------------------------
+// Échéance du dossier
+// ---------------------------------------------------------------------------
+async function dueDate(browser) {
+  const dir = "echeance-du-dossier";
+  const page = await newPage(browser, "admin", { width: 1280, height: 1900 });
+
+  // Réglage par analyse : durée par défaut et seuils de couleur
+  await page.goto(`${baseUrl}/analyses/${ANALYSE_ID}/statuts`, { waitUntil: "networkidle" });
+  await page.getByText("Échéance des dossiers").first().waitFor();
+  await page.getByText("Échéance des dossiers").first().scrollIntoViewIfNeeded();
+  await shot(page, dir, "01-reglage-de-l-echeance.png");
+
+  await page.getByRole("button", { name: "Ajouter un seuil" }).click();
+  await page.getByLabel("Nombre de jours restants").last().fill("3");
+  await page.getByRole("button", { name: "Enregistrer" }).last().click();
+  await page.getByText(/Échéance enregistrée/).waitFor();
+  await page.getByText(/Historique des versions/).last().click();
+  await shot(page, dir, "02-historique-des-seuils.png");
+
+  // Liste : colonne, filtre et tri
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${baseUrl}/dossiers`, { waitUntil: "networkidle" });
+  await page.getByText("Subvention association Les Mouettes").first().waitFor();
+  await shot(page, dir, "03-liste-des-dossiers.png");
+  await page.locator("#dossiers-due-filter").selectOption("overdue");
+  await settle(page);
+  await shot(page, dir, "04-filtre-echeance-depassee.png");
+  await page.locator("#dossiers-due-filter").selectOption("");
+  await page.locator("#dossiers-sort").selectOption("due");
+  await settle(page);
+  await shot(page, dir, "05-tri-par-echeance.png");
+
+  // Dans le dossier : modifier l'échéance
+  await page.goto(`${baseUrl}/dossiers/dos-3`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Modifier" }).waitFor();
+  await shot(page, dir, "06-echeance-dans-le-dossier.png");
+  await page.getByRole("button", { name: "Modifier" }).click();
+  await page.getByLabel("Date d'échéance").fill(dayKey(21));
+  await shot(page, dir, "07-modifier-l-echeance.png");
+  await page.getByRole("button", { name: "Enregistrer" }).click();
+  await settle(page);
+
+  // Le changement est tracé dans l'historique
+  await page.getByRole("link", { name: "Voir l'historique du dossier" }).click();
+  await page.getByText("Échéance modifiée").first().waitFor();
+  await shot(page, dir, "08-historique-du-dossier.png");
+  await page.context().close();
+}
+
+const only = process.argv.slice(3);
+const scenarios = { dashboard, tracking, access, statuses: workflowStatuses, history, due: dueDate };
 const browser = await chromium.launch();
 try {
-  await dashboard(browser);
-  await tracking(browser);
-  await access(browser);
-  await workflowStatuses(browser);
-  await history(browser);
+  for (const [name, run] of Object.entries(scenarios)) {
+    if (only.length === 0 || only.includes(name)) await run(browser);
+  }
 } finally {
   await browser.close();
 }
