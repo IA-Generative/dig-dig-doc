@@ -30,6 +30,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_client import dispatch_text_extraction
 from app.connectors import s3_connector
+from app.core.dossier_guard import check_dossier_access
+from app.core.security.acting_user import acting_user
+from app.core.security.factory import RequestContext
 from app.core.security.internal import verify_app_token
 from app.db import get_db
 from app.models.agent_conversation import AgentMessageRole
@@ -38,10 +41,10 @@ from app.repositories.dossier_repository import DossierRepository
 from app.routers.analyses import create_analyse as _create_analyse
 from app.routers.analyses import get_analyse as _get_analyse
 from app.routers.analyses import list_analyses as _list_analyses
+from app.routers.dossiers import _creation_access
 from app.routers.dossiers import _get_or_404 as _get_dossier_or_404
 from app.routers.dossiers import create_dossier_for as _create_dossier
 from app.routers.dossiers import launch_dossier_for as _launch_dossier
-from app.routers.dossiers import list_dossiers as _list_dossiers
 from app.schemas.agent_conversation import (
     AgentChatEventIn,
     AgentChatEventOut,
@@ -138,25 +141,41 @@ async def create_agent_analyse(body: AnalyseCreate, db: Annotated[AsyncSession, 
 
 
 # --- Tools : dossiers ---
+# L'agent agit **au nom d'une personne** (en-tête `X-Acting-User`, voir app/core/security/acting_user.py) : il ne voit
+# que les dossiers que cette personne voit (issue #222), et un administrateur qui entre dans un dossier restreint hors
+# de ses groupes est tracé comme partout ailleurs (#182).
 
 
 @router.get("/dossiers", response_model=Page[DossierOut])
 async def list_agent_dossiers(
     db: Annotated[AsyncSession, Depends(get_db)],
+    person: Annotated[RequestContext, Depends(acting_user)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> Page[DossierOut]:
-    return await _list_dossiers(db, page=page, page_size=page_size)
+    dossiers, total = await DossierRepository(db).list_paginated(page=page, page_size=page_size, user=person)
+    return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
 
 @router.get("/dossiers/{dossier_id}", response_model=DossierOut)
-async def get_agent_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> DossierOut:
-    return await _get_dossier_or_404(DossierRepository(db), dossier_id)
+async def get_agent_dossier(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    person: Annotated[RequestContext, Depends(acting_user)],
+) -> DossierOut:
+    await check_dossier_access(db, dossier_id, person)
+    return await _get_dossier_or_404(DossierRepository(db), dossier_id, person)
 
 
 @router.post("/dossiers", response_model=DossierOut, status_code=status.HTTP_201_CREATED)
-async def create_agent_dossier(body: DossierCreate, db: Annotated[AsyncSession, Depends(get_db)]) -> DossierOut:
-    return await _create_dossier(body, db)
+async def create_agent_dossier(
+    body: DossierCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    person: Annotated[RequestContext, Depends(acting_user)],
+) -> DossierOut:
+    """Crée un dossier pour la personne, **restreint à ses groupes** comme par l'API (issue #177)."""
+    visibility, group_paths = _creation_access(body, person)
+    return await _create_dossier(body, db, person, visibility, group_paths)
 
 
 class AgentDossierFileIn(BaseModel):
@@ -174,13 +193,15 @@ async def add_agent_dossier_files(
     dossier_id: uuid.UUID,
     body: AgentDossierFilesIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    person: Annotated[RequestContext, Depends(acting_user)],
 ):
     """Équivalent de POST /dossiers/{id}/documents, mais en base64 dans un
     corps JSON plutôt qu'en multipart : le worker n'a pas d'UploadFile
     FastAPI, seulement des octets décodés (même raison que
     app/routers/ephemeral.py::_create_run)."""
+    await check_dossier_access(db, dossier_id, person, method="POST", write=True)
     repository = DossierRepository(db)
-    dossier = await _get_dossier_or_404(repository, dossier_id)
+    dossier = await _get_dossier_or_404(repository, dossier_id, person)
     documents = []
     for f in body.files:
         data = base64.b64decode(f.content_base64)
@@ -190,9 +211,14 @@ async def add_agent_dossier_files(
     created = await repository.add_documents(dossier, documents)
     for document in created:
         dispatch_text_extraction(str(document.id))
-    return await _get_dossier_or_404(repository, dossier_id)
+    return await _get_dossier_or_404(repository, dossier_id, person)
 
 
 @router.post("/dossiers/{dossier_id}/launch", response_model=DossierOut)
-async def launch_agent_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> DossierOut:
-    return await _launch_dossier(dossier_id, db)
+async def launch_agent_dossier(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    person: Annotated[RequestContext, Depends(acting_user)],
+) -> DossierOut:
+    await check_dossier_access(db, dossier_id, person, method="POST", write=True)
+    return await _launch_dossier(dossier_id, db, person)

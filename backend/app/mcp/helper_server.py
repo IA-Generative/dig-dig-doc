@@ -4,15 +4,19 @@ from typing import Any
 from fastapi import HTTPException
 from mcp.server.mcpserver import MCPServer
 
+from app.core.dossier_guard import check_dossier_access
+from app.core.security.acting_user import context_for_user
+from app.core.security.factory import RequestContext
 from app.db import async_session_factory
 from app.mcp.auth import get_current_identity
 from app.models.agent_conversation import AgentConversation, AgentMessageRole
 from app.repositories.agent_conversation_repository import AgentConversationRepository
-from app.repositories.dossier_event_repository import EventActor
+from app.repositories.app_token_repository import AppTokenRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.routers.analyses import create_analyse as _create_analyse
 from app.routers.analyses import get_analyse as _get_analyse
 from app.routers.analyses import list_analyses as _list_analyses
+from app.routers.dossiers import _creation_access
 from app.routers.dossiers import _get_or_404 as _get_dossier_or_404
 from app.routers.dossiers import create_dossier_for as _create_dossier
 from app.routers.dossiers import launch_dossier_for as _launch_dossier
@@ -92,6 +96,13 @@ async def _call_traced(
         role = AgentMessageRole.ERROR if is_error else AgentMessageRole.TOOL_RESULT
         await repository.add_message(conversation, role, tool_name=tool_name, data={"result": result})
     return result
+
+
+async def _acting(db, identity) -> RequestContext:
+    """Les droits de la personne qui a créé le jeton d'application (issue #222) : l'agent ne voit jamais plus de
+    dossiers qu'elle. Un jeton dont le propriétaire est inconnu de l'annuaire n'a aucun groupe."""
+    app_token = await AppTokenRepository(db).get(uuid.UUID(identity.id))
+    return await context_for_user(db, app_token.created_by if app_token else None)
 
 
 @mcp_server.tool()
@@ -174,9 +185,10 @@ async def create_dossier(name: str, analyse_id: str, conversation_id: str | None
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _create_dossier(
-                DossierCreate(name=name, analyse_id=uuid.UUID(analyse_id)), db, EventActor(user_id=identity.id)
-            )
+            person = await _acting(db, identity)
+            body = DossierCreate(name=name, analyse_id=uuid.UUID(analyse_id))
+            visibility, group_paths = _creation_access(body, person)  # restreint aux groupes de la personne
+            dossier = await _create_dossier(body, db, person, visibility, group_paths)
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "create_dossier", arguments, run)
@@ -196,7 +208,7 @@ async def add_dossier_files(
 
         async def run():
             body = AgentDossierFilesIn(files=[AgentDossierFileIn(**f) for f in files])
-            dossier = await _add_dossier_files(uuid.UUID(dossier_id), body, db)
+            dossier = await _add_dossier_files(uuid.UUID(dossier_id), body, db, await _acting(db, identity))
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "add_dossier_files", arguments, run)
@@ -210,7 +222,8 @@ async def list_dossiers(page: int = 1, page_size: int = 20, conversation_id: str
     async with async_session_factory() as db:
 
         async def run():
-            dossiers, total = await DossierRepository(db).list_paginated(page=page, page_size=page_size)
+            person = await _acting(db, identity)
+            dossiers, total = await DossierRepository(db).list_paginated(page=page, page_size=page_size, user=person)
             items = [DossierOut.model_validate(d) for d in dossiers]
             return Page.of(items, total=total, page=page, page_size=page_size).model_dump(mode="json")
 
@@ -226,7 +239,9 @@ async def get_dossier(dossier_id: str, conversation_id: str | None = None) -> di
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _get_dossier_or_404(DossierRepository(db), uuid.UUID(dossier_id))
+            person = await _acting(db, identity)
+            await check_dossier_access(db, uuid.UUID(dossier_id), person)
+            dossier = await _get_dossier_or_404(DossierRepository(db), uuid.UUID(dossier_id), person)
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "get_dossier", arguments, run)
@@ -242,7 +257,9 @@ async def run_dossier(dossier_id: str, conversation_id: str | None = None) -> di
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _launch_dossier(uuid.UUID(dossier_id), db, EventActor(user_id=identity.id))
+            person = await _acting(db, identity)
+            await check_dossier_access(db, uuid.UUID(dossier_id), person, method="POST", write=True)
+            dossier = await _launch_dossier(uuid.UUID(dossier_id), db, person)
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "run_dossier", arguments, run)
@@ -257,7 +274,9 @@ async def get_dossier_results(dossier_id: str, conversation_id: str | None = Non
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _get_dossier_or_404(DossierRepository(db), uuid.UUID(dossier_id))
+            person = await _acting(db, identity)
+            await check_dossier_access(db, uuid.UUID(dossier_id), person)
+            dossier = await _get_dossier_or_404(DossierRepository(db), uuid.UUID(dossier_id), person)
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "get_dossier_results", arguments, run)

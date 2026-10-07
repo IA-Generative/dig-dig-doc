@@ -24,6 +24,12 @@ def get_client() -> httpx.Client:
     )
 
 
+def act_for(client: httpx.Client, user_id: str) -> None:
+    """Les appels suivants de ce client agissent **au nom de cette personne** (en-tête `X-Acting-User`) : l'agent
+    assistant ne voit que les dossiers qu'elle voit (issue #222)."""
+    client.headers["X-Acting-User"] = user_id
+
+
 # --- Execution steps ---
 
 

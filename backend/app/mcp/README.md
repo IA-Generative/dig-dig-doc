@@ -187,6 +187,9 @@ complet dans `docs/mcp-helper-agent-plan.md`.
   (l'éphémère), pas une extension de celui-ci : deux cycles de vie
   différents (one-shot vs persistant/interactif).
 - Même auth par jeton API (`POST /api/app-tokens`) que le serveur éphémère.
+- **Droits de la personne qui a créé le jeton** : l'agent ne voit jamais plus de dossiers qu'elle (règle d'accès
+  par groupe), un dossier qu'il crée est restreint à ses groupes, et un dossier hors de ses droits répond
+  « Dossier introuvable ». Voir [`docs/backend/acces-de-l-agent-assistant.md`](../../../docs/backend/acces-de-l-agent-assistant.md).
 - **Persistant, pas de TTL** : contrairement à `/mcp`, les analyses et
   dossiers créés ici sont les mêmes ressources durables que celles gérées
   depuis l'UI - aucune purge automatique.
