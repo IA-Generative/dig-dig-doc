@@ -4,7 +4,7 @@ Issue : [#174](https://github.com/IA-Generative/dig-dig-doc/issues/174) (parent 
 
 Page d'accueil de l'utilisateur connecté : **ses priorités sous forme d'agenda**, quatre indicateurs simples, la possibilité de **planifier** le traitement d'un dossier (avec récurrence et rappels) et ses **notifications**. L'écran est volontairement épuré : une information principale, le reste à la demande dans des fenêtres.
 
-> **Branché sur l'API pour les dossiers** : indicateurs, urgences, statuts, non affectés et activité viennent du serveur. Les **créneaux** sont enregistrés côté serveur ; les **notifications** restent simulées en attendant leur backend : voir « Choix et limites ».
+> **Branché sur l'API pour les dossiers** : indicateurs, urgences, statuts, non affectés et activité viennent du serveur. Les **créneaux** sont enregistrés côté serveur ; les **notifications** viennent du serveur, seuls les rappels restent déclenchés par le navigateur : voir « Choix et limites ».
 
 ## Y accéder
 
@@ -97,7 +97,8 @@ Le premier bouton (rôles autorisés) liste les dossiers **non affectés** et re
 
 - **Branché sur l'API** : indicateurs, urgences, dossiers par statut, dossiers à prendre en charge et activité récente viennent de `GET /api/dashboard` ([`tableau-de-bord`](../../backend/tableau-de-bord.md)). L'échéance proche ou dépassée suit les **seuils de l'analyse**, calculés par le serveur ([échéance](../echeance-du-dossier/README.md)).
 - **Créneaux** : enregistrés côté serveur, **privés** et toujours rattachés à un dossier ([`creneaux-de-traitement`](../../backend/creneaux-de-traitement.md)) ; ils survivent au rechargement et se retrouvent d'un poste à l'autre. Le partage de son agenda viendra plus tard. Une erreur d'enregistrement s'affiche au-dessus de l'agenda.
-- **Encore simulées**, faute de backend : les **notifications**. Les **rappels** sont programmés au chargement à partir des créneaux du serveur, mais déclenchés par le navigateur.
+- **Notifications** : elles viennent du serveur ([`notifications`](../../backend/notifications.md)) et se mettent à jour toutes les **60 secondes** tant que la page est visible. Elles couvrent les affectations, les échéances qui approchent ou sont dépassées, les changements de statut par un tiers et la fin d'une analyse que vous avez lancée ; l'auteur d'une action n'est jamais notifié. Lues, elles sont conservées 90 jours.
+- **Rappels** : programmés au chargement à partir des créneaux du serveur, mais **déclenchés par le navigateur** (ils s'ajoutent à la liste le temps de la session).
 - **Dossiers à prendre en charge** : visibles des seuls administrateurs en attendant les rôles d'instruction ([#178](https://github.com/IA-Generative/dig-dig-doc/issues/178)). Les règles d'accès par groupe ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ne s'appliquent pas encore.
 - **Où en sont vos dossiers** : les statuts sont propres à chaque analyse ; dès que plusieurs analyses sont concernées, chaque ligne nomme la sienne (« À instruire · Urbanisme »).
 - **Rappels et alertes** : déclenchés par le navigateur, donc **uniquement tant que la page est ouverte**. Prévenir application fermée suppose le Web Push (service worker, clés VAPID, envoi serveur), hors périmètre de la première version.

@@ -187,6 +187,20 @@ const trackingRow = (d) => ({
   created_at: d.created_at,
   last_activity_at: d.last_activity_at,
 });
+// Notifications (#174) : `GET /api/notifications` et marquage comme lu.
+const notificationsOf = () => {
+  const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const open = TRACKED.filter((d) => !d.closed);
+  const make = (n, kind, d, message, hours, read = false) => ({ id: `ntf-${n}`, kind, category: { assigned: "assignment", overdue: "deadline", due_soon: "deadline", status_changed: "status", analysis_done: "analysis", analysis_failed: "analysis" }[kind], dossier_id: d.id, dossier_name: d.name, message, created_at: hoursAgo(hours), read_at: read ? hoursAgo(hours - 1) : null });
+  return [
+    make(1, "overdue", open[0], "L'échéance du dossier est dépassée.", 2),
+    make(2, "assigned", open[1], "Ce dossier vous a été affecté par Camille Durand.", 5),
+    make(3, "analysis_done", open[2], "L'analyse que vous avez lancée est terminée.", 26),
+    make(4, "status_changed", open[3], "Statut passé à « À valider » par Samir Benali.", 50, true),
+  ];
+};
+let NOTIFICATIONS = notificationsOf();
+
 // Créneaux de traitement (#174) : `PUT` / `DELETE /api/dossiers/{id}/slot`, gardés le temps du scénario.
 const SLOTS = new Map();
 
@@ -324,6 +338,18 @@ function api(role) {
     }
     if (path === "/api/tracking") return json(trackingPage(url.searchParams));
     if (path === "/api/dashboard") return json(dashboardPayload(role === "admin"));
+    if (path === "/api/notifications" && method === "GET") return json(NOTIFICATIONS);
+    if (path === "/api/notifications/read-all" && method === "POST") {
+      const unread = NOTIFICATIONS.filter((n) => !n.read_at);
+      for (const n of unread) n.read_at = new Date().toISOString();
+      return json({ marked: unread.length });
+    }
+    const readMatch = path.match(/^\/api\/notifications\/([\w-]+)\/read$/);
+    if (readMatch && method === "POST") {
+      const target = NOTIFICATIONS.find((n) => n.id === readMatch[1]);
+      if (target && !target.read_at) target.read_at = new Date().toISOString();
+      return route.fulfill({ status: 204 });
+    }
     const slotMatch = path.match(/^\/api\/dossiers\/(trk-\d+)\/slot$/);
     if (slotMatch && method === "PUT") {
       const body = route.request().postDataJSON();
@@ -452,6 +478,7 @@ async function planSlot(page, start, end) {
 async function dashboard(browser) {
   const dir = "tableau-de-bord";
   SLOTS.clear();
+  NOTIFICATIONS = notificationsOf();
   const page = await newPage(browser, "admin", { width: 1280, height: 2000 });
   await waitDashboard(page);
   // Quelques créneaux pour montrer l'agenda du jour (enregistrés côté serveur).

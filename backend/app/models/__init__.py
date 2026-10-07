@@ -75,6 +75,7 @@ from .execution_log import ExecutionLog, ExecutionLogLevel
 from .feedback import Feedback, FeedbackReason, FeedbackReasonCode, FeedbackValue
 from .generated_document import VISIBILITY_INTERNAL, GeneratedDocument
 from .generation_prompt import GenerationPromptVersion
+from .notification import Notification, NotificationCursor
 from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
 from .user_preference import UserPreference
@@ -170,6 +171,8 @@ __all__ = [
     "SummaryStatus",
     "TextExtractionStatus",
     "UserPreference",
+    "Notification",
+    "NotificationCursor",
     "UserTask",
     "WorkSlot",
     "UserTaskKind",
