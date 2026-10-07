@@ -1,0 +1,103 @@
+# Tableau de bord : agenda, créneaux, rappels et notifications
+
+Issue : [#174](https://github.com/IA-Generative/dig-dig-doc/issues/174) (parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167)). Les dossiers ouverts depuis cette page se pilotent dans le [tableau de suivi](../tableau-de-suivi/README.md) ; les règles d'accès sont décrites dans [accès aux dossiers par groupe](../acces-aux-dossiers/README.md).
+
+Page d'accueil de l'utilisateur connecté : **ses priorités sous forme d'agenda**, quatre indicateurs simples, la possibilité de **planifier** le traitement d'un dossier (avec récurrence et rappels) et ses **notifications**. L'écran est volontairement épuré : une information principale, le reste à la demande dans des fenêtres.
+
+> **Partie interface seulement.** Les données sont simulées dans le navigateur en attendant le backend (statuts #168, échéance #172, affectations #173, notifications) : voir « Choix et limites ».
+
+## Y accéder
+
+Entrée **« Tableau de bord »** de la barre latérale (page `/dashboard`, ouverte après la connexion). Une pastille y indique le nombre de notifications non lues (plafonné à « 99+ », annoncé aux lecteurs d'écran).
+
+## La page
+
+![Tableau de bord, vue Jour](01-tableau-de-bord.png)
+
+- **En-tête** : « Aujourd'hui » et la date, puis trois boutons ronds, chacun avec une pastille de nombre : **dossiers à prendre en charge** (rôles autorisés seulement), **activité récente** et **notifications**. Chacun ouvre une fenêtre.
+- **Indicateurs** : *Dossiers* (tous mes dossiers), *Planifiés* (ceux qui ont un créneau), *Clôturés* et *Traités cette semaine*. Un clic ouvre le détail (voir plus bas). Le ton est neutre : pas de rouge ni d'objectif.
+- **Mon agenda** : trois vues (**Jour**, **Mois**, **Liste**), une recherche repliée derrière « Rechercher », et le lien **Tous mes dossiers** vers le suivi.
+
+### Vue Jour
+
+La journée heure par heure (8 h–20 h), ouverte sur aujourd'hui.
+
+- Chaque **créneau planifié** est un bloc positionné à son horaire ; deux créneaux qui se chevauchent s'affichent côte à côte. Un clic sur un bloc ouvre la fenêtre de planification. La ligne rouge marque l'**heure courante**.
+- Les flèches font défiler les jours, « Aujourd'hui » revient à la date du jour.
+- La section repliée **« À planifier · n »** liste les dossiers sans créneau et ceux **en retard** (« dont n en retard »), chacun avec un bouton « Planifier ».
+
+### Vue Mois
+
+![Vue Mois](02-calendrier-du-mois.png)
+
+Grille du mois, du lundi au dimanche. Chaque dossier figure à la date de son créneau (un créneau **récurrent** apparaît à chaque occurrence) ou, à défaut, à son échéance ; la pastille est rouge si l'échéance est dépassée et orange sinon. Un clic sur un jour ouvre la vue Jour correspondante.
+
+### Vue Liste
+
+![Vue Liste](03-liste-des-urgences.png)
+
+Les urgences, **triées par échéance et groupées par jour** (« En retard », « Aujourd'hui », « Demain », puis la date), **paginées** (8 par page). Chaque ligne affiche l'analyse, le statut, un badge d'échéance **avec libellé** (« Échéance dépassée », « 8 j de retard ») et le bouton de planification, qui devient le résumé du créneau une fois planifié (avec les icônes de répétition et de rappel).
+
+### Rechercher et filtrer
+
+![Recherche et filtres](04-recherche-et-filtres.png)
+
+« Rechercher » déplie la recherche (dossier, analyse, statut) et le filtre par analyse. Dans la vue Liste, un filtre d'**échéance** s'y ajoute (dépassées, aujourd'hui, cette semaine, plus tard). « Réinitialiser » efface les filtres.
+
+## Planifier un créneau de traitement
+
+![Planifier un créneau](05-planifier-un-creneau.png)
+
+Un clic sur « Planifier » (ou sur un bloc de la vue Jour) ouvre la fenêtre, en trois blocs inspirés du calendrier iOS. Un **résumé lisible** en haut se met à jour en direct (« mercredi 7 octobre, 09:00–10:30 · Tous les jours ouvrés · 15 minutes avant »).
+
+| Bloc | Contenu |
+| --- | --- |
+| **Quand** | Jour (raccourcis *Aujourd'hui* et *Demain*), début, fin, durées rapides (30 min, 1 h, 2 h, demi-journée). La fin doit suivre le début. |
+| **Répétition** | Jamais, tous les jours, toutes les semaines, toutes les 2 semaines, tous les mois, tous les ans, ou **personnalisé**. |
+| **Rappels** | Jusqu'à 3, prédéfinis (à l'heure, 5 min, 15 min, 30 min, 1 h, 2 h, 1 jour, 2 jours, 1 semaine avant) ou **personnalisés**. |
+
+![Répétition et rappels personnalisés](06-repetition-et-rappels-personnalises.png)
+
+- **Personnalisé** : « Tous les *N* jours / semaines / mois / ans », les **jours de la semaine** (L M M J V S D) pour les semaines, et la **fin de la répétition** (jamais, à une date, après *N* fois). Un mois trop court ramène le jour au dernier jour du mois.
+- **Rappels personnalisés** : *N* minutes, heures ou jours avant ; les doublons sont fusionnés.
+- « **Supprimer le créneau** » retire le créneau et ses rappels.
+
+## Indicateurs
+
+![Détail des indicateurs](07-indicateurs.png)
+
+« Mes indicateurs » regroupe des **repères, pas des objectifs** : en un coup d'œil (dossiers, en cours, planifiés, clôturés), à votre rythme (traités cette semaine, délai moyen, part clôturée dans les temps, dossiers clôturés par semaine), répartition **par statut** et **par analyse** (chaque ligne ouvre le suivi filtré sur mes dossiers), et temps planifié (aujourd'hui et sur 7 jours).
+
+## Notifications
+
+![Notifications](08-notifications.png)
+
+La cloche ouvre la fenêtre des notifications, avec des **catégories** (*Affectations*, *Échéances*, *Statuts*, *Analyses*, *Rappels*), le compteur de non lues de chacune, le marquage individuel (un clic sur une notification la lit et ouvre le dossier) et « **Tout marquer comme lu** ».
+
+- **Alertes du navigateur** : un bandeau propose d'activer les alertes système (le navigateur demande l'autorisation à ce moment-là). Chaque **rappel** de créneau génère alors une alerte, et un clic dessus ramène sur le dossier. Si le navigateur les bloque, le bandeau l'explique.
+- **Accès retiré** : la notification d'un dossier auquel on n'a plus accès reste dans la liste, mais sans lien ni nom (« Dossier non accessible »). Voir [accès aux dossiers par groupe](../acces-aux-dossiers/README.md).
+- Pas d'auto-notification : l'auteur d'une action n'est pas notifié de sa propre action.
+
+### Dossiers à prendre en charge et activité récente
+
+![Dossiers à prendre en charge](09-dossiers-a-prendre-en-charge.png)
+
+Le premier bouton (rôles autorisés) liste les dossiers **non affectés** et renvoie vers le suivi filtré sur eux. Le second donne l'**activité récente** sur mes dossiers.
+
+![Activité récente](10-activite-recente.png)
+
+## Accessibilité
+
+- Les nombres (pastilles, compteurs) sont **annoncés**, pas seulement affichés.
+- Les badges d'échéance portent un **libellé** : la couleur n'est jamais le seul signal.
+- Tout se fait **au clavier** ; les changements de vue et les retours d'action sont annoncés.
+- Les animations respectent « réduire les animations ».
+
+## Choix et limites
+
+- **Données simulées** : urgences, créneaux, indicateurs, notifications et activité viennent d'un jeu de données commun au suivi (`src/mocks/dossiers.ts`) ; seule la création de dossier appelle le vrai backend. Les créneaux restent en mémoire : ils survivent à la navigation mais **pas au rechargement** de la page.
+- **Rappels et alertes** : déclenchés par le navigateur, donc **uniquement tant que la page est ouverte**. Prévenir application fermée suppose le Web Push (service worker, clés VAPID, envoi serveur), hors périmètre de la première version.
+- **« Échéance proche »** : le seuil (7 jours) est provisoire côté interface ; il viendra du serveur, selon les seuils de l'analyse ([#172](https://github.com/IA-Generative/dig-dig-doc/issues/172)).
+- **Indicateurs** « traités », « délai moyen » et « dans les temps » : simulés, ils reposeront sur la date de clôture ([#168](https://github.com/IA-Generative/dig-dig-doc/issues/168)).
+- **États de l'interface** : `?mock=empty` (états vides), `?mock=error` (erreur), `?mock=loading` (chargement) et `?mock=nounassigned` (sans le droit « non affectés ») permettent de les voir.
+- Les captures sont prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée, sans backend ni Keycloak (voir en tête du script).
