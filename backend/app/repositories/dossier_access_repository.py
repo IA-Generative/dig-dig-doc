@@ -30,6 +30,27 @@ class DossierAccessRepository:
     async def group_paths(self, dossier_id: uuid.UUID) -> list[str]:
         return [row.keycloak_group for row in await self.groups_of(dossier_id)]
 
+    async def standing(self, dossier_id: uuid.UUID, user) -> str | None:
+        """Position de la personne face au dossier : ``member`` (elle y a accès par la règle ordinaire),
+        ``admin_only`` (elle n'y entre que parce qu'elle est administrateur : accès à tracer, #182), ou ``None``
+        (dossier introuvable ou invisible)."""
+        row = (
+            await self.db.execute(select(Dossier.visibility, Dossier.analyse_id).where(Dossier.id == dossier_id))
+        ).first()
+        if row is None:
+            return None
+        visibility, analyse_id = row
+        groups = await self.group_paths(dossier_id)
+        if can_view(
+            is_admin=False,
+            groups=user.groups,
+            visibility=visibility,
+            has_analyse=analyse_id is not None,
+            dossier_groups=groups,
+        ):
+            return "member"
+        return "admin_only" if user.is_admin else None
+
     async def person_can_view(self, person: AppUser, dossier: Dossier) -> bool:
         """La personne (telle que l'annuaire l'a vue à sa dernière connexion) a-t-elle accès au dossier ?"""
         return can_view(

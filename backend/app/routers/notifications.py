@@ -24,7 +24,7 @@ async def unread_count(
 ) -> UnreadCountOut:
     """Nombre de non lues (pastille), au total et par catégorie."""
     repository = NotificationRepository(db)
-    await repository.sync(user.user_id)
+    await repository.sync(user)
     total, by_category = await repository.unread_counts(user.user_id)
     return UnreadCountOut(total=total, by_category=by_category)
 
@@ -39,9 +39,17 @@ async def list_notifications(
 ) -> list[NotificationOut]:
     """Mes notifications, de la plus récente à la plus ancienne."""
     repository = NotificationRepository(db)
-    await repository.sync(user.user_id)
+    await repository.sync(user)
     items = await repository.list_for(user.user_id, category=category, unread_only=unread, limit=limit)
-    return [NotificationOut.model_validate(item) for item in items]
+    visible = await repository.accessible_dossiers(user, [item.dossier_id for item in items])
+    out = []
+    for item in items:
+        notification = NotificationOut.model_validate(item)
+        if item.dossier_id not in visible:
+            notification.dossier_id = notification.dossier_name = None
+            notification.accessible = False
+        out.append(notification)
+    return out
 
 
 @router.post("/read-all", response_model=MarkedOut)
@@ -52,7 +60,7 @@ async def read_all(
 ) -> MarkedOut:
     """Marque comme lues toutes mes notifications (ou celles d'une catégorie)."""
     repository = NotificationRepository(db)
-    await repository.sync(user.user_id)  # ce qui vient d'arriver est lu aussi
+    await repository.sync(user)  # ce qui vient d'arriver est lu aussi
     return MarkedOut(marked=await repository.mark_all_read(user.user_id, category))
 
 

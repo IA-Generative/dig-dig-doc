@@ -21,6 +21,7 @@ from app.celery_client import (
     render_preview,
 )
 from app.connectors import s3_connector
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.document_draft import DocumentDraft, DraftStatus, FieldStatus
@@ -57,7 +58,9 @@ from app.schemas.document_template import FieldDefinition, MetadataSource, Templ
 from app.services.document_assembly import build_values
 from app.services.document_fields import FieldValueError
 
-router = APIRouter(prefix="/dossiers", tags=["Documents"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers", tags=["Documents"], dependencies=[Depends(get_current_user), Depends(require_dossier_visible)]
+)
 
 
 def _error(error: Exception) -> HTTPException:

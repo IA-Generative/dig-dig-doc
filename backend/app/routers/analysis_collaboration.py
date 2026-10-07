@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import async_session_factory, get_db
 from app.repositories.analysis_collaboration_repository import (
@@ -26,7 +27,11 @@ from app.repositories.dossier_analysis_repository import DossierAnalysisReposito
 from app.routers.dossier_analyses import _analysis_or_404, _ensure_editable
 from app.schemas.analysis_collaboration import LiveSnapshot, LockOut, PresenceIn
 
-router = APIRouter(prefix="/dossiers", tags=["Travail à plusieurs"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers",
+    tags=["Travail à plusieurs"],
+    dependencies=[Depends(get_current_user), Depends(require_dossier_visible)],
+)
 
 _BASE = "/{dossier_id}/analyses-dossier/{analysis_id}"
 

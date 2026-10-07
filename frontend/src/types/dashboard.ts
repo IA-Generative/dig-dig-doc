@@ -112,8 +112,10 @@ export const categoryOf = (kind: NotificationKind): NotificationCategory => CATE
 export interface AppNotification {
   id: string;
   kind: NotificationKind;
-  dossierId: string;
-  dossierName: string;
+  /** `null` quand la personne n'a plus accès au dossier : la notification reste, sans lien ni nom (#177). */
+  dossierId: string | null;
+  dossierName: string | null;
+  accessible: boolean;
   message: string;
   createdAt: string;
   readAt?: string;

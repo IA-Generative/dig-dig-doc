@@ -214,7 +214,9 @@ def test_conversation_is_private_to_its_user(client: TestClient) -> None:
     )
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False, groups=["/dev-tests"]
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:
@@ -299,7 +301,9 @@ def test_delete_conversation_is_private_to_its_user(client: TestClient) -> None:
     owner_conversation = client.post(f"/api/dossiers/{dossier_id}/conversations").json()
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False, groups=["/dev-tests"]
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:
@@ -686,7 +690,9 @@ def test_feedback_is_private_to_its_user(client: TestClient) -> None:
     dossier_id, conversation_id, message_id = _create_conversation_with_message(client, "Dossier retour privé")
 
     def as_other_user() -> RequestContext:
-        return RequestContext(user_id="other-user", email="other@example.com", roles=[], is_admin=False)
+        return RequestContext(
+            user_id="other-user", email="other@example.com", roles=[], is_admin=False, groups=["/dev-tests"]
+        )
 
     app.dependency_overrides[get_current_user] = as_other_user
     try:

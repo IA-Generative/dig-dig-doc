@@ -53,6 +53,7 @@ async def list_tracking(
         search=search,
         sort=sort,
         descending=direction == "desc",
+        user=user,
     )
     items = [
         TrackingRowOut(

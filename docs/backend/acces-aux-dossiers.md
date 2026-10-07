@@ -2,7 +2,7 @@
 
 Issue #177 (partie 1 : modèle, règle, création, modification, affectation), parent #144. Avoir accès à une **analyse** ne donne plus accès à tous ses **dossiers** : un dossier peut être **restreint** à certains groupes Keycloak.
 
-> **État : partie 1.** La règle est appliquée à la **liste**, au **détail**, à la **création**, à l'**accès** et à l'**affectation** des dossiers. Les autres routes qui portent un identifiant de dossier (documents, chat, analyse de dossier, documents générés, notes, recherche), le tableau de suivi, le tableau de bord et les notifications **ne la filtrent pas encore** : c'est la partie 2. Tant qu'elle n'est pas livrée, ne pas considérer un dossier restreint comme protégé hors de la liste et du détail.
+> **État : parties 1 et 2.** La règle s'applique à **toutes** les routes d'un dossier, au suivi, au tableau de bord, aux notifications, aux créneaux et aux conversations. Restent : l'interface (section « Accès », pastille « Restreint »), l'agent assistant MCP et les rôles (voir « Reste à faire »).
 
 ## Règle
 
@@ -48,10 +48,29 @@ Schéma : [`data-model.png`](data-model.png). Migration : `20261013_0900_d9e0f1a
 
 Un changement d'accès est tracé dans le [journal](journal-du-dossier.md) (`access_changed` : visibilité avant et après, groupes ajoutés et retirés). Retirer un groupe **désaffecte** la personne qui perd ainsi l'accès (événement `assignee_changed` avec `reason: access_lost`) ; la réponse l'indique (`assignee_unassigned`). Changer la visibilité vers « selon l'analyse » ne désaffecte personne.
 
-## Reste à faire (partie 2 et suivantes)
+## Appliquée partout (partie 2)
 
-- Appliquer la règle à **toutes** les routes qui portent un dossier, au tableau de suivi (`GET /api/tracking`, compteurs, export), au tableau de bord, aux notifications (masquer le nom du dossier après un retrait d'accès) et aux créneaux.
-- Tracer les **accès administrateur** à un dossier hors de ses groupes (événement distinct, [#182](https://github.com/IA-Generative/dig-dig-doc/issues/182)).
-- Interface : section « Accès » du dossier, pastille « Restreint », choix des groupes à la création, filtre et action en lot du suivi.
+**Une garde pour tous les dossiers** : `app/core/dossier_guard.py` est une dépendance branchée au niveau de chaque routeur qui porte `/dossiers/{dossier_id}/…` (dossiers, analyse de dossier, notes, brouillons et documents, propositions, documents générés, journal, travail à plusieurs, créneaux). Une personne qui ne voit pas le dossier reçoit **404 « Dossier introuvable »**, comme s'il n'existait pas, **avant** la validation du corps de la requête : on ne devine pas son existence par un 403 ou un 422.
+
+- **Aucune route oubliée** : un test parcourt le schéma OpenAPI, appelle **chaque** opération sous `/dossiers/{dossier_id}` en tant que personne extérieure aux groupes et exige un 404. Une route ajoutée plus tard est testée sans qu'on y pense. Les routes internes des workers (`/api/internal/…`, jeton d'application) sont hors périmètre.
+- **Suivi** (`GET /api/tracking`) : seuls les dossiers visibles sont listés, **comptés** et exportés.
+- **Tableau de bord** : indicateurs, urgences, dossiers par statut, non affectés et activité ne portent que sur des dossiers visibles ; un dossier dont on perd l'accès disparaît de ses indicateurs.
+- **Notifications** : on ne génère de notification que pour un dossier visible. Celles qui existent déjà **restent dans la liste** après un retrait d'accès, mais sans lien ni nom (`accessible: false`, `dossier_id` et `dossier_name` à `null` : « Dossier non accessible »).
+- **Créneaux** et **conversations** : un créneau ou une conversation sur un dossier qu'on ne voit plus n'est plus listé (il n'est pas supprimé).
+- **Annuaire** : `GET /api/users?dossier_id=…` ne propose que les personnes qui ont accès à ce dossier (même règle, évaluée sur leurs groupes et leur rôle vus à la dernière connexion).
+
+### Accès administrateur tracé ([#182](https://github.com/IA-Generative/dig-dig-doc/issues/182))
+
+Un administrateur qui entre dans un dossier **restreint dont il n'est pas membre d'un groupe** est tracé dans le journal (`admin_access` : `method`, `write`). Un administrateur membre d'un groupe associé, ou qui entre dans un dossier « selon l'analyse », n'est pas tracé : il y a accès comme tout le monde.
+
+- Une **lecture** est tracée une fois par fenêtre (15 minutes, comme les consultations) ; **chaque modification** l'est. Les battements de présence et les verrous ne comptent pas comme des modifications.
+- Ces traces ne sont **lisibles que des administrateurs** : les autres ne les voient ni dans l'historique, ni dans le filtre « Auteur ». Pour la même raison, l'entrée d'un administrateur « en passant par les droits d'administration » n'ajoute pas de consultation ordinaire.
+- Durée de conservation et lecteurs définitifs : [#182](https://github.com/IA-Generative/dig-dig-doc/issues/182).
+
+## Reste à faire
+
+- **Interface** : section « Accès » du dossier, pastille « Restreint », choix des groupes à la création, filtre « Accès » et action en lot du suivi (aujourd'hui masqués).
+- **Agent assistant (MCP)** : il agit avec un jeton d'application et ne passe pas par cette règle ; à traiter avec l'identité de la personne qui l'utilise.
 - Un lien de partage par e-mail ne doit jamais donner plus de droits que ceux du destinataire.
+- Prise en compte des changements de groupes Keycloak en cours de session ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)) ; dossier restreint sans groupe actif ([#181](https://github.com/IA-Generative/dig-dig-doc/issues/181)).
 - Rôles (lecture, instructeur…) : [#178](https://github.com/IA-Generative/dig-dig-doc/issues/178).
