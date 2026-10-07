@@ -4,8 +4,8 @@ import { ref } from "vue";
 import type { Assignee } from "@/types/tracking";
 
 // Affectation en lot : apparaît dès qu'au moins une ligne est sélectionnée.
-defineProps<{ count: number; assignees: Assignee[] }>();
-const emit = defineEmits<{ assign: [assigneeId: string | null]; clear: [] }>();
+defineProps<{ count: number; assignees: Assignee[]; canSetAccess?: boolean }>();
+const emit = defineEmits<{ assign: [assigneeId: string | null]; clear: []; "set-access": [] }>();
 
 const target = ref("");
 </script>
@@ -22,6 +22,9 @@ const target = ref("");
       Affecter
     </button>
     <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary" @click="emit('assign', null)">Retirer l'affectation</button>
+    <button v-if="canSetAccess" type="button" class="fr-btn fr-btn--sm fr-btn--secondary fr-btn--icon-left ri-lock-line" @click="emit('set-access')">
+      Définir l'accès
+    </button>
     <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline" @click="emit('clear')">Tout désélectionner</button>
   </div>
 </template>

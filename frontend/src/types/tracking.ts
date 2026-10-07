@@ -84,6 +84,8 @@ export interface TrackingFilters {
   assignee: string;
   /** « expired », « 7 », « 30 » (jours restants au plus), « none » (sans date). */
   due: string;
+  /** « restricted » ou « analyse » (visibilité du dossier, #177) ; vide = tous. */
+  access: string;
   fieldFilters: Record<string, FieldFilter>;
 }
 
@@ -110,5 +112,6 @@ export const emptyFilters = (): TrackingFilters => ({
   statusId: "",
   assignee: "",
   due: "",
+  access: "",
   fieldFilters: {},
 });

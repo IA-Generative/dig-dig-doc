@@ -62,6 +62,15 @@ const rangeOf = (id: string) => {
       </select>
     </div>
 
+    <div class="tf__field">
+      <label for="tf-access">Accès</label>
+      <select id="tf-access" class="fr-select" :value="modelValue.access" @change="patch({ access: ($event.target as HTMLSelectElement).value })">
+        <option value="">Tous</option>
+        <option value="restricted">Restreints</option>
+        <option value="analyse">Selon l'analyse</option>
+      </select>
+    </div>
+
     <div v-for="f in fields" :key="f.id" class="tf__field">
       <template v-if="f.type === 'number' || f.type === 'amount' || f.type === 'date'">
         <span class="tf__label">{{ f.name }}</span>

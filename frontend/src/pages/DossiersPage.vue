@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
+import AccessBadge from "@/components/access/AccessBadge.vue";
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
@@ -116,6 +117,7 @@ function isUnassigned(dossier: Dossier) {
                     <RouterLink :to="`/dossiers/${dossier.id}`" class="dossiers-page__name-link" @click.stop>
                       {{ dossier.name }}
                     </RouterLink>
+                    <AccessBadge :dossier-id="dossier.id" class="fr-ml-1w" />
                   </td>
                   <td>
                     <div class="dossiers-page__analyse-cell">
