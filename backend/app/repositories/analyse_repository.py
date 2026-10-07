@@ -25,9 +25,10 @@ from app.models.document_template import DocumentTemplate, DocumentTemplateVersi
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEventType
 from app.repositories.dossier_event_repository import DossierEventRepository
+from app.services.due_date import normalize_thresholds
 
 if TYPE_CHECKING:
-    from app.schemas.analyse import AgentOut, AnalyseOut, StatusDefinitionIn
+    from app.schemas.analyse import AgentOut, AnalyseOut, DueSettingsIn, StatusDefinitionIn
 
 
 # Statuts donnés à toute nouvelle analyse (nom, couleur, initial, final) : un point de départ que
@@ -466,6 +467,41 @@ class AnalyseRepository:
         await self.update_statuses(analyse, items, replacements, allow_new_ids=True, actor=actor)
         return True
 
+    # --- Échéance des dossiers (issue #172) ---
+
+    @staticmethod
+    def due_settings_snapshot(analyse: Analyse) -> dict:
+        """Durée par défaut et seuils de couleur, tels qu'ils sont conservés dans une version."""
+        return {"default_due_days": analyse.default_due_days, "thresholds": analyse.due_thresholds}
+
+    async def update_due_settings(self, analyse: Analyse, settings: "DueSettingsIn") -> None:
+        """Remplace la durée par défaut et les seuils de couleur ; l'état précédent est conservé dans
+        l'historique (restaurable). Rien ne change pour les dossiers : leur niveau est calculé à la lecture."""
+        new_state = {
+            "default_due_days": settings.default_due_days,
+            "thresholds": normalize_thresholds(settings.thresholds.model_dump()),
+        }
+        if new_state == self.due_settings_snapshot(analyse):
+            return  # rien ne change : pas de version inutile
+        self._record_version(analyse, VersionedField.DUE_SETTINGS, self.due_settings_snapshot(analyse))
+        analyse.default_due_days = new_state["default_due_days"]
+        analyse.due_thresholds = new_state["thresholds"]
+        await self.db.commit()
+        await self.db.refresh(analyse)
+
+    async def restore_due_settings_version(self, analyse: Analyse, version_id: uuid.UUID) -> bool:
+        """Restaure une version antérieure ; l'état courant devient lui-même une version. False si inconnue."""
+        from app.schemas.analyse import DueSettingsIn
+
+        version = next(
+            (v for v in analyse.field_versions if v.id == version_id and v.field == VersionedField.DUE_SETTINGS),
+            None,
+        )
+        if version is None:
+            return False
+        await self.update_due_settings(analyse, DueSettingsIn.model_validate(version.content))
+        return True
+
     # --- Agents ---
 
     async def add_agent(
@@ -577,6 +613,7 @@ class AnalyseRepository:
         from app.schemas.analyse import (
             AnalyseOut,
             ClassificationOut,
+            DueSettingsOut,
             EntityDefinitionOut,
             ExtractionOut,
             LabelDefinitionOut,
@@ -623,6 +660,11 @@ class AnalyseRepository:
             created_at=analyse.created_at,
             classification=classification,
             extraction=extraction,
+            due_settings=DueSettingsOut.model_validate(self.due_settings_snapshot(analyse)),
+            due_settings_versions=[
+                Version(id=v.id, content=DueSettingsOut.model_validate(v.content), created_at=v.created_at)
+                for v in self.field_versions(analyse, VersionedField.DUE_SETTINGS)
+            ],
             statuses=[StatusDefinitionOut.model_validate(status) for status in analyse.statuses],
             statuses_versions=[
                 Version(

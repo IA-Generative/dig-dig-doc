@@ -69,6 +69,39 @@ class StatusDefinitionOut(BaseModel):
     is_final: bool
 
 
+class DueStepIn(BaseModel):
+    """Un seuil d'échéance : « N jours restants ou moins » prend cette couleur."""
+
+    days: int = Field(ge=1, le=3650)
+    color: str = Field(pattern=HEX_COLOR_PATTERN)
+
+
+class DueThresholdsIn(BaseModel):
+    """Couleurs de l'échéance : loin, chaque seuil (du plus large au plus serré), dépassée."""
+
+    far_color: str = Field(default="#18753c", pattern=HEX_COLOR_PATTERN)
+    steps: list[DueStepIn] = Field(default_factory=list, max_length=5)
+    overdue_color: str = Field(default="#8a0000", pattern=HEX_COLOR_PATTERN)
+
+    @field_validator("steps")
+    @classmethod
+    def _steps_must_be_distinct(cls, steps: list[DueStepIn]) -> list[DueStepIn]:
+        days = [step.days for step in steps]
+        if len(set(days)) != len(days):
+            raise ValueError("Deux seuils ne peuvent pas avoir le même nombre de jours.")
+        return sorted(steps, key=lambda step: step.days, reverse=True)
+
+
+class DueSettingsIn(BaseModel):
+    # Durée par défaut, en jours depuis la création du dossier ; absente = pas d'échéance automatique.
+    default_due_days: int | None = Field(default=None, ge=1, le=3650)
+    thresholds: DueThresholdsIn
+
+
+class DueSettingsOut(DueSettingsIn):
+    pass
+
+
 class ClassificationOut(BaseModel):
     prompt: str
     prompt_versions: list[Version[str]]
@@ -156,6 +189,9 @@ class AnalyseOut(BaseModel):
     # Statuts de dossier de l'analyse (issue #168), dans l'ordre, et leurs versions précédentes.
     statuses: list[StatusDefinitionOut] = []
     statuses_versions: list[Version[list[StatusDefinitionOut]]] = []
+    # Échéance des dossiers (issue #172) : durée par défaut et seuils de couleur, avec leur historique.
+    due_settings: DueSettingsOut | None = None
+    due_settings_versions: list[Version[DueSettingsOut]] = []
     agents: list[AgentOut]
 
 

@@ -24,6 +24,8 @@ from app.schemas.analyse import (
     AnalyseOut,
     AnalyseShareCreate,
     AnalyseShareOut,
+    DueSettingsIn,
+    DueSettingsOut,
     EntitiesUpdate,
     LabelsUpdate,
     ModelUpdate,
@@ -280,6 +282,38 @@ async def restore_statuses(
     except (StatusValidationError, StatusInUseError) as error:
         raise _status_error(error) from error
     if not restored:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
+    return repository.to_schema(analyse)
+
+
+@router.get("/{analyse_id}/due-settings", response_model=DueSettingsOut)
+async def get_due_settings(analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> DueSettingsOut:
+    """Durée par défaut et seuils de couleur de l'échéance des dossiers de l'analyse (issue #172)."""
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    return DueSettingsOut.model_validate(repository.due_settings_snapshot(analyse))
+
+
+@router.put("/{analyse_id}/due-settings", response_model=AnalyseOut)
+async def update_due_settings(
+    analyse_id: uuid.UUID, body: DueSettingsIn, db: Annotated[AsyncSession, Depends(get_db)]
+) -> AnalyseOut:
+    """Remplace la durée par défaut et les seuils de couleur. L'état précédent est conservé dans
+    ``due_settings_versions`` (restaurable). Les dossiers ne sont pas modifiés : leur niveau est calculé à la
+    lecture."""
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    await repository.update_due_settings(analyse, body)
+    return repository.to_schema(analyse)
+
+
+@router.post("/{analyse_id}/due-settings/restore/{version_id}", response_model=AnalyseOut)
+async def restore_due_settings(
+    analyse_id: uuid.UUID, version_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+) -> AnalyseOut:
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    if not await repository.restore_due_settings_version(analyse, version_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
     return repository.to_schema(analyse)
 
