@@ -1,7 +1,7 @@
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,7 +49,10 @@ class WorkSlotRepository:
         }
         statement = insert(WorkSlot).values(id=uuid.uuid4(), **values)
         statement = statement.on_conflict_do_update(
-            constraint="uq_work_slots_user_dossier", set_={k: statement.excluded[k] for k in values if k != "user_id"}
+            constraint="uq_work_slots_user_dossier",
+            # `updated_at` est bumpé à la main : `onupdate` du modèle ne joue pas pour un INSERT … ON CONFLICT. Les
+            # rappels (#219) ne partent que pour des instants postérieurs à cette date.
+            set_={**{k: statement.excluded[k] for k in values if k != "user_id"}, "updated_at": func.now()},
         ).returning(WorkSlot)
         slot = (await self.db.execute(statement, execution_options={"populate_existing": True})).scalar_one()
         await self.db.commit()

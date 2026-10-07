@@ -12,8 +12,9 @@ from app.models.analyse import Analyse
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEvent, DossierEventType
 from app.models.notification import Notification, NotificationCursor
+from app.models.work_slot import WorkSlot
 from app.services.dossier_access import visible_clause
-from app.services.due_date import due_info, today_in_paris
+from app.services.due_date import PARIS, due_info, today_in_paris
 from app.services.notification_messages import (
     CATEGORIES,
     KIND_CATEGORY,
@@ -21,8 +22,10 @@ from app.services.notification_messages import (
     assigned_message,
     due_message,
     kinds_of,
+    reminder_message,
     status_changed_message,
 )
+from app.services.slot_occurrences import occurrence_starts
 
 # Au premier passage d'une personne, on remonte le journal de cette durée (pas plus : pas de déluge d'anciennetés).
 FIRST_SYNC_DAYS = 7
@@ -30,6 +33,8 @@ FIRST_SYNC_DAYS = 7
 READ_RETENTION_DAYS = 90
 MAX_EVENTS_PER_SYNC = 200
 MAX_DUE_PER_SYNC = 50
+# Un rappel dont l'heure est plus ancienne que cela n'est plus rejoué (l'application n'était pas ouverte).
+REMINDER_WINDOW_HOURS = 6
 
 
 class NotificationRepository:
@@ -52,6 +57,7 @@ class NotificationRepository:
 
         rows = await self._event_notifications(user, cursor.last_seq if cursor else None, max_seq, now)
         rows += await self._due_notifications(user, now, already_read=first)
+        rows += await self._reminder_notifications(user, now)
         if rows:
             await self.db.execute(
                 insert(Notification).values(rows).on_conflict_do_nothing(constraint="uq_notifications_user_dedup")
@@ -187,6 +193,49 @@ class NotificationRepository:
             )
             if len(rows) >= MAX_DUE_PER_SYNC:
                 break
+        return rows
+
+    async def _reminder_notifications(self, user: RequestContext, now: datetime) -> list[dict]:
+        """Rappels de créneau (issue #219) : pour chaque occurrence (créneau récurrent ou non) et chaque décalage, une
+        notification quand l'heure du rappel est passée. **Une seule** par occurrence et par décalage (``dedup_key``).
+
+        Un rappel n'est écrit que si son heure tombe dans les ``REMINDER_WINDOW_HOURS`` dernières heures (on ne
+        rejoue pas un rappel vieux de plusieurs jours) et **après l'enregistrement du créneau** (pas de rappel pour
+        un instant qui précède sa pose ou sa dernière modification). Les créneaux sur un dossier qu'on ne voit plus
+        sont ignorés."""
+        window = timedelta(hours=REMINDER_WINDOW_HOURS)
+        result = await self.db.execute(
+            select(WorkSlot, Dossier.name)
+            .join(Dossier, Dossier.id == WorkSlot.dossier_id)
+            .where(
+                WorkSlot.user_id == user.user_id,
+                func.jsonb_array_length(WorkSlot.reminders) > 0,
+                visible_clause(user.is_admin, user.groups),
+            )
+        )
+        rows = []
+        for slot, dossier_name in result.all():
+            offsets = sorted(set(slot.reminders))
+            longest = timedelta(minutes=offsets[-1])
+            for occurrence in occurrence_starts(slot.start_at, slot.recurrence, now - window, now + longest):
+                for minutes in offsets:
+                    fire_at = occurrence - timedelta(minutes=minutes)
+                    if fire_at > now or fire_at < now - window or fire_at <= slot.updated_at:
+                        continue
+                    local = occurrence.astimezone(PARIS)
+                    rows.append(
+                        {
+                            "id": uuid.uuid4(),
+                            "user_id": user.user_id,
+                            "kind": "reminder",
+                            "dossier_id": slot.dossier_id,
+                            "dossier_name": dossier_name,
+                            "message": reminder_message(local),
+                            "dedup_key": f"reminder:{slot.dossier_id}:{occurrence.isoformat()}:{minutes}",
+                            "created_at": fire_at,
+                            "read_at": None,
+                        }
+                    )
         return rows
 
     # --- Lecture ---

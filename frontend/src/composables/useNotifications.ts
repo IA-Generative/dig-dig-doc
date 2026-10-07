@@ -1,13 +1,11 @@
 import { computed, ref } from "vue";
 
 import type { AppNotification } from "@/types/dashboard";
-import type { SlotDraft } from "@/types/schedule";
 import { apiFetch } from "@/utils/api";
-import { occurrenceStarts } from "@/utils/recurrence";
 
 // Notifications (issue #174) : les notifications d'affectation, d'échéance, de statut et d'analyse viennent de
 // l'API (`GET /api/notifications`, interrogée toutes les 60 s tant que la page est visible : chaque lecture met
-// à jour les notifications côté serveur). Les rappels de créneau restent déclenchés localement par le navigateur.
+// à jour les notifications côté serveur, rappels de créneau compris, #219).
 // État partagé au niveau du module pour que la pastille de la barre latérale et le tableau de bord restent
 // synchronisés.
 
@@ -15,11 +13,7 @@ const POLL_MS = 60_000;
 
 /** Notifications du serveur, de la plus récente à la plus ancienne. */
 const serverNotifications = ref<AppNotification[]>([]);
-/** Rappels de créneau déclenchés dans ce navigateur (pas encore côté serveur). */
-const localReminders = ref<AppNotification[]>([]);
-const notifications = computed(() =>
-  [...localReminders.value, ...serverNotifications.value].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)),
-);
+const notifications = computed(() => serverNotifications.value);
 
 /** Identifiants déjà vus : seules les nouvelles notifications déclenchent une alerte du navigateur. */
 const knownIds = new Set<string>();
@@ -120,69 +114,6 @@ function showBrowserNotification(n: AppNotification) {
   };
 }
 
-// --- Rappels (MOCK) -------------------------------------------------------
-// Chaque rappel d'un créneau (y compris récurrent) génère une notification
-// « reminder » à l'heure voulue. Ici le déclenchement est local (minuteur
-// dans le navigateur) ; côté serveur ce sera une tâche planifiée du worker,
-// comme les seuils d'échéance.
-interface RegisteredSlot {
-  dossierId: string;
-  dossierName: string;
-  slot: SlotDraft;
-  registeredAt: number;
-}
-const registered = new Map<string, RegisteredSlot>();
-/** Rappels déjà émis (dossier|début d'occurrence|décalage) : un rappel ne part qu'une fois. */
-const fired = new Set<string>();
-let timer: ReturnType<typeof setInterval> | undefined;
-
-const DAY_MS = 86_400_000;
-
-function fireDueReminders() {
-  const now = Date.now();
-  for (const { dossierId, dossierName, slot, registeredAt } of registered.values()) {
-    const maxOffset = Math.max(0, ...slot.reminders);
-    // Occurrences dont au moins un rappel peut tomber maintenant.
-    const occurrences = occurrenceStarts(
-      new Date(slot.start),
-      slot.recurrence,
-      new Date(now - DAY_MS),
-      new Date(now + maxOffset * 60_000 + DAY_MS),
-    );
-    for (const occ of occurrences) {
-      for (const minutes of slot.reminders) {
-        const fireAt = occ.getTime() - minutes * 60_000;
-        const key = `${dossierId}|${occ.toISOString()}|${minutes}`;
-        // Pas de rappel pour un instant antérieur à l'enregistrement du créneau.
-        if (fireAt > now || fireAt <= registeredAt || fired.has(key)) continue;
-        fired.add(key);
-        const time = occ.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-        const reminder: AppNotification = {
-          id: `rem-${key}`,
-          kind: "reminder",
-          dossierId,
-          dossierName,
-          accessible: true,
-          message: `Rappel : créneau de traitement à ${time}.`,
-          createdAt: new Date().toISOString(),
-        };
-        localReminders.value.unshift(reminder);
-        showBrowserNotification(reminder);
-      }
-    }
-  }
-}
-
-/** Enregistre (ou retire, avec `null`) les rappels du créneau d'un dossier. */
-function setReminders(dossierId: string, dossierName: string, slot: SlotDraft | null) {
-  if (!slot || slot.reminders.length === 0) {
-    registered.delete(dossierId);
-  } else {
-    registered.set(dossierId, { dossierId, dossierName, slot, registeredAt: Date.now() });
-    timer ??= setInterval(fireDueReminders, 10_000);
-  }
-}
-
 export function useNotifications() {
   const unreadCount = computed(() => notifications.value.filter((n) => !n.readAt).length);
   /** Libellé de la pastille, plafonné à « 99+ ». */
@@ -191,11 +122,6 @@ export function useNotifications() {
   /** Marque une notification comme lue (tout de suite à l'écran, puis côté serveur). */
   function markRead(id: string) {
     const now = new Date().toISOString();
-    const local = localReminders.value.find((n) => n.id === id);
-    if (local) {
-      if (!local.readAt) local.readAt = now;
-      return;
-    }
     const target = serverNotifications.value.find((n) => n.id === id);
     if (!target || target.readAt) return;
     target.readAt = now;
@@ -206,7 +132,6 @@ export function useNotifications() {
 
   function markAllRead() {
     const now = new Date().toISOString();
-    for (const n of localReminders.value) if (!n.readAt) n.readAt = now;
     const pending = serverNotifications.value.filter((n) => !n.readAt);
     for (const n of pending) n.readAt = now;
     if (pending.length) {
@@ -225,7 +150,6 @@ export function useNotifications() {
     startPolling,
     stopPolling,
     refresh: fetchNotifications,
-    setReminders,
     browserPermission,
     browserEnabled,
     enableBrowserNotifications,

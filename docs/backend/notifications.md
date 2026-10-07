@@ -1,6 +1,6 @@
 # Notifications (backend)
 
-Issue #174, parent #167. Une personne est prévenue quand **on lui affecte un dossier**, quand **l'échéance d'un de ses dossiers approche ou est dépassée**, quand **un tiers change le statut** d'un de ses dossiers, ou quand **une analyse qu'elle a lancée se termine ou échoue**. Les rappels de [créneau](creneaux-de-traitement.md) viendront ensuite.
+Issue #174, parent #167. Une personne est prévenue quand **on lui affecte un dossier**, quand **l'échéance d'un de ses dossiers approche ou est dépassée**, quand **un tiers change le statut** d'un de ses dossiers, ou quand **une analyse qu'elle a lancée se termine ou échoue**. Les **rappels de [créneau](creneaux-de-traitement.md)** en font partie (issue #219).
 
 ## Fabriquées à la lecture
 
@@ -16,7 +16,7 @@ Il n'y a **pas de tâche planifiée** : les notifications se fabriquent quand la
 | `status_changed` | Statuts | Un autre que moi change le statut d'un dossier **qui m'est affecté**. |
 | `analysis_done`, `analysis_failed` | Analyses | Fin d'une analyse **que j'ai lancée** (l'auteur du dernier « analyse lancée » avant la fin). |
 | `due_soon`, `overdue` | Échéances | Un dossier ouvert qui m'est affecté **entre** dans le niveau « proche » ou « dépassée » selon les seuils de son analyse ([échéance](echeance-du-dossier.md)) ; **une fois par niveau et par date d'échéance** (changer la date réarme). |
-| `reminder` | Rappels | À venir. |
+| `reminder` | Rappels | L'heure d'un rappel de **mon** créneau est passée (voir « Rappels de créneau »). |
 
 **Premier passage et échéances** : l'état existant (dossiers déjà proches ou dépassés) est enregistré **comme déjà lu** : l'agenda du tableau de bord l'affiche déjà, inutile d'en faire un déluge de notifications. Au plus 50 par passage.
 
@@ -34,6 +34,21 @@ Il n'y a **pas de tâche planifiée** : les notifications se fabriquent quand la
 | `POST /api/notifications/read-all` | Marque toutes les miennes comme lues (ou celles d'une `category`) ; renvoie `{marked}`. |
 
 Chaque requête est **bornée au destinataire** : aucune lecture ni modification ne touche la notification d'un autre.
+
+## Rappels de créneau
+
+Un [créneau de traitement](creneaux-de-traitement.md) peut demander jusqu'à 3 rappels, en minutes avant chaque occurrence (0 = à l'heure). Ils sont fabriqués **à la lecture**, comme les autres notifications, par `NotificationRepository._reminder_notifications`.
+
+- Le serveur **développe la récurrence** (`app/services/slot_occurrences.py`, logique pure) : jour, semaine (jours choisis), mois, année ; fin jamais, à une date (incluse) ou après N occurrences (la première compte).
+- **Heure de Paris** : une occurrence garde la même heure de l'horloge d'un jour à l'autre, **heure d'été et d'hiver comprises** (9 h reste 9 h, soit 7 h puis 8 h UTC). Un quantième qui n'existe pas (31, 29 février) est ramené au dernier jour du mois, **depuis le quantième d'origine** : mars retrouve le 31.
+- Pour chaque occurrence et chaque décalage : une notification **quand l'heure du rappel est passée**, **une seule** (`dedup_key` = dossier, début d'occurrence, décalage), datée de l'heure du rappel.
+- **Fenêtre de 6 heures** : un rappel dont l'heure est plus ancienne n'est pas rejoué (l'application n'était pas ouverte : « rappel à 9 h » reçu à 17 h n'a pas de sens).
+- **Pas de rappel pour un instant antérieur à l'enregistrement** : poser à 8 h 55 un créneau de 9 h avec un rappel 15 minutes avant ne produit pas de rappel pour 8 h 45. Remplacer un créneau repart de zéro (`updated_at`).
+- Propres au **propriétaire** du créneau (jamais pour quelqu'un d'autre qui voit le dossier), et seulement sur un dossier **visible** ; un créneau supprimé ne produit plus rien.
+- Message : « Rappel : créneau de traitement à 09:00. » (heure de Paris de l'occurrence).
+- Garde-fou : 5 000 occurrences au plus depuis le début d'une série (comme l'agenda).
+
+L'interface n'a plus de déclenchement local : les rappels arrivent par l'interrogation périodique (60 s), comme les autres notifications, et déclenchent l'alerte du navigateur si elle est activée.
 
 ## Conservation
 
