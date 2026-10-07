@@ -6,8 +6,10 @@ import UserMenu from "@/components/UserMenu.vue";
 import CguGate from "@/components/CguGate.vue";
 import { useAuth } from "@/composables/useAuth";
 import { useMyConversations } from "@/composables/useMyConversations";
+import { useNotifications } from "@/composables/useNotifications";
 
 const route = useRoute();
+const { unreadCount, badgeLabel } = useNotifications();
 const { fetchProfile } = useAuth();
 const { list: conversations, fetchList: fetchConversations, deleteConversation } = useMyConversations();
 
@@ -62,6 +64,7 @@ watch(isSidebarCollapsed, (value) => {
 });
 
 const navItems = [
+  { to: "/dashboard", label: "Tableau de bord", icon: "ri-dashboard-line", badge: true },
   { to: "/analyses", label: "Analyses", icon: "ri-file-list-3-line" },
   { to: "/dossiers", label: "Dossiers", icon: "ri-folder-line" },
 ];
@@ -108,6 +111,15 @@ const navItems = [
         >
           <VIcon :name="item.icon" />
           <span v-if="!isSidebarCollapsed">{{ item.label }}</span>
+          <!-- Pastille : le nombre est annoncé (sr-only), pas seulement affiché -->
+          <span
+            v-if="item.badge && unreadCount > 0"
+            class="app-sidebar__badge"
+            :class="{ 'app-sidebar__badge--collapsed': isSidebarCollapsed }"
+          >
+            <span aria-hidden="true">{{ badgeLabel }}</span>
+            <span class="fr-sr-only">{{ unreadCount }} notification{{ unreadCount > 1 ? "s" : "" }} non lue{{ unreadCount > 1 ? "s" : "" }}</span>
+          </span>
         </RouterLink>
       </nav>
 
@@ -277,6 +289,27 @@ const navItems = [
 
 .app-sidebar--collapsed .app-sidebar__nav-item {
   justify-content: center;
+  position: relative;
+}
+
+.app-sidebar__badge {
+  margin-left: auto;
+  min-width: 1.25rem;
+  padding: 0 0.375rem;
+  border-radius: 0.625rem;
+  background: var(--background-flat-error);
+  color: var(--text-inverted-grey);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+.app-sidebar__badge--collapsed {
+  position: absolute;
+  top: 0.125rem;
+  right: 0.375rem;
+  margin-left: 0;
 }
 
 /* Espace flexible au milieu (sidebar réduite : pas de liste affichée) */

@@ -57,7 +57,7 @@ export function useAuth() {
     // route guard quand il redirige vers /welcome) pour revenir sur la page
     // demandée après login. Sinon, on revient sur /analyses.
     const params = new URLSearchParams(window.location.search);
-    const current = params.get("redirect") ?? "/analyses";
+    const current = params.get("redirect") ?? "/dashboard";
     window.location.href = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/auth/login?redirect=${encodeURIComponent(current)}`;
   };
 
