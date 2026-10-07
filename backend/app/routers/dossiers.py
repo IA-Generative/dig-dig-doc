@@ -33,8 +33,10 @@ from app.db import get_db
 from app.models.analyse import Analyse
 from app.models.conversation import Message, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
+from app.models.dossier_event import DossierEventType
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_collaboration_repository import ElementLockedError
+from app.repositories.dossier_event_repository import EventActor
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier import (
     ChatEventOut,
@@ -86,8 +88,11 @@ async def list_dossiers(
     return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
 
-@router.post("", response_model=DossierOut, status_code=status.HTTP_201_CREATED)
-async def create_dossier(body: DossierCreate, db: Annotated[AsyncSession, Depends(get_db)]) -> Dossier:
+async def create_dossier_for(
+    body: DossierCreate, db: AsyncSession, actor: "RequestContext | EventActor | None" = None
+) -> Dossier:
+    """Crée un dossier et le journalise (#169). Partagé avec l'agent assistant (MCP) et la route interne, qui
+    n'ont pas de session utilisateur : ``actor`` vaut alors l'identité du jeton, ou None."""
     analyse: Analyse | None = None
     if body.analyse_id is not None:
         analyse = await AnalyseRepository(db).get(body.analyse_id)
@@ -95,13 +100,25 @@ async def create_dossier(body: DossierCreate, db: Annotated[AsyncSession, Depend
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
 
     dossier_repository = DossierRepository(db)
-    dossier = await dossier_repository.create(name=body.name, analyse=analyse)
+    dossier = await dossier_repository.create(name=body.name, analyse=analyse, actor=actor)
     return await _get_or_404(dossier_repository, dossier.id)
+
+
+@router.post("", response_model=DossierOut, status_code=status.HTTP_201_CREATED)
+async def create_dossier(
+    body: DossierCreate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
+    return await create_dossier_for(body, db, user)
 
 
 @router.put("/{dossier_id}/workflow-status", response_model=DossierOut)
 async def update_workflow_status(
-    dossier_id: uuid.UUID, body: WorkflowStatusUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+    dossier_id: uuid.UUID,
+    body: WorkflowStatusUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> Dossier:
     """Change le statut de dossier (issue #168). Refuse un statut qui n'appartient pas à l'analyse du
     dossier. Un statut final pose la date de clôture, tout autre l'efface."""
@@ -117,13 +134,21 @@ async def update_workflow_status(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Ce statut n'appartient pas à l'analyse du dossier."
         )
-    await repository.set_workflow_status(dossier, new_status)
+    await repository.set_workflow_status(dossier, new_status, actor=user)
     return await _get_or_404(repository, dossier_id)
 
 
 @router.get("/{dossier_id}", response_model=DossierOut)
-async def get_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> Dossier:
-    return await _get_or_404(DossierRepository(db), dossier_id)
+async def get_dossier(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    # Consultation tracée dans le journal (#169), une fois par utilisateur dans la fenêtre de dédoublonnage.
+    await repository.events.record_consultation(dossier_id, user)
+    return dossier
 
 
 @router.post("/{dossier_id}/documents", response_model=DossierOut)
@@ -131,6 +156,7 @@ async def add_documents(
     dossier_id: uuid.UUID,
     files: list[UploadFile],
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> Dossier:
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id)
@@ -153,6 +179,14 @@ async def add_documents(
     created = await repository.add_documents(dossier, documents)
     for document in created:
         dispatch_text_extraction(str(document.id))
+        # Ni le nom ni le contenu du fichier : ce sont des données d'usager (#169).
+        repository.events.add(
+            dossier_id,
+            DossierEventType.DOCUMENT_ADDED,
+            user,
+            {"document_id": str(document.id), "mimetype": document.mimetype, "size": document.size},
+        )
+    await db.commit()
     # Pas `return dossier` : refresh(dossier) (dans add_documents) réexpire
     # `documents`, dont les nouveaux DossierDocument n'ont pas `pages` chargée
     # (MissingGreenlet à la sérialisation) - une requête fraîche via
@@ -225,14 +259,16 @@ async def get_page_screenshot(
     return Response(content=data, media_type=content_type)
 
 
-@router.post("/{dossier_id}/launch", response_model=DossierOut)
-async def launch_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> Dossier:
+async def launch_dossier_for(
+    dossier_id: uuid.UUID, db: AsyncSession, actor: "RequestContext | EventActor | None" = None
+) -> Dossier:
+    """Lance l'analyse d'un dossier et le journalise (#169) ; partagé avec l'agent assistant."""
     dossier_repository = DossierRepository(db)
     dossier = await _get_or_404(dossier_repository, dossier_id)
     analyse = await AnalyseRepository(db).get(dossier.analyse_id)
     if analyse is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
-    await dossier_repository.launch(dossier, analyse)
+    await dossier_repository.launch(dossier, analyse, actor=actor)
     # Dépose les tâches de classification et d'extraction sur la file
     # agent_execution : le worker traite chaque page (VLM + LLM) et dépose
     # les prédictions via l'API interne. Les tâches sont indépendantes et
@@ -246,11 +282,24 @@ async def launch_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depe
     return dossier
 
 
+@router.post("/{dossier_id}/launch", response_model=DossierOut)
+async def launch_dossier(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
+    return await launch_dossier_for(dossier_id, db, user)
+
+
 @router.post("/{dossier_id}/stop", response_model=DossierOut)
-async def stop_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> Dossier:
+async def stop_dossier(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id)
-    await repository.stop(dossier)
+    await repository.stop(dossier, actor=user)
     return dossier
 
 
@@ -305,6 +354,7 @@ async def assign_dossier(
     dossier_id: uuid.UUID,
     body: DossierAssignIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
 ):
     """Valide le rattachement d'un dossier « à ranger » à une analyse
     (issue #54). L'utilisateur peut valider une suggestion ou choisir
@@ -314,7 +364,7 @@ async def assign_dossier(
     analyse = await AnalyseRepository(db).get(body.analyse_id)
     if analyse is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
-    await repository.assign_analyse(dossier, analyse)
+    await repository.assign_analyse(dossier, analyse, actor=user)
     return await _get_or_404(repository, dossier_id)
 
 

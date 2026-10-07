@@ -23,6 +23,8 @@ from app.models.analyse import (
 from app.models.analyse_share import AnalyseShare, AnalyseShareKind
 from app.models.document_template import DocumentTemplate, DocumentTemplateVersion
 from app.models.dossier import Dossier
+from app.models.dossier_event import DossierEventType
+from app.repositories.dossier_event_repository import DossierEventRepository
 
 if TYPE_CHECKING:
     from app.schemas.analyse import AgentOut, AnalyseOut, StatusDefinitionIn
@@ -301,6 +303,7 @@ class AnalyseRepository:
         replacements: dict[uuid.UUID, uuid.UUID] | None = None,
         *,
         allow_new_ids: bool = False,
+        actor=None,
     ) -> None:
         """Remplace la liste des statuts de l'analyse en conservant l'identité de ceux qui ont un ``id``.
 
@@ -357,9 +360,36 @@ class AnalyseRepository:
 
         self._record_version(analyse, VersionedField.STATUSES, current)
 
+        events = DossierEventRepository(self.db)
+        names = {status.id: status.name for status in analyse.statuses}
+
         # Dossiers des statuts supprimés : ils reprennent le statut de remplacement.
         for old_id, new_id in replacement_of.items():
             new_item = next(item for item in items if item.id == new_id)
+            moved = (
+                await self.db.execute(select(Dossier.id, Dossier.closed_at).where(Dossier.workflow_status_id == old_id))
+            ).all()
+            for dossier_id, closed_at in moved:
+                payload = {
+                    "from": {"id": str(old_id), "name": names[old_id]},
+                    "to": {"id": str(new_id), "name": new_item.name},
+                    "reason": "status_removed",
+                }
+                events.add(dossier_id, DossierEventType.STATUS_CHANGED, actor, payload)
+                if new_item.is_final and closed_at is None:
+                    events.add(
+                        dossier_id,
+                        DossierEventType.CLOSED,
+                        actor,
+                        {"status": payload["to"], "reason": "status_removed"},
+                    )
+                elif not new_item.is_final and closed_at is not None:
+                    events.add(
+                        dossier_id,
+                        DossierEventType.REOPENED,
+                        actor,
+                        {"status": payload["to"], "reason": "status_removed"},
+                    )
             await self.db.execute(
                 update(Dossier)
                 .where(Dossier.workflow_status_id == old_id)
@@ -373,6 +403,24 @@ class AnalyseRepository:
                 self.db.add(status)
             elif status.is_final != item.is_final:
                 # Un statut qui devient final (ou cesse de l'être) clôt (ou rouvre) ses dossiers.
+                affected = (
+                    await self.db.execute(
+                        select(Dossier.id, Dossier.closed_at).where(Dossier.workflow_status_id == status.id)
+                    )
+                ).all()
+                for dossier_id, closed_at in affected:
+                    if item.is_final and closed_at is None:
+                        kind = DossierEventType.CLOSED
+                    elif not item.is_final and closed_at is not None:
+                        kind = DossierEventType.REOPENED
+                    else:
+                        continue
+                    events.add(
+                        dossier_id,
+                        kind,
+                        actor,
+                        {"status": {"id": str(status.id), "name": item.name}, "reason": "status_flag_changed"},
+                    )
                 await self.db.execute(
                     update(Dossier)
                     .where(Dossier.workflow_status_id == status.id)
@@ -394,6 +442,7 @@ class AnalyseRepository:
         analyse: Analyse,
         version_id: uuid.UUID,
         replacements: dict[uuid.UUID, uuid.UUID] | None = None,
+        actor=None,
     ) -> bool:
         """Restaure une version antérieure de la liste des statuts (l'état courant devient lui-même une
         version). Renvoie False si la version n'existe pas pour cette analyse."""
@@ -414,7 +463,7 @@ class AnalyseRepository:
             )
             for entry in sorted(version.content, key=lambda entry: entry["position"])
         ]
-        await self.update_statuses(analyse, items, replacements, allow_new_ids=True)
+        await self.update_statuses(analyse, items, replacements, allow_new_ids=True, actor=actor)
         return True
 
     # --- Agents ---

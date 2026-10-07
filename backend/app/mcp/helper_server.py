@@ -8,13 +8,14 @@ from app.db import async_session_factory
 from app.mcp.auth import get_current_identity
 from app.models.agent_conversation import AgentConversation, AgentMessageRole
 from app.repositories.agent_conversation_repository import AgentConversationRepository
+from app.repositories.dossier_event_repository import EventActor
 from app.repositories.dossier_repository import DossierRepository
 from app.routers.analyses import create_analyse as _create_analyse
 from app.routers.analyses import get_analyse as _get_analyse
 from app.routers.analyses import list_analyses as _list_analyses
 from app.routers.dossiers import _get_or_404 as _get_dossier_or_404
-from app.routers.dossiers import create_dossier as _create_dossier
-from app.routers.dossiers import launch_dossier as _launch_dossier
+from app.routers.dossiers import create_dossier_for as _create_dossier
+from app.routers.dossiers import launch_dossier_for as _launch_dossier
 from app.routers.internal_agent import AgentDossierFileIn, AgentDossierFilesIn
 from app.routers.internal_agent import add_agent_dossier_files as _add_dossier_files
 from app.schemas.analyse import AnalyseCreate
@@ -173,7 +174,9 @@ async def create_dossier(name: str, analyse_id: str, conversation_id: str | None
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _create_dossier(DossierCreate(name=name, analyse_id=uuid.UUID(analyse_id)), db)
+            dossier = await _create_dossier(
+                DossierCreate(name=name, analyse_id=uuid.UUID(analyse_id)), db, EventActor(user_id=identity.id)
+            )
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "create_dossier", arguments, run)
@@ -239,7 +242,7 @@ async def run_dossier(dossier_id: str, conversation_id: str | None = None) -> di
     async with async_session_factory() as db:
 
         async def run():
-            dossier = await _launch_dossier(uuid.UUID(dossier_id), db)
+            dossier = await _launch_dossier(uuid.UUID(dossier_id), db, EventActor(user_id=identity.id))
             return _dossier_out(dossier)
 
         return await _call_traced(db, identity, conversation_id, "run_dossier", arguments, run)

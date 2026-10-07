@@ -247,6 +247,7 @@ async def update_statuses(
     analyse_id: uuid.UUID,
     body: StatusesUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> AnalyseOut:
     """Remplace la liste des statuts. Un statut conserve son identité si son ``id`` est fourni ; un statut
     supprimé encore utilisé exige un remplaçant (``replacements``), sinon 409. L'état précédent est
@@ -254,7 +255,7 @@ async def update_statuses(
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
     try:
-        await repository.update_statuses(analyse, body.statuses, body.replacements)
+        await repository.update_statuses(analyse, body.statuses, body.replacements, actor=user)
     except (StatusValidationError, StatusInUseError) as error:
         raise _status_error(error) from error
     return repository.to_schema(analyse)
@@ -265,6 +266,7 @@ async def restore_statuses(
     analyse_id: uuid.UUID,
     version_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
     body: StatusesRestore | None = None,
 ) -> AnalyseOut:
     """Restaure une version antérieure des statuts. Si la restauration supprime des statuts utilisés par
@@ -272,7 +274,9 @@ async def restore_statuses(
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
     try:
-        restored = await repository.restore_statuses_version(analyse, version_id, body.replacements if body else None)
+        restored = await repository.restore_statuses_version(
+            analyse, version_id, body.replacements if body else None, actor=user
+        )
     except (StatusValidationError, StatusInUseError) as error:
         raise _status_error(error) from error
     if not restored:

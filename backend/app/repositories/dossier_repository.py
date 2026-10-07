@@ -38,6 +38,7 @@ from app.models.dossier import (
     TextExtractionStatus,
 )
 from app.models.dossier_analysis import AnalysisElement, AnalysisElementVersion
+from app.models.dossier_event import DossierEventType
 from app.models.execution_log import ExecutionLog, ExecutionLogLevel
 from app.models.feedback import (
     Feedback,
@@ -53,6 +54,7 @@ from app.models.summary import (
 )
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
+from app.repositories.dossier_event_repository import DossierEventRepository
 from app.services.prediction_validation import record_validation
 
 
@@ -69,6 +71,7 @@ class DossierRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self._analyse_repository = AnalyseRepository(db)
+        self.events = DossierEventRepository(db)
 
     def _base_query(self):
         pages_load = selectinload(Dossier.documents).selectinload(DossierDocument.pages)
@@ -126,7 +129,7 @@ class DossierRepository:
         result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))
         return result.scalar_one_or_none()
 
-    async def create(self, *, name: str, analyse: Analyse | None = None) -> Dossier:
+    async def create(self, *, name: str, analyse: Analyse | None = None, actor=None) -> Dossier:
         dossier = Dossier(
             name=name,
             analyse_id=analyse.id if analyse else None,
@@ -136,6 +139,13 @@ class DossierRepository:
             workflow_status_id=self._initial_status_id(analyse),
         )
         self.db.add(dossier)
+        await self.db.flush()  # donne son identifiant au dossier, que l'événement référence
+        self.events.add(
+            dossier.id,
+            DossierEventType.CREATED,
+            actor,
+            {"analyse_id": str(analyse.id) if analyse else None},
+        )
         await self.db.commit()
         await self.db.refresh(dossier)
         return dossier
@@ -144,17 +154,37 @@ class DossierRepository:
         initial = self._analyse_repository.initial_status(analyse) if analyse else None
         return initial.id if initial else None
 
-    async def set_workflow_status(self, dossier: Dossier, status: StatusDefinition) -> None:
+    async def set_workflow_status(self, dossier: Dossier, status: StatusDefinition, actor=None) -> None:
         """Change le statut de dossier (issue #168). Le statut doit appartenir à l'analyse du dossier
         (vérifié par l'appelant). Un statut final pose la date de clôture (conservée d'un statut final à
         un autre) ; tout autre statut l'efface.
-        Le journal d'événements du dossier (#169) enregistrera ce changement quand il existera."""
+        Le changement est tracé dans le journal du dossier (#169) : changement de statut, et clôture ou réouverture."""
+        previous = dossier.workflow_status
+        was_closed = dossier.closed_at is not None
         dossier.workflow_status_id = status.id
         if status.is_final:
             if dossier.closed_at is None:
                 dossier.closed_at = datetime.now(UTC)
         else:
             dossier.closed_at = None
+        if previous is None or previous.id != status.id:
+            self.events.add(
+                dossier.id,
+                DossierEventType.STATUS_CHANGED,
+                actor,
+                {
+                    "from": {"id": str(previous.id), "name": previous.name} if previous else None,
+                    "to": {"id": str(status.id), "name": status.name},
+                },
+            )
+        if not was_closed and dossier.closed_at is not None:
+            self.events.add(
+                dossier.id, DossierEventType.CLOSED, actor, {"status": {"id": str(status.id), "name": status.name}}
+            )
+        elif was_closed and dossier.closed_at is None:
+            self.events.add(
+                dossier.id, DossierEventType.REOPENED, actor, {"status": {"id": str(status.id), "name": status.name}}
+            )
         await self.db.commit()
 
     async def add_documents(self, dossier: Dossier, documents: list[dict]) -> list[DossierDocument]:
@@ -521,6 +551,13 @@ class DossierRepository:
             DossierStatus.ECHEC if any(s.status == ExecutionStepStatus.ECHEC for s in steps) else DossierStatus.TERMINE
         )
         dossier.ended_at = datetime.now(UTC)
+        # Action du système (le worker a terminé) : pas d'auteur. Même transaction que l'étape qui la déclenche.
+        self.events.add(
+            dossier_id,
+            DossierEventType.ANALYSIS_FAILED
+            if dossier.status == DossierStatus.ECHEC
+            else DossierEventType.ANALYSIS_FINISHED,
+        )
 
     # --- Pages, prédictions et validation humaine ---
 
@@ -724,7 +761,7 @@ class DossierRepository:
         )
         return await self.get_prediction_by_id(prediction.id)
 
-    async def launch(self, dossier: Dossier, analyse: Analyse) -> None:
+    async def launch(self, dossier: Dossier, analyse: Analyse, actor=None) -> None:
         """Marks the dossier as running and lays down one execution step per
         stage (classification, extraction, one per agent). Actually
         producing a result for each step is the worker's job (issues #4/#5,
@@ -771,6 +808,9 @@ class DossierRepository:
         dossier.analyse_version = self._analyse_repository.get_version_label(analyse)
         dossier.started_at = now
         dossier.ended_at = None
+        self.events.add(
+            dossier.id, DossierEventType.ANALYSIS_STARTED, actor, {"analyse_version": dossier.analyse_version}
+        )
         await self.db.commit()
         # Analyse de dossier (#125) : une par exécution (le worker tolère un
         # dossier sans analyse : exécutions déjà en cours avant ce changement).
@@ -791,11 +831,12 @@ class DossierRepository:
         # leurs id générés côté client (UUIDMixin.default) sont à jour après
         # le commit (expire_on_commit=False sur la session).
 
-    async def stop(self, dossier: Dossier) -> None:
+    async def stop(self, dossier: Dossier, actor=None) -> None:
         if dossier.status != DossierStatus.EN_COURS:
             return
         dossier.status = DossierStatus.ARRETE
         dossier.ended_at = datetime.now(UTC)
+        self.events.add(dossier.id, DossierEventType.ANALYSIS_STOPPED, actor)
         await self.db.commit()
         await self.db.refresh(dossier)
 
@@ -933,7 +974,7 @@ class DossierRepository:
         dossier.suggestion_status = SuggestionStatus.TERMINE
         await self.db.commit()
 
-    async def assign_analyse(self, dossier: Dossier, analyse: Analyse) -> None:
+    async def assign_analyse(self, dossier: Dossier, analyse: Analyse, actor=None) -> None:
         """Valide le rattachement d'un dossier « à ranger » à une analyse.
         Met à jour analyse_id et analyse_version."""
         dossier.analyse_id = analyse.id
@@ -941,4 +982,10 @@ class DossierRepository:
         # Le dossier reçoit le statut initial de l'analyse qui l'accueille (issue #168).
         dossier.workflow_status_id = self._initial_status_id(analyse)
         dossier.closed_at = None
+        self.events.add(
+            dossier.id,
+            DossierEventType.ANALYSE_ASSIGNED,
+            actor,
+            {"analyse_id": str(analyse.id), "analyse_name": analyse.name},
+        )
         await self.db.commit()
