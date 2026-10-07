@@ -2,28 +2,28 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
-import BulkAccessModal from "@/components/access/BulkAccessModal.vue";
 import BulkAssignBar from "@/components/tracking/BulkAssignBar.vue";
 import ColumnsModal from "@/components/tracking/ColumnsModal.vue";
 import CustomFieldsModal from "@/components/tracking/CustomFieldsModal.vue";
 import TrackingFiltersPanel from "@/components/tracking/TrackingFilters.vue";
 import TrackingTable from "@/components/tracking/TrackingTable.vue";
 import TrackingViewsBar from "@/components/tracking/TrackingViewsBar.vue";
+import { useAnalyses } from "@/composables/useAnalyses";
 import { useAuth } from "@/composables/useAuth";
-import { useDossierAccess } from "@/composables/useDossierAccess";
 import { useTracking } from "@/composables/useTracking";
+import { EXPORT_LIMIT, useTrackingApi } from "@/composables/useTrackingApi";
 import { BUILT_IN_VIEWS, useTrackingPrefs } from "@/composables/useTrackingPrefs";
-import type { DossierAccess } from "@/types/access";
 import {
   emptyFilters,
+  type Assignee,
   type ColumnId,
   type CustomValue,
   type TrackingFilters,
-  type TrackingRow,
+  type TrackingListRow,
   type TrackingSort,
 } from "@/types/tracking";
 import { downloadCsv, toCsv } from "@/utils/csv";
-import { dueInfo } from "@/utils/due";
+import { dueLabel, formatDueDate } from "@/utils/due";
 import { formatValue } from "@/utils/trackingFields";
 
 // Tableau de suivi des dossiers, utilisé à deux niveaux :
@@ -31,7 +31,11 @@ import { formatValue } from "@/utils/trackingFields";
 //    statuts, ses colonnes personnalisées ;
 //  - vue transversale (#186, `analyseId` absent) : les dossiers de toutes les
 //    analyses accessibles, avec colonne et filtre « Analyse ».
-// Données simulées (useTracking) en attendant l'API (#168, #172, #173).
+// La liste, les filtres, le tri, la pagination et l'affectation passent par l'API (useTrackingApi). Restent simulés
+// (useTracking) : les colonnes personnalisées et leurs valeurs, tant que leur backend n'existe pas. Elles sont
+// masquées (`CUSTOM_FIELDS_ENABLED`), comme le filtre et l'action en lot « Accès » (#177).
+const CUSTOM_FIELDS_ENABLED = false;
+const ACCESS_ENABLED = false;
 
 const props = defineProps<{ analyseId?: string }>();
 
@@ -39,8 +43,19 @@ const route = useRoute();
 const { isAdmin } = useAuth();
 const transversal = computed(() => !props.analyseId);
 
-const { statuses, assignees, analyses, query, queryAll, assign, setValue, assigneeName, analyseName, fieldsOf } = useTracking();
-const { memberHasAccess, setAccess } = useDossierAccess();
+const { setValue, fieldsOf } = useTracking();
+const { query, queryAll, assign, fetchAssignees } = useTrackingApi();
+const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
+
+const assignees = ref<Assignee[]>([]);
+const assigneeName = (id: string | null) => assignees.value.find((a) => a.id === id)?.name ?? "";
+
+/** Statuts proposés au filtre : ceux de l'analyse, ou tous (pour nommer un statut venu d'un lien) en transversal. */
+const statuses = computed(() =>
+  (singleAnalyseId.value ? analyses.value.filter((a) => a.id === singleAnalyseId.value) : analyses.value).flatMap((a) =>
+    [...a.statuses].sort((x, y) => x.position - y.position).map((s) => ({ id: s.id, label: s.name })),
+  ),
+);
 
 const PAGE_SIZE = 10;
 
@@ -60,21 +75,21 @@ const effectiveFilters = computed<TrackingFilters>(() =>
 const singleAnalyseId = computed(() =>
   props.analyseId ?? (filters.value.analyseIds.length === 1 ? filters.value.analyseIds[0] : undefined),
 );
-const fields = computed(() => (singleAnalyseId.value ? fieldsOf(singleAnalyseId.value) : []));
+const fields = computed(() => (CUSTOM_FIELDS_ENABLED && singleAnalyseId.value ? fieldsOf(singleAnalyseId.value) : []));
 const fieldsAreHidden = computed(() => transversal.value && !singleAnalyseId.value);
 
 const prefs = useTrackingPrefs(props.analyseId ?? "all", fields);
 
-const rows = ref<TrackingRow[]>([]);
+const rows = ref<TrackingListRow[]>([]);
 const total = ref(0);
 const loading = ref(false);
 const selected = ref<string[]>([]);
 
 const filtersOpen = ref(false);
 const columnsOpen = ref(false);
-const bulkAccessOpen = ref(false);
 const fieldsOpen = ref(false);
 const notice = ref("");
+const loadError = ref("");
 
 const activeView = computed(() => prefs.views.value.find((v) => v.id === activeViewId.value) ?? BUILT_IN_VIEWS[0]);
 const modified = computed(
@@ -96,11 +111,18 @@ let requestSeq = 0;
 async function load() {
   const seq = ++requestSeq;
   loading.value = true;
-  const result = await query(effectiveFilters.value, sort.value, page.value, PAGE_SIZE);
-  if (seq !== requestSeq) return; // une requête plus récente est partie
-  rows.value = result.rows;
-  total.value = result.total;
-  loading.value = false;
+  try {
+    const result = await query(effectiveFilters.value, sort.value, page.value, PAGE_SIZE);
+    if (seq !== requestSeq) return; // une requête plus récente est partie
+    rows.value = result.rows;
+    total.value = result.total;
+    loadError.value = "";
+  } catch (e) {
+    if (seq !== requestSeq) return;
+    loadError.value = e instanceof Error ? e.message : "Le chargement a échoué.";
+  } finally {
+    if (seq === requestSeq) loading.value = false;
+  }
 }
 
 watch([filters, sort, page], load, { deep: true });
@@ -119,6 +141,8 @@ function applyView(id: string) {
 }
 
 onMounted(() => {
+  fetchAnalyses(1, 100);
+  fetchAssignees().then((list) => (assignees.value = list));
   applyView(defaultViewId);
   // Liens profonds (ex. depuis le tableau de bord) : ?status=…&due=…&assignee=me&analyse=a,b
   const q = route.query;
@@ -153,21 +177,19 @@ function announce(message: string) {
   noticeTimer = setTimeout(() => (notice.value = ""), 5000);
 }
 
-function onAssign(ids: string[], assigneeId: string | null) {
-  // On n'affecte qu'une personne qui a accès au dossier (#177).
-  if (assigneeId) {
-    const refused = ids.filter((id) => !memberHasAccess(id, assigneeId));
-    if (refused.length) {
-      announce(`${refused.length} dossier${refused.length > 1 ? "s" : ""} non affecté${refused.length > 1 ? "s" : ""} : ${assigneeName(assigneeId)} n'y a pas accès.`);
-      ids = ids.filter((id) => !refused.includes(id));
-      if (ids.length === 0) return;
-    }
+async function onAssign(ids: string[], assigneeId: string | null) {
+  try {
+    const result = await assign(ids, assigneeId);
+    const many = ids.length > 1;
+    announce(
+      result.updated === 0
+        ? "Aucun changement : l'affectation était déjà celle-ci."
+        : `${result.updated} dossier${result.updated > 1 ? "s" : ""} ${assigneeId ? `affecté${result.updated > 1 ? "s" : ""} à ${assigneeName(assigneeId)}` : `désaffecté${result.updated > 1 ? "s" : ""}`}. Tracé dans l'historique.`,
+    );
+    if (many || result.updated) selected.value = [];
+  } catch (e) {
+    announce(e instanceof Error ? e.message : "L'affectation a échoué.");
   }
-  assign(ids, assigneeId);
-  announce(
-    `${ids.length} dossier${ids.length > 1 ? "s" : ""} ${assigneeId ? `affecté${ids.length > 1 ? "s" : ""} à ${assigneeName(assigneeId)}` : "désaffecté" + (ids.length > 1 ? "s" : "")}. Tracé dans l'historique.`,
-  );
-  selected.value = [];
   load();
 }
 
@@ -178,25 +200,6 @@ function onSetValue(rowId: string, fieldId: string, value: CustomValue, done: (e
     announce("Valeur enregistrée. Tracée dans l'historique du dossier.");
     load();
   }
-}
-
-/** Applique un accès à la sélection ; les affectations des personnes qui perdent l'accès sont annulées. */
-function onBulkAccess(next: DossierAccess) {
-  let cancelled = 0;
-  for (const id of selected.value) {
-    setAccess(id, next);
-    const row = rows.value.find((r) => r.id === id);
-    if (row?.assigneeId && !memberHasAccess(id, row.assigneeId)) {
-      assign([id], null);
-      cancelled++;
-    }
-  }
-  announce(
-    `Accès défini pour ${selected.value.length} dossier${selected.value.length > 1 ? "s" : ""}.${cancelled ? ` ${cancelled} affectation${cancelled > 1 ? "s" : ""} annulée${cancelled > 1 ? "s" : ""}.` : ""} Tracé dans l'historique.`,
-  );
-  bulkAccessOpen.value = false;
-  selected.value = [];
-  load();
 }
 
 function onColumnsSaved(order: ColumnId[], hidden: ColumnId[]) {
@@ -210,24 +213,29 @@ function onColumnsReset() {
 }
 
 /** Export CSV de la vue courante (filtres et tri appliqués, colonnes visibles). */
-/** Export CSV de la vue courante (filtres et tri appliqués, colonnes visibles). */
-function exportCsv() {
+async function exportCsv() {
   const cols = prefs.visibleColumns.value;
-  const all = queryAll(effectiveFilters.value, sort.value);
-  const cell = (r: TrackingRow, id: ColumnId): string => {
+  let result;
+  try {
+    result = await queryAll(effectiveFilters.value, sort.value);
+  } catch (e) {
+    announce(e instanceof Error ? e.message : "L'export a échoué.");
+    return;
+  }
+  const cell = (r: TrackingListRow, id: ColumnId): string => {
     switch (id) {
       case "reference":
         return r.reference;
       case "name":
         return r.name;
       case "analyse":
-        return analyseName(r.analyseId);
+        return r.analyse.name;
       case "status":
-        return statuses.find((s) => s.id === r.statusId)?.label ?? "";
+        return r.status?.name ?? "";
       case "assignee":
-        return assigneeName(r.assigneeId);
+        return r.assignee?.name ?? "";
       case "due":
-        return r.dueAt ? `${new Date(r.dueAt).toLocaleDateString("fr-FR")} (${dueInfo(r.dueAt).label})` : "";
+        return r.dueAt && r.due ? `${formatDueDate(r.dueAt)} (${dueLabel(r.due)})` : "";
       case "createdAt":
         return new Date(r.createdAt).toLocaleDateString("fr-FR");
       case "lastActivityAt":
@@ -240,9 +248,14 @@ function exportCsv() {
   };
   downloadCsv(
     `suivi-dossiers-${new Date().toISOString().slice(0, 10)}.csv`,
-    toCsv(cols.map((c) => c.label), all.map((r) => cols.map((c) => cell(r, c.id)))),
+    toCsv(cols.map((c) => c.label), result.rows.map((r) => cols.map((c) => cell(r, c.id)))),
   );
-  announce(`${all.length} ligne${all.length > 1 ? "s" : ""} exportée${all.length > 1 ? "s" : ""}.`);
+  const n = result.rows.length;
+  announce(
+    result.total > n
+      ? `${n} lignes exportées sur ${result.total} : l'export est limité à ${EXPORT_LIMIT} lignes, affinez les filtres.`
+      : `${n} ligne${n > 1 ? "s" : ""} exportée${n > 1 ? "s" : ""}.`,
+  );
 }
 </script>
 
@@ -266,7 +279,7 @@ function exportCsv() {
           <summary class="track__tool"><VIcon name="ri-more-2-fill" /> Options</summary>
           <ul class="track__menu">
             <li><button type="button" class="track__menu-item" @click="columnsOpen = true"><VIcon name="ri-layout-column-line" /> Colonnes</button></li>
-            <li v-if="isAdmin && analyseId">
+            <li v-if="CUSTOM_FIELDS_ENABLED && isAdmin && analyseId">
               <button type="button" class="track__menu-item" @click="fieldsOpen = true"><VIcon name="ri-table-line" /> Champs personnalisés</button>
             </li>
             <li><button type="button" class="track__menu-item" @click="exportCsv"><VIcon name="ri-download-2-line" /> Exporter en CSV</button></li>
@@ -283,6 +296,7 @@ function exportCsv() {
       :analyses="analyses"
       :fields="fields"
       :transversal="transversal"
+      :show-access="ACCESS_ENABLED"
       @reset="resetFilters"
     />
 
@@ -290,14 +304,16 @@ function exportCsv() {
       v-if="selected.length"
       :count="selected.length"
       :assignees="assignees"
-      :can-set-access="isAdmin"
+      :can-set-access="ACCESS_ENABLED && isAdmin"
       @assign="(id) => onAssign(selected, id)"
-      @set-access="bulkAccessOpen = true"
       @clear="selected = []"
     />
 
+    <p v-if="loadError" class="track__error" role="alert">
+      {{ loadError }} <button type="button" class="track__tool" @click="load">Réessayer</button>
+    </p>
     <p class="track__count" aria-live="polite">{{ total }} dossier{{ total > 1 ? "s" : "" }}</p>
-    <p v-if="fieldsAreHidden" class="track__hint">
+    <p v-if="CUSTOM_FIELDS_ENABLED && fieldsAreHidden" class="track__hint">
       Les colonnes personnalisées dépendent de l'analyse : filtrez sur une seule analyse pour les afficher.
     </p>
 
@@ -309,8 +325,7 @@ function exportCsv() {
       :fields="fields"
       :assignees="assignees"
       :loading="loading"
-      :can-assign="memberHasAccess"
-      :analyse-name="analyseName"
+      :can-assign="() => true"
       @assign="(id, assigneeId) => onAssign([id], assigneeId)"
       @set-value="onSetValue"
     />
@@ -327,7 +342,6 @@ function exportCsv() {
       @reset="onColumnsReset"
       @close="columnsOpen = false"
     />
-    <BulkAccessModal v-if="bulkAccessOpen" :count="selected.length" @apply="onBulkAccess" @close="bulkAccessOpen = false" />
     <CustomFieldsModal v-if="fieldsOpen && analyseId" :analyse-id="analyseId" @close="fieldsOpen = false" @saved="announce" />
   </div>
 </template>
@@ -426,6 +440,11 @@ function exportCsv() {
 
 .track__pagination {
   margin-top: 0.5rem;
+}
+
+.track__error {
+  margin: 0;
+  color: var(--text-default-error);
 }
 
 .track__notice {

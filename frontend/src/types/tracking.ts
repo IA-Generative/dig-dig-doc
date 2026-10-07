@@ -1,6 +1,8 @@
-// Tableau de suivi des dossiers d'une analyse (issue #173, partie UI).
-// Les données viennent pour l'instant de mocks (useTracking), en attendant
-// les statuts (#168), l'échéance (#172) et l'API d'affectation.
+import type { DueInfo } from "@/types/dossier";
+
+// Tableau de suivi des dossiers d'une analyse (issue #173).
+// La liste vient de l'API (useTrackingApi). Les colonnes personnalisées, les vues et l'accès par groupe
+// restent simulés (useTracking) tant que leur backend n'existe pas.
 
 export type FieldType = "text" | "number" | "amount" | "date" | "boolean" | "choice";
 
@@ -56,6 +58,24 @@ export interface Assignee {
 export interface MockAnalyse {
   id: string;
   name: string;
+}
+
+/** Une ligne du tableau de suivi telle que la renvoie l'API (`GET /api/tracking`, #173). */
+export interface TrackingListRow {
+  id: string;
+  /** Référence lisible (« DOS-2026-0042 »). */
+  reference: string;
+  name: string;
+  analyse: { id: string; name: string };
+  status: { id: string; name: string; color: string; isFinal: boolean } | null;
+  assignee: Assignee | null;
+  dueAt: string | null;
+  /** Niveau d'échéance calculé par le serveur selon les seuils de l'analyse (#172). */
+  due: DueInfo | null;
+  createdAt: string;
+  lastActivityAt: string;
+  /** Valeurs des colonnes personnalisées : pas encore portées par l'API, toujours vide. */
+  values: Record<string, CustomValue>;
 }
 
 export interface TrackingRow {

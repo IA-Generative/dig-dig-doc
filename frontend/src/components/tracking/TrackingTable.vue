@@ -5,14 +5,14 @@ import { RouterLink } from "vue-router";
 import AccessBadge from "@/components/access/AccessBadge.vue";
 import ColumnHelp from "@/components/tracking/ColumnHelp.vue";
 import CellEditor from "@/components/tracking/CellEditor.vue";
-import DueBadge from "@/components/tracking/DueBadge.vue";
-import StatusBadge from "@/components/tracking/StatusBadge.vue";
-import type { Assignee, ColumnDef, CustomField, CustomValue, TrackingRow, TrackingSort } from "@/types/tracking";
+import DossierDueBadge from "@/components/dossiers/DossierDueBadge.vue";
+import WorkflowStatusBadge from "@/components/statuses/WorkflowStatusBadge.vue";
+import type { Assignee, ColumnDef, CustomField, CustomValue, TrackingListRow, TrackingSort } from "@/types/tracking";
 
 // Tableau de suivi : tri par en-tête, sélection de lignes, affectation
 // directe dans la ligne, édition en cellule des champs personnalisés.
 const props = defineProps<{
-  rows: TrackingRow[];
+  rows: TrackingListRow[];
   columns: ColumnDef[];
   fields: CustomField[];
   assignees: Assignee[];
@@ -21,7 +21,6 @@ const props = defineProps<{
   loading: boolean;
   /** Une personne peut-elle être affectée à ce dossier ? (elle doit y avoir accès, #177) */
   canAssign: (rowId: string, assigneeId: string) => boolean;
-  analyseName: (analyseId: string) => string;
 }>();
 
 const emit = defineEmits<{
@@ -94,20 +93,21 @@ function formatDate(iso: string) {
               <AccessBadge :dossier-id="r.id" class="fr-ml-1w" />
             </template>
             <template v-else-if="c.id === 'name'">{{ r.name }}</template>
-            <!-- MOCK : l'identifiant d'analyse simulé n'existe pas côté application ; le lien deviendra valide avec l'API. -->
-            <RouterLink v-else-if="c.id === 'analyse'" :to="`/analyses/${r.analyseId}/suivi`">{{ analyseName(r.analyseId) }}</RouterLink>
-            <StatusBadge v-else-if="c.id === 'status'" :status-id="r.statusId" />
+            <RouterLink v-else-if="c.id === 'analyse'" :to="`/analyses/${r.analyse.id}/suivi`">{{ r.analyse.name }}</RouterLink>
+            <WorkflowStatusBadge v-else-if="c.id === 'status' && r.status" :status="r.status" />
+            <span v-else-if="c.id === 'status'" class="tt__none">—</span>
             <select
               v-else-if="c.id === 'assignee'"
               class="fr-select tt__assignee"
-              :value="r.assigneeId ?? ''"
+              :value="r.assignee?.id ?? ''"
               :aria-label="`Affecté à — ${r.reference}`"
               @change="emit('assign', r.id, ($event.target as HTMLSelectElement).value || null)"
             >
               <option value="">Non affecté</option>
-              <option v-for="a in assignees.filter((x) => canAssign(r.id, x.id) || x.id === r.assigneeId)" :key="a.id" :value="a.id">{{ a.name }}</option>
+              <option v-for="a in assignees.filter((x) => canAssign(r.id, x.id) || x.id === r.assignee?.id)" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
-            <DueBadge v-else-if="c.id === 'due'" :due-at="r.dueAt" />
+            <DossierDueBadge v-else-if="c.id === 'due' && r.due" :due="r.due" compact />
+            <span v-else-if="c.id === 'due'" class="tt__none">—</span>
             <template v-else-if="c.id === 'createdAt'">{{ formatDate(r.createdAt) }}</template>
             <template v-else-if="c.id === 'lastActivityAt'">{{ formatDate(r.lastActivityAt) }}</template>
             <CellEditor
@@ -128,6 +128,10 @@ function formatDate(iso: string) {
 </template>
 
 <style scoped>
+.tt__none {
+  color: var(--text-mention-grey);
+}
+
 .tt {
   overflow-x: auto;
   min-height: 12rem;
