@@ -357,18 +357,20 @@ def test_events_leave_with_their_dossier(client: TestClient) -> None:
     assert run(client, count_events) == 0  # le journal suit le dossier (cascade, cf. #94)
 
 
-def test_dossier_created_by_the_internal_agent_is_journaled_as_a_system_action(client: TestClient) -> None:
+def test_dossier_created_by_the_internal_agent_is_journaled_under_the_person_it_acts_for(client: TestClient) -> None:
     analyse = _create_analyse(client)
+    client.get("/api/auth/me")  # la personne est connue de l'annuaire, avec ses groupes
 
     created = client.post(
         "/api/internal/agent/dossiers",
         json={"name": "Dossier de l'agent", "analyse_id": analyse["id"]},
-        headers=INTERNAL_HEADERS,
+        headers={**INTERNAL_HEADERS, "X-Acting-User": ME},
     )
 
     assert created.status_code == 201, created.text
     (event,) = _events(client, created.json()["id"])
-    assert event["type"] == "created" and event["actor_id"] is None
+    # L'agent agit au nom de la personne (issue #222) : c'est elle qui est responsable de l'action.
+    assert event["type"] == "created" and event["actor_id"] == ME
 
 
 # --- Auteurs (filtre de l'historique) ---

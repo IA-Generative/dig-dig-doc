@@ -33,6 +33,8 @@ def run_helper_chat(self, conversation_id: str, model: str | None = None) -> Non
         try:
             # 1. Charge la conversation (historique user/assistant).
             conversation = api_client.get_agent_conversation(client, conversation_id)
+            # L'agent agit au nom de la personne qui a ouvert la conversation.
+            api_client.act_for(client, conversation["created_by"])
             history = _build_conversation_history(conversation)
             tools = HelperTools(client)
 

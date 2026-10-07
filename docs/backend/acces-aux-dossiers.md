@@ -2,7 +2,7 @@
 
 Issue #177 (partie 1 : modèle, règle, création, modification, affectation), parent #144. Avoir accès à une **analyse** ne donne plus accès à tous ses **dossiers** : un dossier peut être **restreint** à certains groupes Keycloak.
 
-> **État : parties 1 et 2.** La règle s'applique à **toutes** les routes d'un dossier, au suivi, au tableau de bord, aux notifications, aux créneaux et aux conversations. Restent : l'interface (section « Accès », pastille « Restreint »), l'agent assistant MCP et les rôles (voir « Reste à faire »).
+> **État : parties 1 et 2, et agent assistant.** La règle s'applique à **toutes** les routes d'un dossier, au suivi, au tableau de bord, aux notifications, aux créneaux et aux conversations, et l'**agent assistant** agit avec les droits de la personne pour qui il travaille ([détail](acces-de-l-agent-assistant.md)). Restent : l'interface (section « Accès », pastille « Restreint ») et les rôles (voir « Reste à faire »).
 
 ## Règle
 
@@ -70,7 +70,7 @@ Un administrateur qui entre dans un dossier **restreint dont il n'est pas membre
 ## Reste à faire
 
 - **Interface** : section « Accès » du dossier, pastille « Restreint », choix des groupes à la création, filtre « Accès » et action en lot du suivi (aujourd'hui masqués).
-- **Agent assistant (MCP)** : il agit avec un jeton d'application et ne passe pas par cette règle ; à traiter avec l'identité de la personne qui l'utilise.
+- *(fait, #222)* **Agent assistant** : il agit désormais avec les droits de la personne pour qui il travaille : [accès de l'agent assistant](acces-de-l-agent-assistant.md).
 - Un lien de partage par e-mail ne doit jamais donner plus de droits que ceux du destinataire.
 - Prise en compte des changements de groupes Keycloak en cours de session ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)) ; dossier restreint sans groupe actif ([#181](https://github.com/IA-Generative/dig-dig-doc/issues/181)).
 - Rôles (lecture, instructeur…) : [#178](https://github.com/IA-Generative/dig-dig-doc/issues/178).
