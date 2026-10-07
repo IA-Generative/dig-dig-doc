@@ -53,6 +53,7 @@ from .dossier import (
     ExecutionStepStatus,
     TextExtractionStatus,
 )
+from .dossier_access import DossierGroupAccess, Visibility
 from .dossier_analysis import (
     AnalysisElement,
     AnalysisElementKind,
@@ -96,6 +97,7 @@ __all__ = [
     "FieldStatus",
     "DocumentTemplateVersion",
     "AppUser",
+    "DossierGroupAccess",
     "DossierEvent",
     "DossierEventType",
     "DossierNote",
@@ -174,6 +176,7 @@ __all__ = [
     "Notification",
     "NotificationCursor",
     "UserTask",
+    "Visibility",
     "WorkSlot",
     "UserTaskKind",
     "UserTaskStatus",

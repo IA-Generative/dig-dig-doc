@@ -53,14 +53,14 @@ def test_creation_is_recorded_with_its_author(client: TestClient) -> None:
     assert event["type"] == "created"
     assert event["actor_id"] == ME
     assert event["actor_name"] == "dev@example.com"
-    assert event["payload"] == {"analyse_id": analyse["id"]}
+    assert event["payload"] == {"analyse_id": analyse["id"], "visibility": "restricted", "groups": ["/dev-tests"]}
     assert event["created_at"]
 
 
 def test_dossier_without_analyse_records_creation_without_analyse(client: TestClient) -> None:
     dossier = _create_dossier(client, None, "Dossier à ranger")
     (event,) = _events(client, dossier["id"])
-    assert event["payload"] == {"analyse_id": None}
+    assert event["payload"] == {"analyse_id": None, "visibility": "restricted", "groups": ["/dev-tests"]}
 
 
 def test_events_are_listed_most_recent_first_and_paginated(client: TestClient) -> None:

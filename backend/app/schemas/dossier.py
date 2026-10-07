@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -422,6 +423,41 @@ class DossierCreate(BaseModel):
     # assignée à la création. Les suggestions d'analyse sont générées après
     # upload des documents et génération des résumés.
     analyse_id: uuid.UUID | None = None
+    # Accès (issue #177). Absent : « restricted » aux groupes de la personne qui crée. « restricted » demande au
+    # moins un groupe, **parmi les siens** ; « analyse » ouvre le dossier à tous ceux qui ont accès à l'analyse.
+    visibility: Literal["restricted", "analyse"] | None = None
+    group_paths: list[str] | None = None
+
+
+class DossierGroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    path: str = Field(validation_alias="keycloak_group")
+    granted_by: str | None
+    created_at: datetime
+
+
+class DossierAccessOut(BaseModel):
+    """Qui voit le dossier : sa visibilité et ses groupes. Lisible par ceux qui voient le dossier ; seuls les
+    administrateurs la modifient (``can_edit``)."""
+
+    visibility: Literal["restricted", "analyse"]
+    groups: list[DossierGroupOut]
+    can_edit: bool
+    # Groupes que la personne connectée peut associer : les siens (pas d'appel à Keycloak, pas d'héritage).
+    available_groups: list[str]
+
+
+class DossierAccessUpdate(BaseModel):
+    visibility: Literal["restricted", "analyse"]
+    # Groupes associés, en remplacement. Un groupe déjà associé se garde ou se retire librement ; un nouveau doit
+    # faire partie des groupes de la personne qui modifie.
+    group_paths: list[str] = Field(default_factory=list, max_length=50)
+
+
+class DossierAccessChangeOut(DossierAccessOut):
+    # Vrai si le changement a annulé l'affectation d'une personne qui perdait l'accès.
+    assignee_unassigned: bool = False
 
 
 # --- Schémas internes (worker agent_execution) ---

@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.dossier_access import Visibility
 from app.models.summary import SummaryStatus
 from app.services.due_date import DEFAULT_THRESHOLDS, DueInfo, closed_before_due, due_info, today_in_paris
 
@@ -69,6 +70,9 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "dossiers"
 
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # Qui voit le dossier (issue #177). « analyse » est la valeur historique (et celle des créations
+    # programmatiques : MCP, runs éphémères) ; l'API des utilisateurs crée des dossiers « restricted ».
+    visibility: Mapped[str] = mapped_column(String, nullable=False, default=Visibility.ANALYSE.value)
     # Numéro d'ordre, strictement croissant, attribué par la base : il fait la référence lisible du dossier
     # (« DOS-2026-0042 », cf. `reference`), que les instructeurs se communiquent (issue #173).
     ref_number: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False, unique=True)
