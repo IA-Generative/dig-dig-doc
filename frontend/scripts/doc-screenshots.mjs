@@ -1,4 +1,4 @@
-// Prend les captures d'écran de la documentation du tableau de bord (#174),
+// Prend les captures d'écran de la documentation du tableau de bord (#174), des statuts de dossier (#170),
 // du tableau de suivi (#173, #186) et de l'accès par groupe (#177), sous
 // docs/frontend/<fonctionnalité>/.
 //
@@ -23,6 +23,23 @@ const profiles = {
   user: { user_id: "u1", email: "alex.martin@example.org", first_name: "Alex", last_name: "Martin", roles: [], is_admin: false, groups: ["/service-culture", "/service-sport"] },
 };
 
+const STATUS = (id, name, color, position, is_initial = false, is_final = false) => ({
+  id,
+  name,
+  color,
+  position,
+  is_initial,
+  is_final,
+});
+
+const STATUSES = [
+  STATUS("st-1", "À instruire", "#6a6af4", 0, true),
+  STATUS("st-2", "En instruction", "#0063cb", 1),
+  STATUS("st-3", "Pièces manquantes", "#b34000", 2),
+  STATUS("st-4", "À valider", "#8585f6", 3),
+  STATUS("st-5", "Clos", "#18753c", 4, false, true),
+];
+
 const dossier = (n, name, extra = {}) => ({
   id: `dos-${n}`,
   name,
@@ -39,18 +56,40 @@ const dossier = (n, name, extra = {}) => ({
   summary: null,
   suggestion_status: "terminé",
   suggested_analyses: [],
+  workflow_status: STATUSES[n % 3],
+  closed_at: null,
   ...extra,
 });
 
 const dossiers = [
   dossier(3, "Subvention association Les Mouettes n°102"),
   dossier(1, "Convention de partenariat culturelle n°100"),
-  dossier(9, "Aide au projet sportif jeunesse n°108"),
+  dossier(9, "Aide au projet sportif jeunesse n°108", { workflow_status: STATUSES[2] }),
 ];
 
 const page_of = (items) => ({ items, total: items.length, page: 1, page_size: 20, pages: 1 });
 
 function api(role) {
+  // Statuts de l'analyse, modifiables : un statut encore utilisé ne peut pas être supprimé sans remplaçant.
+  let statuses = STATUSES.map((s) => ({ ...s }));
+  let versions = [
+    {
+      id: "ver-1",
+      created_at: iso(-12),
+      content: STATUSES.filter((s) => s.id !== "st-3" && s.id !== "st-4").map((s, i) => ({ ...s, position: i, is_final: s.id === "st-5" })),
+    },
+  ];
+  const analyseOut = () => ({
+    id: ANALYSE_ID,
+    name: "Instruction subventions",
+    description: "Instruction des demandes de subvention des associations.",
+    created_at: iso(-90),
+    classification: { prompt: "", prompt_versions: [], labels: [], labels_versions: [] },
+    extraction: { prompt: "", prompt_versions: [], entities: [], entities_versions: [] },
+    statuses,
+    statuses_versions: versions,
+    agents: [],
+  });
   return (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -62,20 +101,28 @@ function api(role) {
     if (path === "/api/cgu/acceptance") return json({ accepted: true, cgu: null });
     if (path === "/api/cgu") return json({}, 404);
     if (path === "/api/analyses") {
-      return json(page_of([{ id: ANALYSE_ID, name: "Instruction subventions", description: "Instruction des demandes de subvention des associations.", created_at: iso(-90), agent_count: 2 }]));
+      return json(page_of([{ id: ANALYSE_ID, name: "Instruction subventions", description: "Instruction des demandes de subvention des associations.", created_at: iso(-90), agent_count: 2, statuses }]));
     }
-    if (path === `/api/analyses/${ANALYSE_ID}`) {
-      return json({
-        id: ANALYSE_ID,
-        name: "Instruction subventions",
-        description: "Instruction des demandes de subvention des associations.",
-        created_at: iso(-90),
-        classification: { prompt: "", prompt_versions: [], labels: [], labels_versions: [] },
-        extraction: { prompt: "", prompt_versions: [], entities: [], entities_versions: [] },
-        agents: [],
-      });
+    if (path === `/api/analyses/${ANALYSE_ID}`) return json(analyseOut());
+    if (path === `/api/analyses/${ANALYSE_ID}/statuses` && method === "PUT") {
+      const body = route.request().postDataJSON();
+      const kept = new Set(body.statuses.map((x) => x.id));
+      const removedInUse = statuses.filter((x) => !kept.has(x.id) && dossiers.some((d) => d.workflow_status?.id === x.id));
+      const missing = removedInUse.filter((x) => !body.replacements?.[x.id]);
+      if (missing.length) {
+        return json(
+          { detail: { code: "status_in_use", message: "Des statuts supprimés sont encore utilisés par des dossiers.", statuses: missing.map((x) => ({ id: x.id, name: x.name, dossier_count: dossiers.filter((d) => d.workflow_status?.id === x.id).length })) } },
+          409,
+        );
+      }
+      versions = [{ id: `ver-${versions.length + 1}`, created_at: new Date().toISOString(), content: statuses }, ...versions];
+      statuses = body.statuses.map((x, i) => ({ id: x.id ?? `st-new-${i}`, name: x.name, color: x.color, position: i, is_initial: x.is_initial, is_final: x.is_final }));
+      return json(analyseOut());
     }
-    if (path === "/api/dossiers" && method === "GET") return json(page_of(dossiers));
+    if (path === "/api/dossiers" && method === "GET") {
+      const wanted = url.searchParams.get("workflow_status_id");
+      return json(page_of(wanted ? dossiers.filter((d) => d.workflow_status?.id === wanted) : dossiers));
+    }
     const match = path.match(/^\/api\/dossiers\/(dos-\d+)$/);
     if (match) return json(dossiers.find((d) => `dos-${match[1].slice(4)}` === d.id) ?? dossiers[0]);
     if (path === "/api/conversations") return json(page_of([]));
@@ -308,11 +355,47 @@ async function access(browser) {
   await page.context().close();
 }
 
+// ---------------------------------------------------------------------------
+// Statuts de dossier
+// ---------------------------------------------------------------------------
+async function workflowStatuses(browser) {
+  const dir = "statuts-de-dossier";
+  let page = await newPage(browser, "admin", { width: 1280, height: 1500 });
+
+  await page.goto(`${baseUrl}/analyses/${ANALYSE_ID}/statuts`, { waitUntil: "networkidle" });
+  await page.getByText("Statuts de dossier").first().waitFor();
+  await shot(page, dir, "01-onglet-statuts.png");
+
+  await page.getByText(/Historique des versions/).click();
+  await shot(page, dir, "02-historique-des-statuts.png");
+
+  // Supprimer un statut encore utilisé : le serveur répond 409 et on choisit un remplaçant.
+  await page.getByRole("button", { name: "Supprimer Pièces manquantes" }).click();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await shotModal(page, dir, "03-remplacer-un-statut-utilise.png");
+  await closeModal(page);
+
+  // Dossiers : colonne Statut, filtre et tri
+  await page.goto(`${baseUrl}/dossiers`, { waitUntil: "networkidle" });
+  await page.getByText("Subvention association Les Mouettes").first().waitFor();
+  await shot(page, dir, "04-liste-des-dossiers.png");
+
+  await page.locator("#dossiers-status-filter").selectOption("st-2");
+  await shot(page, dir, "05-filtre-par-statut.png");
+
+  // Changer le statut depuis le dossier
+  await page.goto(`${baseUrl}/dossiers/dos-3`, { waitUntil: "networkidle" });
+  await page.getByText("Changer le statut du dossier").waitFor({ state: "attached" });
+  await shot(page, dir, "06-statut-dans-le-dossier.png");
+  await page.context().close();
+}
+
 const browser = await chromium.launch();
 try {
   await dashboard(browser);
   await tracking(browser);
   await access(browser);
+  await workflowStatuses(browser);
 } finally {
   await browser.close();
 }

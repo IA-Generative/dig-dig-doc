@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import AccessBadge from "@/components/access/AccessBadge.vue";
+import WorkflowStatusPicker from "@/components/statuses/WorkflowStatusPicker.vue";
 import AccessModal from "@/components/access/AccessModal.vue";
 import ModelPicker from "@/components/ModelPicker.vue";
 import ChatWindow, { type ChatWindowSource } from "@/components/ChatWindow.vue";
@@ -36,6 +37,7 @@ const {
   regenerateDossierSummary,
   suggestAnalyse,
   assignAnalyse,
+  setWorkflowStatus,
 } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const {
@@ -167,6 +169,16 @@ const suggestionBadgeType: Record<SuggestionStatus, "new" | "info" | "success" |
 
 const isUnassigned = computed(() => !dossier.value?.analyseId);
 
+const statusError = ref("");
+async function onWorkflowStatusChange(statusId: string) {
+  statusError.value = "";
+  try {
+    await setWorkflowStatus(dossierId, statusId);
+  } catch (e) {
+    statusError.value = e instanceof Error ? e.message : "Le changement de statut a échoué.";
+  }
+}
+
 // Fil d'échange pour alimenter l'analyse : les résultats eux-mêmes sont
 // présentés directement dans DossierResults, pas ici, pour rester visibles
 // sans avoir à remonter la conversation. Les messages sont chargés par pages
@@ -231,6 +243,15 @@ async function onDeleteConversation() {
             · Version {{ dossier.analyseVersion }}
           </template>
         </p>
+        <!-- Statut de dossier (#170) : propre à l'analyse ; absent d'un dossier « à ranger ». -->
+        <WorkflowStatusPicker
+          v-if="!isUnassigned && analyse"
+          :statuses="analyse.statuses"
+          :current="dossier.workflowStatus"
+          :closed-at="dossier.closedAt"
+          @change="onWorkflowStatusChange"
+        />
+        <p v-if="statusError" class="fr-error-text" role="alert">{{ statusError }}</p>
       </div>
       <div class="dossier-detail__header-actions">
         <ModelPicker

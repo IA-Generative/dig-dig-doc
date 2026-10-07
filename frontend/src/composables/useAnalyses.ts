@@ -9,6 +9,8 @@ import type {
   EntityDefinition,
   LabelDefinition,
   Version,
+  StatusDraft,
+  WorkflowStatus,
 } from "@/types/analyse";
 
 function mapVersion<TApi, T>(v: { id: string; content: TApi; created_at: string }, mapContent: (c: TApi) => T): Version<T> {
@@ -23,6 +25,17 @@ function mapLabel(api: { id: string; name: string; definition: string }): LabelD
 
 function mapEntity(api: { id: string; name: string; definition: string; type: EntityDefinition["type"] }): EntityDefinition {
   return { id: api.id, name: api.name, definition: api.definition, type: api.type };
+}
+
+function mapStatus(api: any): WorkflowStatus {
+  return {
+    id: api.id,
+    name: api.name,
+    color: api.color,
+    position: api.position,
+    isInitial: api.is_initial,
+    isFinal: api.is_final,
+  };
 }
 
 function mapAgent(api: any): Agent {
@@ -62,12 +75,23 @@ function mapAnalyse(api: any): Analyse {
         mapVersion(v, (content: any[]) => content.map(mapEntity)),
       ),
     },
+    statuses: (api.statuses ?? []).map(mapStatus),
+    statusesVersions: (api.statuses_versions ?? []).map((v: any) =>
+      mapVersion(v, (content: any[]) => content.map(mapStatus)),
+    ),
     agents: api.agents.map(mapAgent),
   };
 }
 
 function mapSummary(api: any): AnalyseSummary {
-  return { id: api.id, name: api.name, description: api.description, createdAt: api.created_at, agentCount: api.agent_count };
+  return {
+    id: api.id,
+    name: api.name,
+    description: api.description,
+    createdAt: api.created_at,
+    agentCount: api.agent_count,
+    statuses: (api.statuses ?? []).map(mapStatus),
+  };
 }
 
 // Store partagé par toute l'application : `summaries` contient la page
@@ -186,6 +210,47 @@ export function useAnalyses() {
     cache[analyseId] = mapAnalyse(data);
   };
 
+  // --- Statuts de dossier (issue #168) ---
+
+  /**
+   * Remplace la liste des statuts. Un statut qui a un `id` est conservé (les dossiers y font référence) ;
+   * sans `id`, il est créé. `replacements` : pour chaque statut supprimé encore utilisé, le statut qui reprend
+   * ses dossiers. Sans remplaçant, le serveur répond 409 (ApiError, `detail.statuses` liste les statuts
+   * concernés et leur nombre de dossiers).
+   */
+  const updateStatuses = async (
+    analyseId: string,
+    statuses: StatusDraft[],
+    replacements: Record<string, string> = {},
+  ) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/statuses`, {
+      method: "PUT",
+      body: JSON.stringify({
+        statuses: statuses.map(({ id, name, color, isInitial, isFinal }) => ({
+          id: id ?? undefined,
+          name,
+          color,
+          is_initial: isInitial,
+          is_final: isFinal,
+        })),
+        replacements,
+      }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
+  const restoreStatusesVersion = async (
+    analyseId: string,
+    versionId: string,
+    replacements: Record<string, string> = {},
+  ) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/statuses/restore/${versionId}`, {
+      method: "POST",
+      body: JSON.stringify({ replacements }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
   // --- Agents (créés librement par l'utilisateur pour un but métier) ---
 
   const addAgent = async (
@@ -285,6 +350,8 @@ export function useAnalyses() {
     restoreExtractionPromptVersion,
     updateExtractionEntities,
     restoreExtractionEntitiesVersion,
+    updateStatuses,
+    restoreStatusesVersion,
     addAgent,
     updateAgentPrompt,
     restoreAgentPromptVersion,

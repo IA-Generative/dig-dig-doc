@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { RouterLink, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import AccessBadge from "@/components/access/AccessBadge.vue";
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
+import WorkflowStatusBadge from "@/components/statuses/WorkflowStatusBadge.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useDossiers } from "@/composables/useDossiers";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/types/dossier";
 
 const router = useRouter();
+const route = useRoute();
 const { list: dossiers, pageCount, fetchList, launch, stop, suggestAnalyse } = useDossiers();
 const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 
@@ -27,7 +29,28 @@ const pages = computed(() =>
   Array.from({ length: pageCount.value }, (_, i) => ({ label: String(i + 1), title: `Page ${i + 1}` })),
 );
 
-watch(currentPage, (page) => fetchList(page, PAGE_SIZE), { immediate: true });
+// Filtre par statut de dossier et tri (#170) ; le filtre se lit dans l'URL (?status=<id>) pour que le
+// tableau de bord et le suivi puissent y renvoyer.
+const statusFilter = ref(typeof route.query.status === "string" ? route.query.status : "");
+const sort = ref<"created_at" | "status">("created_at");
+
+watch(
+  [currentPage, statusFilter, sort],
+  () => fetchList(currentPage.value, PAGE_SIZE, { workflowStatusId: statusFilter.value || undefined, sort: sort.value }),
+  { immediate: true },
+);
+// Un changement de filtre ou de tri ramène à la première page.
+watch([statusFilter, sort], () => (currentPage.value = 1));
+
+/** Statuts de toutes les analyses ; le nom de l'analyse les distingue quand il y en a plusieurs. */
+const statusOptions = computed(() => [
+  { value: "", text: "Tous les statuts" },
+  ...analyses.value.flatMap((a) =>
+    [...a.statuses]
+      .sort((x, y) => x.position - y.position)
+      .map((s) => ({ value: s.id, text: analyses.value.length > 1 ? `${a.name} — ${s.name}` : s.name })),
+  ),
+]);
 // La table affiche le nom de l'analyse liée à chaque dossier : la liste
 // paginée par défaut (6-20 éléments) ne couvre pas forcément toutes les
 // analyses existantes, donc on en charge une fenêtre large dédiée à cette
@@ -90,7 +113,25 @@ function isUnassigned(dossier: Dossier) {
       <DsfrButton label="Créer un dossier" icon="ri-add-line" @click="isCreateModalOpened = true" />
     </div>
 
-    <p v-if="dossiers.length === 0" class="fr-text--sm">Aucun dossier pour le moment.</p>
+    <div class="dossiers-page__filters">
+      <div>
+        <label for="dossiers-status-filter" class="dossiers-page__filter-label">Statut</label>
+        <select id="dossiers-status-filter" v-model="statusFilter" class="fr-select">
+          <option v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.text }}</option>
+        </select>
+      </div>
+      <div>
+        <label for="dossiers-sort" class="dossiers-page__filter-label">Trier par</label>
+        <select id="dossiers-sort" v-model="sort" class="fr-select">
+          <option value="created_at">Date (plus récents d'abord)</option>
+          <option value="status">Statut</option>
+        </select>
+      </div>
+    </div>
+
+    <p v-if="dossiers.length === 0" class="fr-text--sm">
+      {{ statusFilter ? "Aucun dossier dans ce statut." : "Aucun dossier pour le moment." }}
+    </p>
 
     <div v-else class="fr-table">
       <div class="fr-table__wrapper">
@@ -102,6 +143,7 @@ function isUnassigned(dossier: Dossier) {
                   <th scope="col">Dossier</th>
                   <th scope="col">Analyse</th>
                   <th scope="col">Statut</th>
+                  <th scope="col">Exécution</th>
                   <th scope="col">Date</th>
                   <th scope="col" class="dossiers-page__actions-col">Actions</th>
                 </tr>
@@ -131,6 +173,10 @@ function isUnassigned(dossier: Dossier) {
                         class="dossiers-page__suggestion-badge"
                       />
                     </div>
+                  </td>
+                  <td>
+                    <WorkflowStatusBadge v-if="dossier.workflowStatus" :status="dossier.workflowStatus" />
+                    <span v-else class="fr-text--xs dossiers-page__no-status">—</span>
                   </td>
                   <td><DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small /></td>
                   <td>
@@ -193,6 +239,24 @@ function isUnassigned(dossier: Dossier) {
 </template>
 
 <style scoped>
+.dossiers-page__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dossiers-page__filter-label {
+  display: block;
+  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.dossiers-page__no-status {
+  color: var(--text-mention-grey);
+}
+
 .dossiers-page__header {
   display: flex;
   align-items: flex-start;
