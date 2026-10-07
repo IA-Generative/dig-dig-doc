@@ -68,10 +68,11 @@ function onRemove() {
 
     <button
       type="button"
-      class="fr-btn fr-btn--sm fr-btn--icon-left urow__plan"
-      :class="slot ? 'fr-btn--secondary ri-calendar-check-line' : 'fr-btn--tertiary ri-calendar-event-line'"
+      class="fr-btn fr-btn--sm urow__plan"
+      :class="slot ? 'fr-btn--secondary' : 'fr-btn--tertiary'"
       @click="editing = true"
     >
+      <VIcon :name="slot ? 'ri-calendar-check-line' : 'ri-calendar-event-line'" />
       <template v-if="slotLabel">
         <span class="fr-sr-only">Traitement planifié : </span>{{ slotLabel }}
         <VIcon v-if="slot?.recurrence" name="ri-repeat-line" aria-label="Se répète" />
@@ -141,6 +142,7 @@ function onRemove() {
 }
 
 .urow__plan {
+  gap: 0.375rem;
   flex-shrink: 0;
   max-width: 18rem;
   white-space: normal;

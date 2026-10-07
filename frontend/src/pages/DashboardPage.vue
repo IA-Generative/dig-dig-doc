@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { RouterLink } from "vue-router";
 
 import ActivityModal from "@/components/dashboard/ActivityModal.vue";
 import AgendaToolbar, { type AgendaView } from "@/components/dashboard/AgendaToolbar.vue";
@@ -67,7 +68,10 @@ function onSchedule(dossierId: string, slot: SlotDraft | null) {
       <!-- Quatre indicateurs simples ; le détail s'ouvre au clic. -->
       <MetricsRow :urgencies="sorted" :stats="data.stats" :status-counts="data.statusCounts" />
 
-      <h2 class="dashboard__agenda-title">Mon agenda</h2>
+      <div class="dashboard__agenda-head">
+        <h2 class="dashboard__agenda-title">Mon agenda</h2>
+        <RouterLink :to="{ path: '/suivi', query: { assignee: 'me' } }" class="dashboard__all">Tous mes dossiers</RouterLink>
+      </div>
       <AgendaToolbar v-model:view="view" v-model:filters-open="filtersOpen" :filters-active="hasActiveFilters" />
 
       <UrgencyFilters
@@ -116,8 +120,20 @@ function onSchedule(dossierId: string, slot: SlotDraft | null) {
   }
 }
 
+.dashboard__agenda-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.dashboard__all {
+  font-size: 0.875rem;
+}
+
 .dashboard__agenda-title {
-  margin: 0 0 0.5rem;
+  margin: 0;
   font-size: 1.25rem;
   font-weight: 800;
 }

@@ -8,9 +8,12 @@ import { FIELD_TYPE_LABELS, type CustomField, type CustomValue, type FieldType }
 // Définition des colonnes personnalisées (administrateur de l'analyse).
 // Versionnée avec historique et restauration, comme les autres champs
 // d'une analyse (cf. VersionHistory).
+const props = defineProps<{ analyseId: string }>();
 const emit = defineEmits<{ close: []; saved: [message: string] }>();
 
-const { fields, fieldsVersions, saveFields, restoreFieldsVersion } = useTracking();
+const { fieldsOf, fieldsVersionsOf, saveFields, restoreFieldsVersion } = useTracking();
+const fields = computed(() => fieldsOf(props.analyseId));
+const fieldsVersions = computed(() => fieldsVersionsOf(props.analyseId));
 
 const draft = ref<CustomField[]>(JSON.parse(JSON.stringify(fields.value)));
 const openId = ref<string | null>(null);
@@ -69,13 +72,13 @@ const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(fiel
 
 function save() {
   if (errors.value.length) return;
-  saveFields(draft.value.map((f) => ({ ...f, name: f.name.trim() })), purge.value);
+  saveFields(props.analyseId, draft.value.map((f) => ({ ...f, name: f.name.trim() })), purge.value);
   emit("saved", "Colonnes personnalisées enregistrées. L'ancienne version est dans l'historique.");
   emit("close");
 }
 
 function restore(versionId: string) {
-  restoreFieldsVersion(versionId);
+  restoreFieldsVersion(props.analyseId, versionId);
   emit("saved", "Version restaurée.");
   emit("close");
 }
@@ -151,7 +154,7 @@ const defaultAsString = (v: CustomValue) => (v === null ? "" : String(v));
       </li>
     </ul>
 
-    <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary fr-btn--icon-left ri-add-line" @click="addField">Ajouter un champ</button>
+    <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary" style="gap: 0.375rem" @click="addField"><VIcon name="ri-add-line" /> Ajouter un champ</button>
 
     <div v-if="removed.length" class="cf__removed" role="status">
       <p>

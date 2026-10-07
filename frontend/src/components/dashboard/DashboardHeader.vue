@@ -73,7 +73,10 @@ const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : 
 .head__date {
   margin: 0;
   color: var(--text-mention-grey);
-  text-transform: capitalize;
+}
+
+.head__date::first-letter {
+  text-transform: uppercase;
 }
 
 .head__actions {

@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 
+import { mockDossierName } from "@/mocks/dossiers";
 import type { AppNotification } from "@/types/dashboard";
 import type { SlotDraft } from "@/types/schedule";
 import { occurrenceStarts } from "@/utils/recurrence";
@@ -14,40 +15,40 @@ const notifications = ref<AppNotification[]>([
   {
     id: "n-1",
     kind: "overdue",
-    dossierId: "mock-1",
-    dossierName: "Subvention association Les Mouettes",
+    dossierId: "dos-5",
+    dossierName: mockDossierName("dos-5"),
     message: "L'échéance du dossier est dépassée.",
     createdAt: hoursAgo(2),
   },
   {
     id: "n-2",
     kind: "assigned",
-    dossierId: "mock-4",
-    dossierName: "Demande d'aide à la rénovation énergétique",
+    dossierId: "dos-9",
+    dossierName: mockDossierName("dos-9"),
     message: "Ce dossier vous a été affecté par Camille D.",
     createdAt: hoursAgo(5),
   },
   {
     id: "n-3",
     kind: "analysis_done",
-    dossierId: "mock-2",
-    dossierName: "Permis de construire 2026-0412",
+    dossierId: "dos-13",
+    dossierName: mockDossierName("dos-13"),
     message: "L'analyse que vous avez lancée est terminée.",
     createdAt: hoursAgo(26),
   },
   {
     id: "n-5",
     kind: "reminder",
-    dossierId: "mock-u2",
-    dossierName: "Marché public fournitures bureau #102",
+    dossierId: "dos-17",
+    dossierName: mockDossierName("dos-17"),
     message: "Rappel : créneau de traitement à 09:00.",
     createdAt: hoursAgo(1),
   },
   {
     id: "n-4",
     kind: "status_changed",
-    dossierId: "mock-3",
-    dossierName: "Marché public fournitures bureau",
+    dossierId: "dos-21",
+    dossierName: mockDossierName("dos-21"),
     message: "Statut passé à « À valider » par Samir B.",
     createdAt: hoursAgo(50),
     readAt: hoursAgo(40),

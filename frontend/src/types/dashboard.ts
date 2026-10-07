@@ -14,6 +14,7 @@ export const DUE_LEVEL_LABELS: Record<DueLevel, string> = {
 export interface DashboardUrgency {
   dossierId: string;
   dossierName: string;
+  analyseId: string;
   analyseName: string;
   statusLabel: string;
   dueAt: string;

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink, type RouteLocationRaw } from "vue-router";
 
 // Barres horizontales simples (libellé, barre, valeur) : la valeur est
 // toujours écrite, la barre n'est qu'un repère visuel.
-const props = defineProps<{ items: { label: string; value: number }[] }>();
+// `to` : lien optionnel du libellé (par exemple vers le suivi filtré).
+const props = defineProps<{ items: { label: string; value: number; to?: RouteLocationRaw }[] }>();
 
 const max = computed(() => Math.max(1, ...props.items.map((i) => i.value)));
 </script>
@@ -11,7 +13,8 @@ const max = computed(() => Math.max(1, ...props.items.map((i) => i.value)));
 <template>
   <ul class="bars">
     <li v-for="i in items" :key="i.label" class="bars__row">
-      <span class="bars__label">{{ i.label }}</span>
+      <RouterLink v-if="i.to" :to="i.to" class="bars__label bars__link">{{ i.label }}</RouterLink>
+      <span v-else class="bars__label">{{ i.label }}</span>
       <span class="bars__track" aria-hidden="true">
         <span class="bars__fill" :style="{ width: `${(i.value / max) * 100}%` }" />
       </span>
@@ -42,6 +45,11 @@ const max = computed(() => Math.max(1, ...props.items.map((i) => i.value)));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bars__link {
+  background-image: none;
+  color: var(--text-action-high-blue-france);
 }
 
 .bars__track {
