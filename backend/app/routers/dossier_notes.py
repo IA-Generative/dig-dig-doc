@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_client import dispatch_note_proposals
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.dossier_analysis import DossierAnalysisStatus
@@ -25,7 +26,9 @@ from app.repositories.dossier_note_repository import (
 from app.repositories.dossier_repository import DossierRepository
 from app.schemas.dossier_note import NoteCreateIn, NoteOut, NoteRestoreIn, NoteUpdateIn, NoteVersionOut
 
-router = APIRouter(prefix="/dossiers", tags=["Notes"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers", tags=["Notes"], dependencies=[Depends(get_current_user), Depends(require_dossier_visible)]
+)
 
 
 async def _note_or_404(db: AsyncSession, dossier_id: uuid.UUID, note_id: uuid.UUID) -> DossierNote:

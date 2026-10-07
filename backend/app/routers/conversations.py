@@ -28,6 +28,6 @@ async def list_my_conversations(
     en paramètre : list_conversations_for_user filtre déjà par
     user.user_id, jamais un id fourni par le client."""
     conversations, total = await DossierRepository(db).list_conversations_for_user_paginated(
-        user_id=user.user_id, page=page, page_size=page_size
+        user_id=user.user_id, page=page, page_size=page_size, user=user
     )
     return Page.of(list(conversations), total=total, page=page, page_size=page_size)

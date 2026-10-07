@@ -30,8 +30,9 @@ function mapNotification(api: any): AppNotification {
   return {
     id: api.id,
     kind: api.kind,
-    dossierId: api.dossier_id,
-    dossierName: api.dossier_name,
+    dossierId: api.dossier_id ?? null,
+    dossierName: api.dossier_name ?? null,
+    accessible: api.accessible !== false,
     message: api.message,
     createdAt: api.created_at,
     readAt: api.read_at ?? undefined,
@@ -107,10 +108,14 @@ function disableBrowserNotifications() {
 
 function showBrowserNotification(n: AppNotification) {
   if (!supported || !browserEnabled.value || Notification.permission !== "granted") return;
-  const alert = new Notification(n.dossierName, { body: n.message, tag: n.id, icon: "/marianne-icone.png" });
+  const alert = new Notification(n.dossierName ?? "Dossier non accessible", {
+    body: n.message,
+    tag: n.id,
+    icon: "/marianne-icone.png",
+  });
   alert.onclick = () => {
     window.focus();
-    window.location.assign(`/dossiers/${n.dossierId}`);
+    if (n.dossierId) window.location.assign(`/dossiers/${n.dossierId}`);
     alert.close();
   };
 }
@@ -157,6 +162,7 @@ function fireDueReminders() {
           kind: "reminder",
           dossierId,
           dossierName,
+          accessible: true,
           message: `Rappel : créneau de traitement à ${time}.`,
           createdAt: new Date().toISOString(),
         };

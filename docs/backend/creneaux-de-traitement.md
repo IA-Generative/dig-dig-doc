@@ -45,5 +45,5 @@ Table `work_slots` : `user_id` (sub Keycloak), `dossier_id` (`CASCADE` : le cré
 
 - **Occurrences** : le serveur stocke la règle, il ne développe pas encore les occurrences ; l'interface les calcule pour l'agenda. Le calcul côté serveur viendra avec les **rappels** (notifications), qui en ont besoin pour savoir quand se déclencher.
 - **Rappels** : toujours déclenchés par le navigateur, tant que la page est ouverte ; au chargement du tableau de bord ils sont reprogrammés à partir des créneaux du serveur.
-- **Accès** (#177) : un créneau se pose sur tout dossier existant ; la règle d'accès par groupe s'y appliquera.
+- **Accès** ([#177](acces-aux-dossiers.md)) : un créneau ne se pose que sur un dossier visible (404 sinon) ; un créneau sur un dossier qu'on ne voit plus n'est plus listé.
 - Migration : `20261011_0900_b7c8d9e0f1a2_creneaux_de_traitement.py` (testée en montée, descente et remontée).

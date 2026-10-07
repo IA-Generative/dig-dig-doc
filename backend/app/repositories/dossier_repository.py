@@ -457,7 +457,7 @@ class DossierRepository:
         return conversations
 
     async def list_conversations_for_user_paginated(
-        self, *, user_id: str, page: int, page_size: int
+        self, *, user_id: str, page: int, page_size: int, user: "RequestContext | None" = None
     ) -> tuple[Sequence[Conversation], int]:
         """Version paginée de list_conversations_for_user, triée par activité
         la plus récente (dernier message created_at, ou created_at de la
@@ -468,7 +468,14 @@ class DossierRepository:
             .group_by(Message.conversation_id)
             .subquery()
         )
-        count_query = select(func.count()).select_from(Conversation).where(Conversation.user_id == user_id)
+        # Une conversation sur un dossier qu'on ne voit plus n'est plus listée (issue #177).
+        visible = [visible_clause(user.is_admin, user.groups)] if user is not None else []
+        count_query = (
+            select(func.count())
+            .select_from(Conversation)
+            .join(Dossier, Conversation.dossier_id == Dossier.id)
+            .where(Conversation.user_id == user_id, *visible)
+        )
         total = await self.db.scalar(count_query)
         result = await self.db.execute(
             select(Conversation)
@@ -478,7 +485,7 @@ class DossierRepository:
                 selectinload(Conversation.dossier),
                 selectinload(Conversation.messages),
             )
-            .where(Conversation.user_id == user_id)
+            .where(Conversation.user_id == user_id, *visible)
             .order_by(func.coalesce(last_msg.c.last_at, Conversation.created_at).desc())
             .limit(page_size)
             .offset((page - 1) * page_size)

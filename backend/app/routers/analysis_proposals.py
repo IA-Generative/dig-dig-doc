@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.analysis_proposal import ProposalStatus
@@ -32,7 +33,11 @@ from app.schemas.analysis_proposal import (
 )
 from app.schemas.dossier_analysis import InvalidElementValueError
 
-router = APIRouter(prefix="/dossiers", tags=["Propositions"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers",
+    tags=["Propositions"],
+    dependencies=[Depends(get_current_user), Depends(require_dossier_visible)],
+)
 
 _BASE = "/{dossier_id}/analyses-dossier/{analysis_id}/proposals"
 

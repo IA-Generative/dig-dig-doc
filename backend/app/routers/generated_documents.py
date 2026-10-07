@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery_client import RenderFailedError, RenderWorkerUnavailableError, render_document
 from app.connectors import s3_connector
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.document_draft import DraftStatus
@@ -35,7 +36,11 @@ from app.services.document_assembly import build_values
 ODT_TYPE = "application/vnd.oasis.opendocument.text"
 PDF_TYPE = "application/pdf"
 
-router = APIRouter(prefix="/dossiers", tags=["Documents générés"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers",
+    tags=["Documents générés"],
+    dependencies=[Depends(get_current_user), Depends(require_dossier_visible)],
+)
 
 
 async def _dossier_or_404(db: AsyncSession, dossier_id: uuid.UUID) -> None:

@@ -24,3 +24,7 @@ def _no_real_celery_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     (test_document_upload_dispatches_text_extraction) réapplique son propre
     monkeypatch par-dessus celui-ci."""
     monkeypatch.setattr("app.routers.dossiers.dispatch_text_extraction", lambda document_id: None)
+
+
+# Fixtures partagées des tests d'accès aux dossiers (issue #177) : `world` (personnes et groupes), `analyse`.
+pytest_plugins = ["tests.access_support"]

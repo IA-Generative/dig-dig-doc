@@ -9,6 +9,7 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -28,6 +29,7 @@ from app.celery_client import (
     dispatch_text_extraction,
 )
 from app.connectors import s3_connector
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.analyse import Analyse
@@ -71,7 +73,9 @@ from app.schemas.dossier import (
 from app.schemas.pagination import Page
 from app.services.prediction_validation import AnalysisFrozenError
 
-router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user), Depends(require_dossier_visible)]
+)
 
 
 async def _get_or_404(
@@ -366,14 +370,18 @@ async def update_due_at(
 
 @router.get("/{dossier_id}", response_model=DossierOut)
 async def get_dossier(
+    request: Request,
     dossier_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> Dossier:
     repository = DossierRepository(db)
     dossier = await _get_or_404(repository, dossier_id, user)
-    # Consultation tracée dans le journal (#169), une fois par utilisateur dans la fenêtre de dédoublonnage.
-    await repository.events.record_consultation(dossier_id, user)
+    # Consultation tracée dans le journal (#169), une fois par utilisateur dans la fenêtre de dédoublonnage. Un
+    # administrateur qui entre sans être membre est déjà tracé à part (accès administrateur, #182) : sa
+    # consultation ne s'affiche pas en plus parmi celles des membres.
+    if not getattr(request.state, "admin_only", False):
+        await repository.events.record_consultation(dossier_id, user)
     return dossier
 
 

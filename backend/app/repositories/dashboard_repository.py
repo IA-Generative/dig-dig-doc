@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import Date, Float, and_, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security.factory import RequestContext
 from app.models.analyse import Analyse, StatusDefinition
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEvent
@@ -16,6 +17,7 @@ from app.schemas.dashboard import (
 )
 from app.schemas.work_slot import SlotOut
 from app.services.dashboard_stats import ACTIVITY_KINDS, activity_message, bucket_by_week, week_windows
+from app.services.dossier_access import visible_clause
 from app.services.due_date import PARIS, due_info, today_in_paris
 
 URGENCY_LIMIT = 200
@@ -31,12 +33,17 @@ class DashboardRepository:
         self.db = db
 
     @staticmethod
-    def _mine(user_id: str) -> list:
-        # Les dossiers « à ranger » (sans analyse) n'ont ni statut ni seuils : ils n'entrent pas ici.
-        return [Dossier.assignee_id == user_id, Dossier.analyse_id.is_not(None)]
+    def _mine(user: RequestContext) -> list:
+        # Les dossiers « à ranger » (sans analyse) n'ont ni statut ni seuils : ils n'entrent pas ici. Un dossier qu'on
+        # ne voit plus (retrait d'accès, #177) n'est plus dans ses indicateurs, ses urgences ni son activité.
+        return [
+            Dossier.assignee_id == user.user_id,
+            Dossier.analyse_id.is_not(None),
+            visible_clause(user.is_admin, user.groups),
+        ]
 
-    async def stats(self, user_id: str, today: date) -> DashboardStatsOut:
-        mine = self._mine(user_id)
+    async def stats(self, user: RequestContext, today: date) -> DashboardStatsOut:
+        mine = self._mine(user)
         windows = week_windows(today, 4)
         closed_rows = await self.db.execute(
             select(Dossier.closed_at).where(*mine, Dossier.closed_at >= windows[0][0], Dossier.closed_at.is_not(None))
@@ -64,18 +71,18 @@ class DashboardRepository:
             on_time_rate=round(on_time / with_due, 2) if with_due else 0.0,
         )
 
-    async def urgencies(self, user_id: str) -> list[DashboardUrgencyOut]:
+    async def urgencies(self, user: RequestContext) -> list[DashboardUrgencyOut]:
         """Dossiers ouverts dont l'échéance est proche ou dépassée selon les seuils de leur analyse (#172)."""
         result = await self.db.execute(
             select(Dossier, Analyse.name, Analyse.due_thresholds, StatusDefinition.name)
             .join(Analyse, Analyse.id == Dossier.analyse_id)
             .outerjoin(StatusDefinition, StatusDefinition.id == Dossier.workflow_status_id)
-            .where(*self._mine(user_id), Dossier.closed_at.is_(None), Dossier.due_at.is_not(None))
+            .where(*self._mine(user), Dossier.closed_at.is_(None), Dossier.due_at.is_not(None))
             .order_by(Dossier.due_at.asc(), Dossier.ref_number.asc())
         )
         today = today_in_paris()
         rows = result.all()
-        slots = await WorkSlotRepository(self.db).map_for(user_id, [row[0].id for row in rows])
+        slots = await WorkSlotRepository(self.db).map_for(user.user_id, [row[0].id for row in rows])
         urgencies = []
         for dossier, analyse_name, thresholds, status_name in rows:
             info = due_info(dossier.due_at, thresholds, today)
@@ -99,13 +106,13 @@ class DashboardRepository:
                 break
         return urgencies
 
-    async def status_counts(self, user_id: str) -> list[DashboardStatusCountOut]:
+    async def status_counts(self, user: RequestContext) -> list[DashboardStatusCountOut]:
         """Mes dossiers ouverts par statut, dans l'ordre des statuts (les statuts finaux n'y figurent pas)."""
         result = await self.db.execute(
             select(StatusDefinition.id, StatusDefinition.name, Analyse.name, func.count())
             .join(Dossier, Dossier.workflow_status_id == StatusDefinition.id)
             .join(Analyse, Analyse.id == StatusDefinition.analyse_id)
-            .where(*self._mine(user_id), StatusDefinition.is_final.is_(False))
+            .where(*self._mine(user), StatusDefinition.is_final.is_(False))
             .group_by(StatusDefinition.id, StatusDefinition.name, StatusDefinition.position, Analyse.name)
             .order_by(Analyse.name, StatusDefinition.position)
         )
@@ -114,12 +121,16 @@ class DashboardRepository:
             for i, name, analyse, count in result.all()
         ]
 
-    async def unassigned(self) -> list[DashboardUnassignedOut]:
+    async def unassigned(self, user: RequestContext) -> list[DashboardUnassignedOut]:
         """Dossiers ouverts sans responsable, les plus anciens d'abord (ce sont ceux qui attendent le plus)."""
         result = await self.db.execute(
             select(Dossier.id, Dossier.name, Analyse.name, Dossier.created_at)
             .join(Analyse, Analyse.id == Dossier.analyse_id)
-            .where(Dossier.assignee_id.is_(None), Dossier.closed_at.is_(None))
+            .where(
+                Dossier.assignee_id.is_(None),
+                Dossier.closed_at.is_(None),
+                visible_clause(user.is_admin, user.groups),
+            )
             .order_by(Dossier.created_at.asc(), Dossier.ref_number.asc())
             .limit(UNASSIGNED_LIMIT)
         )
@@ -128,17 +139,17 @@ class DashboardRepository:
             for i, name, analyse, created in result.all()
         ]
 
-    async def activity(self, user_id: str) -> list[DashboardActivityOut]:
+    async def activity(self, user: RequestContext) -> list[DashboardActivityOut]:
         """Ce qui s'est passé sur mes dossiers ces derniers jours, **par d'autres** (on ne se notifie pas soi-même)."""
         since = datetime.now(UTC) - timedelta(days=ACTIVITY_DAYS)
         result = await self.db.execute(
             select(DossierEvent, Dossier.name)
             .join(Dossier, Dossier.id == DossierEvent.dossier_id)
             .where(
-                *self._mine(user_id),
+                *self._mine(user),
                 DossierEvent.type.in_(list(ACTIVITY_KINDS)),
                 DossierEvent.created_at >= since,
-                DossierEvent.actor_id.is_distinct_from(user_id),
+                DossierEvent.actor_id.is_distinct_from(user.user_id),
             )
             .order_by(DossierEvent.created_at.desc(), DossierEvent.seq.desc())
             .limit(ACTIVITY_LIMIT)
