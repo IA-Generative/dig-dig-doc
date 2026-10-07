@@ -52,6 +52,7 @@ from app.schemas.dossier import (
     MessagePage,
     PredictionValidationIn,
     PredictionValidationOut,
+    WorkflowStatusUpdate,
 )
 from app.schemas.pagination import Page
 from app.services.prediction_validation import AnalysisFrozenError
@@ -87,6 +88,28 @@ async def create_dossier(body: DossierCreate, db: Annotated[AsyncSession, Depend
     dossier_repository = DossierRepository(db)
     dossier = await dossier_repository.create(name=body.name, analyse=analyse)
     return await _get_or_404(dossier_repository, dossier.id)
+
+
+@router.put("/{dossier_id}/workflow-status", response_model=DossierOut)
+async def update_workflow_status(
+    dossier_id: uuid.UUID, body: WorkflowStatusUpdate, db: Annotated[AsyncSession, Depends(get_db)]
+) -> Dossier:
+    """Change le statut de dossier (issue #168). Refuse un statut qui n'appartient pas à l'analyse du
+    dossier. Un statut final pose la date de clôture, tout autre l'efface."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    if dossier.analyse_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Dossier sans analyse : aucun statut n'est disponible."
+        )
+    analyse = await AnalyseRepository(db).get(dossier.analyse_id)
+    new_status = next((s for s in analyse.statuses if s.id == body.status_id), None) if analyse else None
+    if new_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Ce statut n'appartient pas à l'analyse du dossier."
+        )
+    await repository.set_workflow_status(dossier, new_status)
+    return await _get_or_404(repository, dossier_id)
 
 
 @router.get("/{dossier_id}", response_model=DossierOut)

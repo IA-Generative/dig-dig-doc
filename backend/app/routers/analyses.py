@@ -15,7 +15,7 @@ from app.models.analyse import (
     VersionedField,
 )
 from app.models.analyse_share import AnalyseShareKind
-from app.repositories.analyse_repository import AnalyseRepository
+from app.repositories.analyse_repository import AnalyseRepository, StatusInUseError, StatusValidationError
 from app.schemas.analyse import (
     AgentCreate,
     AgentOut,
@@ -29,6 +29,9 @@ from app.schemas.analyse import (
     ModelUpdate,
     OutputUpdate,
     PromptUpdate,
+    StatusDefinitionOut,
+    StatusesRestore,
+    StatusesUpdate,
     ToolsUpdate,
 )
 from app.schemas.pagination import Page
@@ -55,6 +58,17 @@ def _get_agent_or_404(repository: AnalyseRepository, analyse: Analyse, agent_id:
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent introuvable")
     return agent
+
+
+def _status_error(error: Exception) -> HTTPException:
+    """Traduit une erreur sur les statuts en réponse HTTP : 422 (règle non respectée) ou 409 (statut
+    supprimé encore utilisé : le détail liste les statuts et le nombre de dossiers concernés)."""
+    if isinstance(error, StatusInUseError):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "status_in_use", "message": str(error), "statuses": error.in_use},
+        )
+    return HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
 
 
 @router.get("", response_model=Page[AnalyseListItem])
@@ -216,6 +230,53 @@ async def add_agent(
     )
     analyse = await _get_or_404(repository, analyse_id)
     return repository.to_agent_schema(analyse, repository.get_agent(analyse, agent.id))
+
+
+@router.get("/{analyse_id}/statuses", response_model=list[StatusDefinitionOut])
+async def list_statuses(
+    analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+) -> list[StatusDefinitionOut]:
+    """Statuts de dossier de l'analyse, dans l'ordre (issue #168)."""
+    analyse = await _get_or_404(AnalyseRepository(db), analyse_id)
+    return [StatusDefinitionOut.model_validate(s) for s in analyse.statuses]
+
+
+@router.put("/{analyse_id}/statuses", response_model=AnalyseOut)
+async def update_statuses(
+    analyse_id: uuid.UUID,
+    body: StatusesUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AnalyseOut:
+    """Remplace la liste des statuts. Un statut conserve son identité si son ``id`` est fourni ; un statut
+    supprimé encore utilisé exige un remplaçant (``replacements``), sinon 409. L'état précédent est
+    conservé dans ``statuses_versions``."""
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    try:
+        await repository.update_statuses(analyse, body.statuses, body.replacements)
+    except (StatusValidationError, StatusInUseError) as error:
+        raise _status_error(error) from error
+    return repository.to_schema(analyse)
+
+
+@router.post("/{analyse_id}/statuses/restore/{version_id}", response_model=AnalyseOut)
+async def restore_statuses(
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: StatusesRestore | None = None,
+) -> AnalyseOut:
+    """Restaure une version antérieure des statuts. Si la restauration supprime des statuts utilisés par
+    des dossiers, les remplaçants se donnent dans ``replacements`` (sinon 409)."""
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    try:
+        restored = await repository.restore_statuses_version(analyse, version_id, body.replacements if body else None)
+    except (StatusValidationError, StatusInUseError) as error:
+        raise _status_error(error) from error
+    if not restored:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
+    return repository.to_schema(analyse)
 
 
 @router.put("/{analyse_id}/agents/{agent_id}/prompt", response_model=AgentOut)

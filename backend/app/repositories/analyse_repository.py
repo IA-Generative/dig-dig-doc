@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -17,13 +17,57 @@ from app.models.analyse import (
     EntityDefinition,
     FieldVersion,
     LabelDefinition,
+    StatusDefinition,
     VersionedField,
 )
 from app.models.analyse_share import AnalyseShare, AnalyseShareKind
 from app.models.document_template import DocumentTemplate, DocumentTemplateVersion
+from app.models.dossier import Dossier
 
 if TYPE_CHECKING:
-    from app.schemas.analyse import AgentOut, AnalyseOut
+    from app.schemas.analyse import AgentOut, AnalyseOut, StatusDefinitionIn
+
+
+# Statuts donnés à toute nouvelle analyse (nom, couleur, initial, final) : un point de départ que
+# l'administrateur adapte ensuite (issue #168).
+DEFAULT_STATUSES = [
+    ("À instruire", "#6a6af4", True, False),
+    ("En instruction", "#0063cb", False, False),
+    ("Terminé", "#18753c", False, True),
+]
+
+
+class StatusValidationError(ValueError):
+    """La liste de statuts proposée ne respecte pas les règles (message destiné à l'utilisateur)."""
+
+
+class StatusInUseError(Exception):
+    """Des statuts supprimés sont encore utilisés par des dossiers sans statut de remplacement.
+    ``in_use`` : [{"id", "name", "dossier_count"}]."""
+
+    def __init__(self, in_use: list[dict]) -> None:
+        super().__init__("Des statuts supprimés sont encore utilisés par des dossiers.")
+        self.in_use = in_use
+
+
+def _closed_at_for(is_final: bool):
+    """Valeur de Dossier.closed_at quand un dossier entre dans un statut : posée à la première clôture
+    (conservée s'il passe d'un statut final à un autre), effacée dans un statut non final."""
+    return func.coalesce(Dossier.closed_at, func.now()) if is_final else None
+
+
+def _status_snapshot(statuses) -> list[dict]:
+    return [
+        {
+            "id": str(status.id),
+            "name": status.name,
+            "color": status.color,
+            "position": status.position,
+            "is_initial": status.is_initial,
+            "is_final": status.is_final,
+        }
+        for status in statuses
+    ]
 
 
 class AnalyseRepository:
@@ -42,6 +86,7 @@ class AnalyseRepository:
             .options(
                 selectinload(Analyse.labels),
                 selectinload(Analyse.entities),
+                selectinload(Analyse.statuses),
                 selectinload(Analyse.agents),
                 selectinload(Analyse.field_versions),
                 selectinload(Analyse.shares),
@@ -88,6 +133,10 @@ class AnalyseRepository:
 
     async def create(self, *, name: str, description: str) -> Analyse:
         analyse = Analyse(name=name, description=description)
+        analyse.statuses = [
+            StatusDefinition(name=status_name, color=color, position=position, is_initial=initial, is_final=final)
+            for position, (status_name, color, initial, final) in enumerate(DEFAULT_STATUSES)
+        ]
         self.db.add(analyse)
         await self.db.commit()
         await self.db.refresh(analyse)
@@ -220,6 +269,154 @@ class AnalyseRepository:
         await self.db.commit()
         await self.db.refresh(analyse)
 
+    # --- Statuts de dossier (issue #168) ---
+
+    @staticmethod
+    def initial_status(analyse: Analyse) -> StatusDefinition | None:
+        return next((status for status in analyse.statuses if status.is_initial), None)
+
+    @staticmethod
+    def _validate_statuses(
+        items: "list[StatusDefinitionIn]", existing: dict[uuid.UUID, StatusDefinition], allow_new_ids: bool
+    ) -> None:
+        if not items:
+            raise StatusValidationError("Une analyse doit avoir au moins un statut.")
+        names = [item.name.casefold() for item in items]
+        if len(set(names)) != len(names):
+            raise StatusValidationError("Deux statuts ne peuvent pas porter le même nom.")
+        ids = [item.id for item in items if item.id is not None]
+        if len(set(ids)) != len(ids):
+            raise StatusValidationError("Un statut apparaît deux fois dans la liste.")
+        if not allow_new_ids and any(item_id not in existing for item_id in ids):
+            raise StatusValidationError("Statut inconnu : il n'appartient pas à cette analyse.")
+        if sum(item.is_initial for item in items) != 1:
+            raise StatusValidationError("Une analyse doit avoir exactement un statut initial.")
+        if any(item.is_initial and item.is_final for item in items):
+            raise StatusValidationError("Un statut ne peut pas être à la fois initial et final.")
+
+    async def update_statuses(
+        self,
+        analyse: Analyse,
+        items: "list[StatusDefinitionIn]",
+        replacements: dict[uuid.UUID, uuid.UUID] | None = None,
+        *,
+        allow_new_ids: bool = False,
+    ) -> None:
+        """Remplace la liste des statuts de l'analyse en conservant l'identité de ceux qui ont un ``id``.
+
+        - un statut supprimé encore utilisé par des dossiers exige un statut de remplacement
+          (``replacements``), sinon ``StatusInUseError`` ;
+        - les dossiers reprennent le statut de remplacement, et ``closed_at`` suit le caractère final ;
+        - changer le caractère final d'un statut recalcule ``closed_at`` de ses dossiers ;
+        - l'état précédent est conservé dans l'historique (restaurable) ;
+        - ``allow_new_ids`` : autorise un ``id`` inconnu (restauration d'une version, qui recrée un statut supprimé).
+        """
+        replacements = replacements or {}
+        existing = {status.id: status for status in analyse.statuses}
+        self._validate_statuses(items, existing, allow_new_ids)
+
+        kept_ids = {item.id for item in items if item.id in existing}
+        removed = [status for status in analyse.statuses if status.id not in kept_ids]
+
+        # Statuts supprimés encore utilisés : chacun doit avoir un remplaçant parmi les statuts conservés.
+        replacement_of: dict[uuid.UUID, uuid.UUID] = {}
+        if removed:
+            counts = dict(
+                (
+                    await self.db.execute(
+                        select(Dossier.workflow_status_id, func.count())
+                        .where(Dossier.workflow_status_id.in_([status.id for status in removed]))
+                        .group_by(Dossier.workflow_status_id)
+                    )
+                ).all()
+            )
+            in_use = [
+                {"id": str(status.id), "name": status.name, "dossier_count": counts[status.id]}
+                for status in removed
+                if counts.get(status.id)
+            ]
+            missing = [entry for entry in in_use if replacements.get(uuid.UUID(entry["id"])) not in kept_ids]
+            if missing:
+                raise StatusInUseError(missing)
+            replacement_of = {uuid.UUID(entry["id"]): replacements[uuid.UUID(entry["id"])] for entry in in_use}
+
+        new_state = [
+            {
+                "id": str(item.id) if item.id in existing else None,
+                "name": item.name,
+                "color": item.color,
+                "position": position,
+                "is_initial": item.is_initial,
+                "is_final": item.is_final,
+            }
+            for position, item in enumerate(items)
+        ]
+        current = _status_snapshot(analyse.statuses)
+        if not removed and new_state == current:
+            return  # rien ne change : pas de version inutile
+
+        self._record_version(analyse, VersionedField.STATUSES, current)
+
+        # Dossiers des statuts supprimés : ils reprennent le statut de remplacement.
+        for old_id, new_id in replacement_of.items():
+            new_item = next(item for item in items if item.id == new_id)
+            await self.db.execute(
+                update(Dossier)
+                .where(Dossier.workflow_status_id == old_id)
+                .values(workflow_status_id=new_id, closed_at=_closed_at_for(new_item.is_final))
+            )
+
+        for position, item in enumerate(items):
+            status = existing.get(item.id) if item.id is not None else None
+            if status is None:
+                status = StatusDefinition(id=item.id, analyse_id=analyse.id)
+                self.db.add(status)
+            elif status.is_final != item.is_final:
+                # Un statut qui devient final (ou cesse de l'être) clôt (ou rouvre) ses dossiers.
+                await self.db.execute(
+                    update(Dossier)
+                    .where(Dossier.workflow_status_id == status.id)
+                    .values(closed_at=_closed_at_for(item.is_final))
+                )
+            status.name = item.name
+            status.color = item.color
+            status.position = position
+            status.is_initial = item.is_initial
+            status.is_final = item.is_final
+
+        for status in removed:
+            await self.db.delete(status)
+        await self.db.commit()
+        await self.db.refresh(analyse)
+
+    async def restore_statuses_version(
+        self,
+        analyse: Analyse,
+        version_id: uuid.UUID,
+        replacements: dict[uuid.UUID, uuid.UUID] | None = None,
+    ) -> bool:
+        """Restaure une version antérieure de la liste des statuts (l'état courant devient lui-même une
+        version). Renvoie False si la version n'existe pas pour cette analyse."""
+        from app.schemas.analyse import StatusDefinitionIn
+
+        version = next(
+            (v for v in analyse.field_versions if v.id == version_id and v.field == VersionedField.STATUSES), None
+        )
+        if version is None:
+            return False
+        items = [
+            StatusDefinitionIn(
+                id=uuid.UUID(entry["id"]),
+                name=entry["name"],
+                color=entry["color"],
+                is_initial=entry["is_initial"],
+                is_final=entry["is_final"],
+            )
+            for entry in sorted(version.content, key=lambda entry: entry["position"])
+        ]
+        await self.update_statuses(analyse, items, replacements, allow_new_ids=True)
+        return True
+
     # --- Agents ---
 
     async def add_agent(
@@ -334,6 +531,7 @@ class AnalyseRepository:
             EntityDefinitionOut,
             ExtractionOut,
             LabelDefinitionOut,
+            StatusDefinitionOut,
             Version,
         )
 
@@ -376,6 +574,15 @@ class AnalyseRepository:
             created_at=analyse.created_at,
             classification=classification,
             extraction=extraction,
+            statuses=[StatusDefinitionOut.model_validate(status) for status in analyse.statuses],
+            statuses_versions=[
+                Version(
+                    id=v.id,
+                    content=[StatusDefinitionOut(**item) for item in v.content],
+                    created_at=v.created_at,
+                )
+                for v in self.field_versions(analyse, VersionedField.STATUSES)
+            ],
             agents=[self.to_agent_schema(analyse, agent) for agent in analyse.agents],
         )
 

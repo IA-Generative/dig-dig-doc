@@ -12,6 +12,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.summary import SummaryStatus
 
 if TYPE_CHECKING:
+    from app.models.analyse import StatusDefinition
     from app.models.conversation import Conversation
     from app.models.document_page import DocumentPage
     from app.models.execution_log import ExecutionLog
@@ -82,6 +83,16 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Statut de dossier défini par son analyse (issue #168) : distinct de
+    # `status` ci-dessus, qui est l'état d'exécution de l'analyse automatique.
+    # NULL pour un dossier « à ranger » (pas d'analyse, donc pas de statuts) ;
+    # RESTRICT : un statut encore utilisé ne se supprime pas sans remplaçant.
+    workflow_status_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("status_definitions.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    # Date de clôture : posée quand le dossier passe dans un statut final,
+    # effacée s'il est rouvert. Alimente les indicateurs du tableau de bord (#174).
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # État de génération du résumé global du dossier (issue #52).
     summary_status: Mapped[SummaryStatus] = mapped_column(
         Enum(SummaryStatus, name="summary_status"),
@@ -100,6 +111,7 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
         default=SuggestionStatus.EN_ATTENTE,
     )
 
+    workflow_status: Mapped["StatusDefinition | None"] = relationship(lazy="selectin")
     execution_steps: Mapped[list["ExecutionStep"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="ExecutionStep.started_at"
     )
