@@ -39,6 +39,7 @@ from app.routers.internal_agent import router as internal_agent_router
 from app.routers.models import router as models_router
 from app.routers.profile import router as profile_router
 from app.routers.reports import router as reports_router
+from app.routers.tracking import router as tracking_router
 from app.routers.user_tasks import router as user_tasks_router
 from app.routers.users import router as users_router
 
@@ -156,6 +157,7 @@ app.include_router(admin_document_templates_router, prefix="/api")
 app.include_router(admin_generation_prompt_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
+app.include_router(tracking_router, prefix="/api")
 app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
