@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.work_slot import SlotOut
+
 
 class DashboardStatsOut(BaseModel):
     """Indicateurs personnels : les dossiers affectés à la personne."""
@@ -32,6 +34,8 @@ class DashboardUrgencyOut(BaseModel):
     level: Literal["soon", "overdue"]
     days_left: int
     color: str | None
+    # Mon créneau de traitement sur ce dossier, s'il y en a un (privé : jamais celui d'un autre).
+    slot: SlotOut | None = None
 
 
 class DashboardStatusCountOut(BaseModel):

@@ -6,16 +6,14 @@ import { apiFetch } from "@/utils/api";
 
 // Tableau de bord branché sur l'API (issue #174) : `GET /api/dashboard` donne les indicateurs, les urgences
 // (échéance proche ou dépassée selon les seuils de l'analyse), mes dossiers par statut, les dossiers non affectés
-// (administrateurs) et l'activité récente. Restent simulés, faute de backend : les créneaux planifiés (gardés le
-// temps de la session) et les notifications (useNotifications).
+// (administrateurs) et l'activité récente ; chaque urgence porte mon créneau de traitement, s'il y en a un
+// (`PUT` / `DELETE /api/dossiers/{id}/slot`, privés). Restent simulés, faute de backend : les notifications et
+// les rappels (useNotifications).
 // Pour valider les états de l'interface, ajouter `?mock=` à l'URL : `empty` (états vides), `error` (erreur),
 // `loading` (chargement sans fin), `nounassigned` (sans droit « non affectés »).
 
-/** Créneaux planifiés, conservés tant que la page n'est pas rechargée (ils survivent à la navigation). */
-const slots = new Map<string, SlotDraft>();
-
 function mapUrgency(api: any): DashboardUrgency {
-  const slot = slots.get(api.dossier_id);
+  const slot = api.slot;
   return {
     dossierId: api.dossier_id,
     dossierName: api.dossier_name,
@@ -26,7 +24,7 @@ function mapUrgency(api: any): DashboardUrgency {
     level: api.level,
     plannedStart: slot?.start,
     plannedEnd: slot?.end,
-    recurrence: slot?.recurrence,
+    recurrence: slot?.recurrence ?? undefined,
     reminders: slot?.reminders,
   };
 }
@@ -124,16 +122,23 @@ export function useDashboard() {
     }
   }
 
-  /** Planifie (ou retire, avec `null`) le créneau de traitement d'un dossier (simulé : gardé le temps de la session). */
-  function setSchedule(dossierId: string, slot: SlotDraft | null) {
+  /**
+   * Planifie (ou retire, avec `null`) mon créneau de traitement sur un dossier, côté serveur. En cas d'échec
+   * l'erreur est relancée et l'agenda reste tel qu'il était.
+   */
+  async function setSchedule(dossierId: string, slot: SlotDraft | null) {
     const target = data.value?.urgencies.find((u) => u.dossierId === dossierId);
     if (!target) return;
-    if (slot) slots.set(dossierId, slot);
-    else slots.delete(dossierId);
-    target.plannedStart = slot?.start;
-    target.plannedEnd = slot?.end;
-    target.recurrence = slot?.recurrence;
-    target.reminders = slot?.reminders;
+    if (slot) {
+      const saved = await apiFetch<any>(`/api/dossiers/${dossierId}/slot`, { method: "PUT", body: JSON.stringify(slot) });
+      target.plannedStart = saved.start;
+      target.plannedEnd = saved.end;
+      target.recurrence = saved.recurrence ?? undefined;
+      target.reminders = saved.reminders;
+    } else {
+      await apiFetch<void>(`/api/dossiers/${dossierId}/slot`, { method: "DELETE" });
+      target.plannedStart = target.plannedEnd = target.recurrence = target.reminders = undefined;
+    }
   }
 
   return { data, loading, error, fetchDashboard, setSchedule };

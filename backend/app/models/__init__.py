@@ -79,6 +79,7 @@ from .report import Report, ReportStatus, ReportType
 from .summary import DocumentSummary, DossierSummary, SummaryStatus
 from .user_preference import UserPreference
 from .user_task import UserTask, UserTaskKind, UserTaskStatus
+from .work_slot import WorkSlot
 
 __all__ = [
     "DocumentDraft",
@@ -170,6 +171,7 @@ __all__ = [
     "TextExtractionStatus",
     "UserPreference",
     "UserTask",
+    "WorkSlot",
     "UserTaskKind",
     "UserTaskStatus",
     "VersionedField",
