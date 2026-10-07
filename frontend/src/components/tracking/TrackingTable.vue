@@ -21,6 +21,7 @@ const props = defineProps<{
   loading: boolean;
   /** Une personne peut-elle être affectée à ce dossier ? (elle doit y avoir accès, #177) */
   canAssign: (rowId: string, assigneeId: string) => boolean;
+  analyseName: (analyseId: string) => string;
 }>();
 
 const emit = defineEmits<{
@@ -92,6 +93,9 @@ function formatDate(iso: string) {
               <RouterLink :to="`/dossiers/${r.id}`" class="tt__ref">{{ r.reference }}</RouterLink>
               <AccessBadge :dossier-id="r.id" class="fr-ml-1w" />
             </template>
+            <template v-else-if="c.id === 'name'">{{ r.name }}</template>
+            <!-- MOCK : l'identifiant d'analyse simulé n'existe pas côté application ; le lien deviendra valide avec l'API. -->
+            <RouterLink v-else-if="c.id === 'analyse'" :to="`/analyses/${r.analyseId}/suivi`">{{ analyseName(r.analyseId) }}</RouterLink>
             <StatusBadge v-else-if="c.id === 'status'" :status-id="r.statusId" />
             <select
               v-else-if="c.id === 'assignee'"

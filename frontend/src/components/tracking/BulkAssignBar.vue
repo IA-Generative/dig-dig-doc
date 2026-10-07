@@ -22,8 +22,8 @@ const target = ref("");
       Affecter
     </button>
     <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary" @click="emit('assign', null)">Retirer l'affectation</button>
-    <button v-if="canSetAccess" type="button" class="fr-btn fr-btn--sm fr-btn--secondary fr-btn--icon-left ri-lock-line" @click="emit('set-access')">
-      Définir l'accès
+    <button v-if="canSetAccess" type="button" class="fr-btn fr-btn--sm fr-btn--secondary" style="gap: 0.375rem" @click="emit('set-access')">
+      <VIcon name="ri-lock-line" /> Définir l'accès
     </button>
     <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary-no-outline" @click="emit('clear')">Tout désélectionner</button>
   </div>

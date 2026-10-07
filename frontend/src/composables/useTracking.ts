@@ -1,76 +1,32 @@
-import { computed, ref } from "vue";
+import { ref } from "vue";
 
+import { useDossierAccess } from "@/composables/useDossierAccess";
+import { ASSIGNEES, MOCK_ANALYSES, ME, STATUSES, initialDossiers, initialFieldsByAnalyse } from "@/mocks/dossiers";
 import type { Version } from "@/types/analyse";
 import {
-  type Assignee,
   type ColumnId,
   type CustomField,
   type CustomValue,
   type TrackingFilters,
   type TrackingRow,
   type TrackingSort,
-  type TrackingStatus,
 } from "@/types/tracking";
-import { useDossierAccess } from "@/composables/useDossierAccess";
 import { dueInfo } from "@/utils/due";
 import { matchesFieldFilter, validateValue } from "@/utils/trackingFields";
 
-// MOCK (issue #173, partie UI) : état partagé au niveau du module, à
-// remplacer par l'API (affectations, statuts #168, échéance #172, champs
+// MOCK (issues #173 et #186, partie UI) : état partagé au niveau du module,
+// à remplacer par l'API (affectations, statuts #168, échéance #172, champs
 // personnalisés). Les signatures de `query` / `assign` / `setValue` suivent
-// ce que fera l'API : filtres, tri et pagination côté serveur.
+// ce que fera l'API : filtres, tri et pagination côté serveur. Les dossiers
+// viennent du jeu de données commun (@/mocks/dossiers), partagé avec le
+// tableau de bord.
 
-export const ME = "u1";
+export { ASSIGNEES, ME, STATUSES };
 
-export const ASSIGNEES: Assignee[] = [
-  { id: "u1", name: "Alex Martin" },
-  { id: "u2", name: "Camille Durand" },
-  { id: "u3", name: "Samir Benali" },
-  { id: "u4", name: "Léa Petit" },
-  { id: "u5", name: "Noah Roux" },
-];
-
-export const STATUSES: TrackingStatus[] = [
-  { id: "a_instruire", label: "À instruire", tone: "new", final: false },
-  { id: "en_instruction", label: "En instruction", tone: "info", final: false },
-  { id: "pieces_manquantes", label: "Pièces manquantes", tone: "warning", final: false },
-  { id: "a_valider", label: "À valider", tone: "new", final: false },
-  { id: "clos", label: "Clos", tone: "success", final: true },
-];
-
-const daysFromNow = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
-const SERVICES = ["Culture", "Sport", "Social", "Éducation"];
-
-function initialFields(): CustomField[] {
-  return [
-    { id: "f_montant", name: "Montant demandé", definition: "Montant de l'aide sollicité par le demandeur, tel qu'indiqué dans le formulaire.", type: "amount", required: false, defaultValue: null, choices: [], currency: "EUR" },
-    { id: "f_service", name: "Service", definition: "Service instructeur en charge du dossier.", type: "choice", required: true, defaultValue: "Culture", choices: SERVICES, currency: "EUR" },
-    { id: "f_depot", name: "Date de dépôt", definition: "Date de réception du dossier complet. Sert de point de départ au délai d'instruction.", type: "date", required: false, defaultValue: null, choices: [], currency: "EUR" },
-    { id: "f_prioritaire", name: "Prioritaire", definition: "À cocher quand le dossier doit être traité avant les autres.", type: "boolean", required: false, defaultValue: false, choices: [], currency: "EUR" },
-  ];
-}
-
-function initialRows(): TrackingRow[] {
-  return Array.from({ length: 42 }, (_, i) => ({
-    id: `trk-${i + 1}`,
-    reference: `DOS-2026-${String(i + 1).padStart(4, "0")}`,
-    statusId: STATUSES[i % STATUSES.length].id,
-    assigneeId: i % 4 === 3 ? null : ASSIGNEES[i % ASSIGNEES.length].id,
-    dueAt: i % 9 === 8 ? null : daysFromNow(((i * 7) % 70) - 8),
-    createdAt: daysFromNow(-60 + i),
-    lastActivityAt: daysFromNow(-((i * 3) % 20)),
-    values: {
-      f_montant: i % 5 === 4 ? null : 1000 + ((i * 937) % 24000),
-      f_service: SERVICES[i % SERVICES.length],
-      f_depot: daysFromNow(-70 + i).slice(0, 10),
-      f_prioritaire: i % 6 === 0,
-    },
-  }));
-}
-
-const rows = ref<TrackingRow[]>(initialRows());
-const fields = ref<CustomField[]>(initialFields());
-const fieldsVersions = ref<Version<CustomField[]>[]>([]);
+const rows = ref<TrackingRow[]>(initialDossiers());
+/** Colonnes personnalisées par analyse. */
+const fieldsByAnalyse = ref<Record<string, CustomField[]>>(initialFieldsByAnalyse());
+const versionsByAnalyse = ref<Record<string, Version<CustomField[]>[]>>({});
 /** Journal local simulant l'historique du dossier (#169) : affectations et valeurs modifiées. */
 const log = ref<string[]>([]);
 
@@ -79,14 +35,25 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 
 const statusOrder = (id: string) => STATUSES.findIndex((s) => s.id === id);
 const assigneeName = (id: string | null) => ASSIGNEES.find((a) => a.id === id)?.name ?? "";
+const analyseName = (id: string) => MOCK_ANALYSES.find((a) => a.id === id)?.name ?? id;
+const allFields = () => Object.values(fieldsByAnalyse.value).flat();
 
 const accessApi = useDossierAccess();
+
+function matchesStatus(row: TrackingRow, statusId: string): boolean {
+  if (!statusId) return true;
+  if (statusId.startsWith("cat:")) {
+    return STATUSES.find((s) => s.id === row.statusId)?.category === statusId.slice("cat:".length);
+  }
+  return row.statusId === statusId;
+}
 
 function matches(row: TrackingRow, f: TrackingFilters): boolean {
   // Visibilité (#177) : un dossier inaccessible n'apparaît jamais (ni dans les compteurs ni dans l'export).
   if (!accessApi.canSee(row.id)) return false;
   if (f.access && accessApi.accessOf(row.id).visibility !== f.access) return false;
-  if (f.statusId && row.statusId !== f.statusId) return false;
+  if (f.analyseIds.length && !f.analyseIds.includes(row.analyseId)) return false;
+  if (!matchesStatus(row, f.statusId)) return false;
   if (f.assignee === "me" && row.assigneeId !== ME) return false;
   if (f.assignee === "none" && row.assigneeId !== null) return false;
   if (f.assignee && f.assignee !== "me" && f.assignee !== "none" && row.assigneeId !== f.assignee) return false;
@@ -98,11 +65,11 @@ function matches(row: TrackingRow, f: TrackingFilters): boolean {
   }
   const query = f.search.trim().toLowerCase();
   if (query) {
-    const haystack = [row.reference, ...Object.values(row.values).map(String)].join(" ").toLowerCase();
+    const haystack = [row.reference, row.name, ...Object.values(row.values).map(String)].join(" ").toLowerCase();
     if (!haystack.includes(query)) return false;
   }
   for (const [fieldId, filter] of Object.entries(f.fieldFilters)) {
-    const field = fields.value.find((x) => x.id === fieldId);
+    const field = allFields().find((x) => x.id === fieldId);
     if (field && !matchesFieldFilter(field, row.values[fieldId], filter)) return false;
   }
   return true;
@@ -112,6 +79,10 @@ function sortValue(row: TrackingRow, key: ColumnId): string | number {
   switch (key) {
     case "reference":
       return row.reference;
+    case "name":
+      return row.name;
+    case "analyse":
+      return analyseName(row.analyseId);
     case "status":
       return statusOrder(row.statusId);
     case "assignee":
@@ -164,7 +135,7 @@ export function useTracking() {
 
   /** Modifie une valeur personnalisée ; renvoie le message d'erreur de validation, ou `null`. */
   function setValue(rowId: string, fieldId: string, value: CustomValue): string | null {
-    const field = fields.value.find((f) => f.id === fieldId);
+    const field = allFields().find((f) => f.id === fieldId);
     const row = rows.value.find((r) => r.id === rowId);
     if (!field || !row) return "Champ introuvable.";
     const error = validateValue(field, value);
@@ -174,49 +145,50 @@ export function useTracking() {
     return null;
   }
 
-  /** Enregistre les définitions de champs : l'état précédent est conservé dans l'historique. */
-  function saveFields(next: CustomField[], purgeRemoved: boolean) {
-    fieldsVersions.value.unshift({
-      id: `fv-${versionSeq++}`,
-      content: clone(fields.value),
-      createdAt: new Date().toISOString(),
-    });
+  const fieldsOf = (analyseId: string): CustomField[] => fieldsByAnalyse.value[analyseId] ?? [];
+  const fieldsVersionsOf = (analyseId: string): Version<CustomField[]>[] => versionsByAnalyse.value[analyseId] ?? [];
+
+  /** Enregistre les définitions de champs d'une analyse : l'état précédent est conservé dans l'historique. */
+  function saveFields(analyseId: string, next: CustomField[], purgeRemoved: boolean) {
+    versionsByAnalyse.value[analyseId] = [
+      { id: `fv-${versionSeq++}`, content: clone(fieldsOf(analyseId)), createdAt: new Date().toISOString() },
+      ...fieldsVersionsOf(analyseId),
+    ];
     const keptIds = new Set(next.map((f) => f.id));
     if (purgeRemoved) {
-      for (const row of rows.value) {
+      for (const row of rows.value.filter((r) => r.analyseId === analyseId)) {
         for (const key of Object.keys(row.values)) if (!keptIds.has(key)) delete row.values[key];
       }
     }
-    fields.value = clone(next);
+    fieldsByAnalyse.value[analyseId] = clone(next);
   }
 
   /** Restaure une version antérieure ; l'état courant devient lui-même une version. */
-  function restoreFieldsVersion(versionId: string) {
-    const version = fieldsVersions.value.find((v) => v.id === versionId);
+  function restoreFieldsVersion(analyseId: string, versionId: string) {
+    const version = fieldsVersionsOf(analyseId).find((v) => v.id === versionId);
     if (!version) return;
-    fieldsVersions.value.unshift({ id: `fv-${versionSeq++}`, content: clone(fields.value), createdAt: new Date().toISOString() });
-    fields.value = clone(version.content);
+    versionsByAnalyse.value[analyseId] = [
+      { id: `fv-${versionSeq++}`, content: clone(fieldsOf(analyseId)), createdAt: new Date().toISOString() },
+      ...fieldsVersionsOf(analyseId),
+    ];
+    fieldsByAnalyse.value[analyseId] = clone(version.content);
   }
-
-  /** Valeur par défaut d'un nouveau champ pour les dossiers existants : non rétroactive (valeur vide). */
-  const statusCounts = computed(() =>
-    STATUSES.map((s) => ({ ...s, count: rows.value.filter((r) => r.statusId === s.id).length })),
-  );
 
   return {
     rows,
-    fields,
-    fieldsVersions,
     log,
     statuses: STATUSES,
     assignees: ASSIGNEES,
-    statusCounts,
+    analyses: MOCK_ANALYSES,
     query,
     queryAll,
     assign,
     setValue,
+    fieldsOf,
+    fieldsVersionsOf,
     saveFields,
     restoreFieldsVersion,
     assigneeName,
+    analyseName,
   };
 }

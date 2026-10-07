@@ -206,20 +206,24 @@ function cellLabel(c: (typeof cells.value)[number]) {
   <div class="cal">
     <div class="cal__toolbar">
       <div v-if="mode === 'month'" class="cal__nav">
-        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary fr-btn--icon-left ri-arrow-left-s-line" @click="shiftMonth(-1)">
+        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary" @click="shiftMonth(-1)">
+          <VIcon name="ri-arrow-left-s-line" />
           <span class="fr-sr-only">Mois précédent</span>
         </button>
         <h3 class="cal__month" aria-live="polite">{{ monthLabel }}</h3>
-        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary fr-btn--icon-left ri-arrow-right-s-line" @click="shiftMonth(1)">
+        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary" @click="shiftMonth(1)">
+          <VIcon name="ri-arrow-right-s-line" />
           <span class="fr-sr-only">Mois suivant</span>
         </button>
       </div>
       <div v-else class="cal__nav">
-        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary fr-btn--icon-left ri-arrow-left-s-line" @click="shiftDay(-1)">
+        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary" @click="shiftDay(-1)">
+          <VIcon name="ri-arrow-left-s-line" />
           <span class="fr-sr-only">Jour précédent</span>
         </button>
         <h3 class="cal__month" aria-live="polite">{{ isSelectedToday ? "Aujourd'hui" : selectedLabel }}</h3>
-        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary fr-btn--icon-left ri-arrow-right-s-line" @click="shiftDay(1)">
+        <button type="button" class="fr-btn fr-btn--sm fr-btn--tertiary" @click="shiftDay(1)">
+          <VIcon name="ri-arrow-right-s-line" />
           <span class="fr-sr-only">Jour suivant</span>
         </button>
       </div>
@@ -291,7 +295,7 @@ function cellLabel(c: (typeof cells.value)[number]) {
             :key="e.key"
             class="cal__chip"
             :class="e.u.level === 'overdue' ? 'cal__chip--overdue' : 'cal__chip--soon'"
-          ><template v-if="e.start">{{ timeOf(e.start) }} </template>{{ e.u.dossierName }}</span>
+          ><span v-if="e.start" class="cal__chip-time">{{ timeOf(e.start) }}</span>{{ e.u.dossierName }}</span>
           <span v-if="c.items.length > MAX_CHIPS" class="cal__more">+{{ c.items.length - MAX_CHIPS }} autre{{ c.items.length - MAX_CHIPS > 1 ? "s" : "" }}</span>
         </span>
         <span v-if="c.items.length" class="cal__dot" aria-hidden="true">{{ c.items.length }}</span>
@@ -320,11 +324,6 @@ function cellLabel(c: (typeof cells.value)[number]) {
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
-}
-
-.cal__modes {
-  display: flex;
-  gap: 0.25rem;
 }
 
 .cal__timeline {
@@ -428,10 +427,6 @@ function cellLabel(c: (typeof cells.value)[number]) {
   white-space: nowrap;
 }
 
-.cal__detail-title--overdue {
-  color: var(--text-default-error);
-}
-
 .cal__nav {
   display: flex;
   align-items: center;
@@ -443,13 +438,10 @@ function cellLabel(c: (typeof cells.value)[number]) {
   margin: 0;
   font-size: 1.125rem;
   text-align: center;
-  text-transform: capitalize;
 }
 
-.cal__count {
-  margin: 0.5rem 0 0.75rem;
-  font-size: 0.875rem;
-  color: var(--text-mention-grey);
+.cal__month::first-letter {
+  text-transform: uppercase;
 }
 
 .cal__grid {
@@ -549,6 +541,11 @@ function cellLabel(c: (typeof cells.value)[number]) {
   background: var(--background-contrast-warning);
 }
 
+.cal__chip-time {
+  margin-right: 0.375rem;
+  font-weight: 700;
+}
+
 .cal__more {
   font-size: 0.6875rem;
   color: var(--text-mention-grey);
@@ -580,21 +577,6 @@ function cellLabel(c: (typeof cells.value)[number]) {
   .cal__dot {
     display: block;
   }
-}
-
-.cal__detail {
-  margin-top: 1.25rem;
-}
-
-.cal__detail-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  text-transform: capitalize;
-}
-
-.cal__empty {
-  margin: 0;
-  color: var(--text-mention-grey);
 }
 
 .cal__list {

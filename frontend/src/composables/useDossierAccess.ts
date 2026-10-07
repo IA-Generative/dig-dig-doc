@@ -24,15 +24,15 @@ const GROUP_MEMBERS: Record<string, string[]> = {
 };
 
 const access = ref<Record<string, DossierAccess>>({
-  "trk-3": { visibility: "restricted", groups: ["/service-culture"] },
-  "trk-7": { visibility: "restricted", groups: ["/service-sport"] },
-  "trk-12": { visibility: "restricted", groups: ["/service-culture", "/service-social"] },
+  "dos-3": { visibility: "restricted", groups: ["/service-culture"] },
+  "dos-7": { visibility: "restricted", groups: ["/service-sport"] },
+  "dos-12": { visibility: "restricted", groups: ["/service-culture", "/service-social"] },
   // Aucun groupe commun avec l'utilisateur de démo : invisible pour un non-administrateur.
-  "trk-20": { visibility: "restricted", groups: ["/service-social"] },
+  "dos-20": { visibility: "restricted", groups: ["/service-social"] },
 });
 
 /** Dossiers dont l'utilisateur a perdu l'accès (démo des notifications masquées). */
-const revoked = ref<Set<string>>(new Set(["mock-1"]));
+const revoked = ref<Set<string>>(new Set(["dos-5"]));
 
 const changes = ref<Record<string, AccessChange[]>>({});
 

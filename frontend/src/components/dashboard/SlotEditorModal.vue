@@ -412,10 +412,10 @@ const actions = computed(() => [
       <button
         v-if="reminderRows.length < MAX_REMINDERS"
         type="button"
-        class="fr-btn fr-btn--sm fr-btn--tertiary fr-btn--icon-left ri-add-line slot__add"
+        class="fr-btn fr-btn--sm fr-btn--tertiary slot__add"
         @click="addReminder"
       >
-        Ajouter un rappel
+        <VIcon name="ri-add-line" /> Ajouter un rappel
       </button>
     </section>
 
@@ -570,6 +570,7 @@ const actions = computed(() => [
 }
 
 .slot__add {
+  gap: 0.375rem;
   margin: 0.5rem 0.75rem 0.75rem;
 }
 

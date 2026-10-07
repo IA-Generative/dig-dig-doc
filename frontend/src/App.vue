@@ -67,6 +67,7 @@ const navItems = [
   { to: "/dashboard", label: "Tableau de bord", icon: "ri-dashboard-line", badge: true },
   { to: "/analyses", label: "Analyses", icon: "ri-file-list-3-line" },
   { to: "/dossiers", label: "Dossiers", icon: "ri-folder-line" },
+  { to: "/suivi", label: "Suivi", icon: "ri-table-line" },
 ];
 </script>
 

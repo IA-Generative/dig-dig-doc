@@ -30,8 +30,13 @@ interface Stored {
   columns: ColumnPrefs;
 }
 
-export function useTrackingPrefs(analyseId: Ref<string> | string, fields: Ref<CustomField[]>) {
-  const key = computed(() => `digdigdoc-tracking-${typeof analyseId === "string" ? analyseId : analyseId.value}`);
+/**
+ * `scopeKey` : identifiant de l'analyse, ou « all » pour la vue transversale (#186).
+ * Chaque portée a ses propres vues enregistrées et ses propres colonnes.
+ */
+export function useTrackingPrefs(scopeKey: Ref<string> | string, fields: Ref<CustomField[]>) {
+  const key = computed(() => `digdigdoc-tracking-${typeof scopeKey === "string" ? scopeKey : scopeKey.value}`);
+  const transversal = computed(() => (typeof scopeKey === "string" ? scopeKey : scopeKey.value) === "all");
 
   const stored = ref<Stored>({ views: [], columns: { order: [], hidden: [] } });
   try {
@@ -71,8 +76,9 @@ export function useTrackingPrefs(analyseId: Ref<string> | string, fields: Ref<Cu
 
   /** Toutes les colonnes existantes (natives puis champs personnalisés), dans l'ordre choisi. */
   const allColumns = computed<ColumnDef[]>(() => {
+    // Dans l'onglet d'une analyse, la colonne « Analyse » serait constante : elle n'est proposée que dans la vue transversale.
     const available = [
-      ...NATIVE_COLUMNS,
+      ...NATIVE_COLUMNS.filter((c) => c.id !== "analyse" || transversal.value),
       ...fields.value.map((f) => ({ id: `field:${f.id}` as ColumnId, label: f.name, definition: f.definition, sortable: true })),
     ];
     const rank = (id: ColumnId) => {

@@ -19,6 +19,9 @@ const emit = defineEmits<{ close: [] }>();
     :actions="[{ label: 'Fermer', onClick: () => emit('close') }]"
     @close="emit('close')"
   >
+    <RouterLink v-if="items.length" :to="{ path: '/suivi', query: { assignee: 'none' } }" class="um__all" @click="emit('close')">
+      Voir tous les dossiers non affectés dans le suivi
+    </RouterLink>
     <p v-if="items.length === 0" class="um__empty">Aucun dossier à prendre en charge.</p>
     <ul v-else class="um__list">
       <li v-for="d in items" :key="d.dossierId">
@@ -35,6 +38,12 @@ const emit = defineEmits<{ close: [] }>();
 </template>
 
 <style scoped>
+.um__all {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+}
+
 .um__empty {
   margin: 1.5rem 0;
   text-align: center;
