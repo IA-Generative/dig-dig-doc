@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.connectors import s3_connector
 from app.models.analyse import Analyse, StatusDefinition
+from app.models.app_user import AppUser
 from app.models.chat_event import ChatEvent, ChatEventKind
 from app.models.conversation import (
     Conversation,
@@ -107,6 +108,7 @@ class DossierRepository:
         page_size: int,
         workflow_status_id: uuid.UUID | None = None,
         due: str | None = None,
+        assignee: str | None = None,
         sort: str = "created_at",
     ) -> tuple[Sequence[Dossier], int]:
         """Liste paginée, du plus récent au plus ancien par défaut.
@@ -114,12 +116,17 @@ class DossierRepository:
         - ``workflow_status_id`` : ne garde que les dossiers de ce statut (issue #170) ;
         - ``due`` : filtre d'échéance, ne garde que les dossiers **non clos** (``overdue`` : échéance dépassée ;
           ``7`` / ``30`` : dans 7 / 30 jours ou moins ; ``none`` : sans échéance) ;
+        - ``assignee`` : ``none`` (non affectés) ou l'identifiant d'une personne (#173) ;
         - ``sort="status"`` : trie par statut, dans l'ordre défini par chaque analyse (les dossiers sans
           statut en dernier), puis du plus récent au plus ancien ;
         - ``sort="due"`` : échéance la plus proche d'abord (sans échéance en dernier).
         """
         filters = [Dossier.workflow_status_id == workflow_status_id] if workflow_status_id else []
         filters += self._due_filters(due)
+        if assignee == "none":
+            filters.append(Dossier.assignee_id.is_(None))
+        elif assignee:
+            filters.append(Dossier.assignee_id == assignee)
         total = await self.db.scalar(select(func.count()).select_from(Dossier).where(*filters))
         query = self._base_query().where(*filters)
         if sort == "due":
@@ -196,6 +203,44 @@ class DossierRepository:
         dossier.due_at = due_at
         self.events.add(dossier.id, DossierEventType.DUE_DATE_CHANGED, actor, payload)
         await self.db.commit()
+
+    async def set_assignee(self, dossier: Dossier, assignee: AppUser | None, actor=None) -> bool:
+        """Affecte le dossier à une personne de l'annuaire (ou le désaffecte avec ``None``) et trace le changement
+        dans le journal (#169). Sans changement, rien n'est écrit ; renvoie si le dossier a changé."""
+        if self._apply_assignee(dossier, assignee, actor):
+            await self.db.commit()
+            return True
+        return False
+
+    async def assign_many(self, dossiers: Sequence[Dossier], assignee: AppUser | None, actor=None) -> int:
+        """Affectation en lot : **tout ou rien** (une seule transaction). Renvoie le nombre de dossiers modifiés."""
+        changed = sum(self._apply_assignee(dossier, assignee, actor) for dossier in dossiers)
+        if changed:
+            await self.db.commit()
+        return changed
+
+    def _apply_assignee(self, dossier: Dossier, assignee: AppUser | None, actor) -> bool:
+        previous = dossier.assignee
+        if (previous.user_id if previous else None) == (assignee.user_id if assignee else None):
+            return False
+        self.events.add(
+            dossier.id,
+            DossierEventType.ASSIGNEE_CHANGED,
+            actor,
+            {"from": self._person_ref(previous), "to": self._person_ref(assignee)},
+        )
+        dossier.assignee_id = assignee.user_id if assignee else None
+        dossier.assignee = assignee
+        dossier.assigned_at = datetime.now(UTC) if assignee else None
+        return True
+
+    @staticmethod
+    def _person_ref(person: AppUser | None) -> dict | None:
+        return {"id": person.user_id, "name": person.name} if person else None
+
+    async def get_many(self, dossier_ids: Sequence[uuid.UUID]) -> list[Dossier]:
+        result = await self.db.execute(self._base_query().where(Dossier.id.in_(dossier_ids)))
+        return list(result.scalars().all())
 
     def _initial_status_id(self, analyse: Analyse | None) -> uuid.UUID | None:
         initial = self._analyse_repository.initial_status(analyse) if analyse else None
