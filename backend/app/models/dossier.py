@@ -1,9 +1,9 @@
 import enum
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, Identity, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -69,6 +69,9 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "dossiers"
 
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # Numéro d'ordre, strictement croissant, attribué par la base : il fait la référence lisible du dossier
+    # (« DOS-2026-0042 », cf. `reference`), que les instructeurs se communiquent (issue #173).
+    ref_number: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False, unique=True)
     # Un dossier « à ranger » (issue #54) n'a pas d'analyse assignée :
     # analyse_id est nullable, l'utilisateur choisira (ou validera la
     # suggestion de l'IA) après upload des documents et génération des
@@ -135,6 +138,11 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     summaries: Mapped[list["DossierSummary"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="DossierSummary.created_at.desc()"
     )
+
+    @property
+    def reference(self) -> str:
+        """Référence lisible : année de création et numéro d'ordre sur 4 chiffres au moins."""
+        return f"DOS-{self.created_at.astimezone(UTC).year}-{self.ref_number:04d}"
 
     @property
     def due(self) -> DueInfo | None:
