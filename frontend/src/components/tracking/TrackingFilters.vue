@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import type { Assignee, CustomField, FieldFilter, TrackingFilters, TrackingStatus } from "@/types/tracking";
+import {
+  STATUS_CATEGORY_LABELS,
+  type Assignee,
+  type CustomField,
+  type FieldFilter,
+  type MockAnalyse,
+  type StatusCategory,
+  type TrackingFilters,
+  type TrackingStatus,
+} from "@/types/tracking";
 
 // Filtres du tableau : recherche, statut, affecté à, échéance, puis un
 // filtre par champ personnalisé adapté à son type.
@@ -7,13 +16,30 @@ const props = defineProps<{
   modelValue: TrackingFilters;
   statuses: TrackingStatus[];
   assignees: Assignee[];
+  analyses: MockAnalyse[];
   fields: CustomField[];
+  /** Vue transversale : filtre « Analyse » et statuts regroupés par catégorie tant que plusieurs analyses sont concernées. */
+  transversal: boolean;
 }>();
 const emit = defineEmits<{ "update:modelValue": [filters: TrackingFilters]; reset: [] }>();
 
 function patch(change: Partial<TrackingFilters>) {
   emit("update:modelValue", { ...props.modelValue, ...change });
 }
+
+function toggleAnalyse(id: string, checked: boolean) {
+  const current = props.modelValue.analyseIds;
+  // Changer de périmètre peut rendre un statut précis ou un filtre de champ sans objet.
+  patch({
+    analyseIds: checked ? [...current, id] : current.filter((a) => a !== id),
+    statusId: props.modelValue.statusId.startsWith("cat:") ? props.modelValue.statusId : "",
+    fieldFilters: {},
+  });
+}
+
+const categories = Object.entries(STATUS_CATEGORY_LABELS) as [StatusCategory, string][];
+/** Un statut précis n'a de sens que pour une seule analyse ; sinon on filtre par catégorie commune. */
+const singleAnalyse = () => !props.transversal || props.modelValue.analyseIds.length === 1;
 
 function setField(id: string, value: FieldFilter) {
   patch({ fieldFilters: { ...props.modelValue.fieldFilters, [id]: value } });
@@ -35,11 +61,27 @@ const rangeOf = (id: string) => {
       <label for="tf-search">Rechercher</label>
       <input id="tf-search" class="fr-input" type="search" placeholder="Référence, valeur…" :value="modelValue.search" @input="patch({ search: ($event.target as HTMLInputElement).value })" />
     </div>
+    <fieldset v-if="transversal" class="tf__field tf__field--analyses">
+      <legend class="tf__label">Analyse</legend>
+      <label v-for="a in analyses" :key="a.id" class="tf__check">
+        <input type="checkbox" :checked="modelValue.analyseIds.includes(a.id)" @change="toggleAnalyse(a.id, ($event.target as HTMLInputElement).checked)" />
+        {{ a.name }}
+      </label>
+    </fieldset>
     <div class="tf__field">
       <label for="tf-status">Statut</label>
       <select id="tf-status" class="fr-select" :value="modelValue.statusId" @change="patch({ statusId: ($event.target as HTMLSelectElement).value })">
         <option value="">Tous</option>
-        <option v-for="s in statuses" :key="s.id" :value="s.id">{{ s.label }}</option>
+        <template v-if="singleAnalyse()">
+          <option v-for="s in statuses" :key="s.id" :value="s.id">{{ s.label }}</option>
+        </template>
+        <template v-else>
+          <!-- Lien profond vers un statut précis (ex. depuis le tableau de bord) : on le garde visible. -->
+          <option v-if="modelValue.statusId && !modelValue.statusId.startsWith('cat:')" :value="modelValue.statusId">
+            {{ statuses.find((s) => s.id === modelValue.statusId)?.label }}
+          </option>
+          <option v-for="[value, label] in categories" :key="value" :value="`cat:${value}`">{{ label }}</option>
+        </template>
       </select>
     </div>
     <div class="tf__field">
@@ -122,6 +164,23 @@ const rangeOf = (id: string) => {
   padding: 0.75rem;
   border-radius: 0.5rem;
   background: var(--background-alt-grey);
+}
+
+.tf__field--analyses {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.tf__check {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 400 !important;
 }
 
 .tf__field--wide {

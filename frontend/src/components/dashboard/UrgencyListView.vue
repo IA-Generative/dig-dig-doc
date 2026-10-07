@@ -19,6 +19,12 @@ const PAGE_SIZE = 8;
 const page = ref(1);
 watch(() => props.urgencies, () => (page.value = 1));
 
+// DsfrPagination travaille avec un index de page commençant à 0.
+const pageIndex = computed({
+  get: () => page.value - 1,
+  set: (index: number) => (page.value = index + 1),
+});
+
 const pageCount = computed(() => Math.max(1, Math.ceil(props.urgencies.length / PAGE_SIZE)));
 const pages = computed(() =>
   Array.from({ length: pageCount.value }, (_, i) => ({ label: String(i + 1), title: `Page ${i + 1}` })),
@@ -50,7 +56,7 @@ const groups = computed(() => {
           </li>
         </ul>
       </section>
-      <DsfrPagination v-if="pageCount > 1" v-model:current-page="page" :pages="pages" class="list__pagination" />
+      <DsfrPagination v-if="pageCount > 1" v-model:current-page="pageIndex" :pages="pages" class="list__pagination" />
     </template>
   </section>
 </template>
@@ -68,8 +74,11 @@ const groups = computed(() => {
   margin: 0 0 0.25rem;
   font-size: 0.875rem;
   font-weight: 700;
-  text-transform: capitalize;
   color: var(--text-mention-grey);
+}
+
+.list__day-title::first-letter {
+  text-transform: uppercase;
 }
 
 .list__day-title--overdue {

@@ -22,12 +22,24 @@ const planned = computed(() => props.urgencies.filter((u) => u.plannedStart).len
 const weekLabels = ["Il y a 3 semaines", "Il y a 2 semaines", "Semaine dernière", "Cette semaine"];
 const rhythm = computed(() => props.stats.weeklyClosed.map((value, i) => ({ label: weekLabels[i] ?? `Semaine ${i + 1}`, value })));
 
-const byStatus = computed(() => props.statusCounts.map((s) => ({ label: s.label, value: s.count })));
+// Chaque ligne renvoie vers le suivi, filtré sur mes dossiers (#186).
+const byStatus = computed(() =>
+  props.statusCounts.map((s) => ({
+    label: s.label,
+    value: s.count,
+    to: { path: "/suivi", query: { assignee: "me", status: s.statusId } },
+  })),
+);
 
 const byAnalyse = computed(() => {
-  const counts = new Map<string, number>();
-  for (const u of props.urgencies) counts.set(u.analyseName, (counts.get(u.analyseName) ?? 0) + 1);
-  return [...counts].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  const counts = new Map<string, { id: string; value: number }>();
+  for (const u of props.urgencies) {
+    const entry = counts.get(u.analyseName) ?? { id: u.analyseId, value: 0 };
+    counts.set(u.analyseName, { id: entry.id, value: entry.value + 1 });
+  }
+  return [...counts]
+    .map(([label, { id, value }]) => ({ label, value, to: { path: "/suivi", query: { assignee: "me", analyse: id } } }))
+    .sort((a, b) => b.value - a.value);
 });
 
 /** Créneaux (récurrents compris) entre aujourd'hui et dans `days` jours. */

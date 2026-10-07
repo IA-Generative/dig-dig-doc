@@ -14,7 +14,8 @@ const emit = defineEmits<{
 }>();
 
 const editing = ref(false);
-const draft = ref("");
+// Un <input type="number"> lié par v-model fournit un nombre, les autres une chaîne.
+const draft = ref<string | number>("");
 const error = ref<string | null>(null);
 const input = ref<HTMLInputElement | HTMLSelectElement | null>(null);
 
@@ -30,7 +31,7 @@ function cancel() {
   error.value = null;
 }
 
-function commit(raw: string | boolean) {
+function commit(raw: string | number | boolean) {
   const value: CustomValue = typeof raw === "boolean" ? raw : parseInput(props.field, raw);
   const invalid = validateValue(props.field, value);
   if (invalid) {

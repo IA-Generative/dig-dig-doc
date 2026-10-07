@@ -36,9 +36,24 @@ export interface TrackingStatus {
   /** Variante du badge DSFR. */
   tone: "new" | "info" | "success" | "warning" | "error";
   final: boolean;
+  /** Catégorie commune à toutes les analyses : sert au filtre de la vue transversale (statuts propres à chaque analyse). */
+  category: StatusCategory;
 }
 
+export type StatusCategory = "initial" | "progress" | "final";
+
+export const STATUS_CATEGORY_LABELS: Record<StatusCategory, string> = {
+  initial: "À démarrer",
+  progress: "En cours",
+  final: "Clos",
+};
+
 export interface Assignee {
+  id: string;
+  name: string;
+}
+
+export interface MockAnalyse {
   id: string;
   name: string;
 }
@@ -46,6 +61,9 @@ export interface Assignee {
 export interface TrackingRow {
   id: string;
   reference: string;
+  /** Nom du dossier (le tableau de bord l'affiche aussi). */
+  name: string;
+  analyseId: string;
   statusId: string;
   assigneeId: string | null;
   dueAt: string | null;
@@ -55,7 +73,7 @@ export interface TrackingRow {
 }
 
 /** Colonne affichable : une colonne native, ou `field:<id>` pour un champ personnalisé. */
-export type ColumnId = "reference" | "status" | "assignee" | "due" | "createdAt" | "lastActivityAt" | `field:${string}`;
+export type ColumnId = "reference" | "name" | "analyse" | "status" | "assignee" | "due" | "createdAt" | "lastActivityAt" | `field:${string}`;
 
 export interface ColumnDef {
   id: ColumnId;
@@ -67,6 +85,8 @@ export interface ColumnDef {
 
 export const NATIVE_COLUMNS: ColumnDef[] = [
   { id: "reference", label: "Référence", definition: "Référence unique du dossier. Cliquez pour l'ouvrir.", sortable: true },
+  { id: "name", label: "Dossier", definition: "Nom du dossier.", sortable: true },
+  { id: "analyse", label: "Analyse", definition: "Analyse à laquelle le dossier est rattaché. Les colonnes personnalisées dépendent de l'analyse.", sortable: true },
   { id: "status", label: "Statut", definition: "Étape du dossier dans le traitement, selon les statuts définis par l'analyse.", sortable: true },
   { id: "assignee", label: "Affecté à", definition: "Instructeur responsable du dossier. Modifiable directement dans la ligne.", sortable: true },
   { id: "due", label: "Échéance", definition: "Date limite de traitement. La couleur indique le temps restant, selon les seuils de l'analyse.", sortable: true },
@@ -79,7 +99,10 @@ export type FieldFilter = string | { min: string; max: string };
 
 export interface TrackingFilters {
   search: string;
+  /** Identifiant de statut, ou « cat:<catégorie> » (initial, progress, final) dans la vue transversale. */
   statusId: string;
+  /** Analyses retenues (vide = toutes celles auxquelles l'utilisateur a accès). */
+  analyseIds: string[];
   /** « me » = moi, « none » = non affecté, sinon identifiant d'utilisateur. */
   assignee: string;
   /** « overdue », « 7 », « 30 » (jours restants au plus), « none » (sans date). */
@@ -110,6 +133,7 @@ export interface ColumnPrefs {
 export const emptyFilters = (): TrackingFilters => ({
   search: "",
   statusId: "",
+  analyseIds: [],
   assignee: "",
   due: "",
   access: "",

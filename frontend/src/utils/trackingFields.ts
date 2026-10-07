@@ -23,7 +23,9 @@ export function validateValue(field: CustomField, value: CustomValue): string | 
 }
 
 /** Convertit la saisie brute d'un champ en valeur typée. */
-export function parseInput(field: CustomField, raw: string): CustomValue {
+export function parseInput(field: CustomField, raw: string | number): CustomValue {
+  // Un <input type="number"> lié par v-model fournit déjà un nombre.
+  if (typeof raw === "number") return Number.isNaN(raw) ? null : raw;
   if (raw === "") return null;
   if (field.type === "number" || field.type === "amount") {
     const n = Number(raw.replace(",", "."));

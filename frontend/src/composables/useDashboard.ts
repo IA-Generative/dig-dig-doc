@@ -1,7 +1,11 @@
 import { ref } from "vue";
 
-import type { DashboardData, DashboardUrgency } from "@/types/dashboard";
+import { useDossierAccess } from "@/composables/useDossierAccess";
+import { useTracking } from "@/composables/useTracking";
+import { ME, STATUSES } from "@/mocks/dossiers";
+import type { DashboardActivity, DashboardData, DashboardUrgency } from "@/types/dashboard";
 import type { SlotDraft } from "@/types/schedule";
+import { dayOffset } from "@/utils/dates";
 
 // MOCK (issue #174, partie UI) : à remplacer par un appel API une fois les
 // statuts (#168), l'échéance (#172) et les affectations (#173) livrés.
@@ -10,122 +14,118 @@ import type { SlotDraft } from "@/types/schedule";
 // (chargement sans fin), `nounassigned` (sans droit « non affectés »).
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
-const daysFromNow = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString();
 
-const MOCK_ANALYSES = ["Instruction subventions", "Urbanisme", "Commande publique", "Aides logement", "Contentieux"];
-const MOCK_STATUSES = ["À instruire", "En instruction", "Pièces manquantes", "À valider"];
-const MOCK_SUBJECTS = [
-  "Subvention association Les Mouettes",
-  "Permis de construire 2026-0412",
-  "Marché public fournitures bureau",
-  "Recours gracieux n°88",
-  "Aide rénovation énergétique",
-  "Déclaration préalable de travaux",
-  "Convention de partenariat culturelle",
-];
+/** Créneaux planifiés, conservés tant que la page n'est pas rechargée (ils survivent à la navigation). */
+const slots = new Map<string, SlotDraft>();
+let slotsSeeded = false;
 
-/** Quelques dossiers déjà planifiés aujourd'hui, pour valider l'affichage des horaires. */
-function mockSlot(i: number): Pick<DashboardUrgency, "plannedStart" | "plannedEnd" | "recurrence" | "reminders"> {
-  const slots: Record<number, [number, number]> = { 2: [9, 10.5], 5: [11, 12], 7: [14, 16] };
-  const slot = slots[i];
-  if (!slot) return {};
+function demoSlot(position: number): SlotDraft | null {
+  const hours: Record<number, [number, number]> = { 2: [9, 10.5], 5: [11, 12], 7: [14, 16] };
+  const range = hours[position];
+  if (!range) return null;
   const at = (h: number) => {
     const d = new Date();
     d.setHours(Math.floor(h), (h % 1) * 60, 0, 0);
     return d.toISOString();
   };
   return {
-    plannedStart: at(slot[0]),
-    plannedEnd: at(slot[1]),
+    start: at(range[0]),
+    end: at(range[1]),
     // Démo : le premier créneau se répète chaque jour ouvré, avec un rappel.
-    ...(i === 2
-      ? { recurrence: { unit: "week" as const, interval: 1, weekdays: [0, 1, 2, 3, 4], end: { type: "never" as const } }, reminders: [15] }
-      : { reminders: [] }),
+    recurrence: position === 2 ? { unit: "week", interval: 1, weekdays: [0, 1, 2, 3, 4], end: { type: "never" } } : undefined,
+    reminders: position === 2 ? [15] : [],
   };
 }
 
-/** Jeu de données volontairement large (28) pour éprouver pagination, filtres et recherche. */
-function mockUrgencies(): DashboardUrgency[] {
-  return Array.from({ length: 28 }, (_, i) => {
-    const offset = Math.round((i - 6) * 0.6); // de -4 j (retard) à +12 j
+const URGENCY_HORIZON_DAYS = 14;
+
+/**
+ * Construit le tableau de bord à partir du jeu de données commun (@/mocks/dossiers) :
+ * mes dossiers affectés, ceux sans responsable, les statuts. Seuls les dossiers
+ * accessibles (#177) sont pris en compte. Ainsi les affectations faites dans le
+ * tableau de suivi se retrouvent ici.
+ */
+function mockData(): DashboardData {
+  const { rows, analyseName } = useTracking();
+  const { canSee } = useDossierAccess();
+  const isFinal = (statusId: string) => STATUSES.find((s) => s.id === statusId)?.final ?? false;
+  const statusLabel = (statusId: string) => STATUSES.find((s) => s.id === statusId)?.label ?? statusId;
+
+  const visible = rows.value.filter((r) => canSee(r.id));
+  const mine = visible.filter((r) => r.assigneeId === ME);
+  const open = mine.filter((r) => !isFinal(r.statusId));
+
+  const urgentRows = open
+    .filter((r) => r.dueAt && dayOffset(r.dueAt) <= URGENCY_HORIZON_DAYS)
+    .sort((a, b) => Date.parse(a.dueAt!) - Date.parse(b.dueAt!));
+
+  if (!slotsSeeded && urgentRows.length) {
+    slotsSeeded = true;
+    urgentRows.forEach((r, i) => {
+      const slot = demoSlot(i);
+      if (slot) slots.set(r.id, slot);
+    });
+  }
+
+  const urgencies: DashboardUrgency[] = urgentRows.map((r) => {
+    const slot = slots.get(r.id);
     return {
-      dossierId: `mock-u${i}`,
-      dossierName: `${MOCK_SUBJECTS[i % MOCK_SUBJECTS.length]} #${100 + i}`,
-      analyseName: MOCK_ANALYSES[i % MOCK_ANALYSES.length],
-      statusLabel: MOCK_STATUSES[i % MOCK_STATUSES.length],
-      dueAt: daysFromNow(offset),
-      level: offset < 0 ? "overdue" : "soon",
-      ...mockSlot(i),
+      dossierId: r.id,
+      dossierName: r.name,
+      analyseId: r.analyseId,
+      analyseName: analyseName(r.analyseId),
+      statusLabel: statusLabel(r.statusId),
+      dueAt: r.dueAt!,
+      level: dayOffset(r.dueAt!) < 0 ? "overdue" : "soon",
+      plannedStart: slot?.start,
+      plannedEnd: slot?.end,
+      recurrence: slot?.recurrence,
+      reminders: slot?.reminders,
     };
   });
-}
 
-function mockData(): DashboardData {
+  const statusCounts = STATUSES.filter((s) => !s.final)
+    .map((s) => ({ statusId: s.id, label: s.label, count: open.filter((r) => r.statusId === s.id).length }))
+    .filter((s) => s.count > 0);
+
+  const unassigned = visible
+    .filter((r) => r.assigneeId === null && !isFinal(r.statusId))
+    .map((r) => ({
+      dossierId: r.id,
+      dossierName: r.name,
+      analyseName: analyseName(r.analyseId),
+      createdAt: r.createdAt,
+    }));
+
+  const messages: { kind: DashboardActivity["kind"]; text: string }[] = [
+    { kind: "analysis_done", text: "Analyse terminée" },
+    { kind: "status_changed", text: "Statut modifié par Camille D." },
+    { kind: "document_added", text: "Document ajouté : devis-fournisseur.pdf" },
+    { kind: "analysis_failed", text: "L'analyse a échoué" },
+  ];
+  const activity = mine.slice(0, messages.length).map((r, i) => ({
+    id: `act-${i + 1}`,
+    kind: messages[i].kind,
+    dossierId: r.id,
+    dossierName: r.name,
+    message: messages[i].text,
+    at: hoursAgo([1, 4, 22, 47][i]),
+  }));
+
   return {
     stats: {
-      totalDossiers: 52,
-      closedDossiers: 28,
+      totalDossiers: mine.length,
+      closedDossiers: mine.length - open.length,
       completedThisWeek: 9,
       completedPrevWeek: 6,
       weeklyClosed: [5, 8, 6, 9],
       avgProcessingDays: 2.4,
       onTimeRate: 0.87,
     },
-    urgencies: mockUrgencies(),
-    statusCounts: [
-      { statusId: "a_instruire", label: "À instruire", count: 7 },
-      { statusId: "en_instruction", label: "En instruction", count: 12 },
-      { statusId: "pieces_manquantes", label: "Pièces manquantes", count: 3 },
-      { statusId: "a_valider", label: "À valider", count: 2 },
-    ],
-    unassigned: [
-      {
-        dossierId: "mock-4",
-        dossierName: "Demande d'aide à la rénovation énergétique",
-        analyseName: "Aides logement",
-        createdAt: hoursAgo(5),
-      },
-      {
-        dossierId: "mock-5",
-        dossierName: "Recours gracieux n°88",
-        analyseName: "Contentieux",
-        createdAt: hoursAgo(30),
-      },
-    ],
-    activity: [
-      {
-        id: "act-1",
-        kind: "analysis_done",
-        dossierId: "mock-2",
-        dossierName: "Permis de construire 2026-0412",
-        message: "Analyse terminée",
-        at: hoursAgo(1),
-      },
-      {
-        id: "act-2",
-        kind: "status_changed",
-        dossierId: "mock-1",
-        dossierName: "Subvention association Les Mouettes",
-        message: "Statut passé de « À instruire » à « En instruction » par Camille D.",
-        at: hoursAgo(4),
-      },
-      {
-        id: "act-3",
-        kind: "document_added",
-        dossierId: "mock-3",
-        dossierName: "Marché public fournitures bureau",
-        message: "Document ajouté : devis-fournisseur.pdf",
-        at: hoursAgo(22),
-      },
-      {
-        id: "act-4",
-        kind: "analysis_failed",
-        dossierId: "mock-5",
-        dossierName: "Recours gracieux n°88",
-        message: "L'analyse a échoué",
-        at: hoursAgo(47),
-      },
-    ],
+    urgencies,
+    statusCounts,
+    unassigned,
+    activity,
   };
 }
 
@@ -175,6 +175,8 @@ export function useDashboard() {
   function setSchedule(dossierId: string, slot: SlotDraft | null) {
     const target = data.value?.urgencies.find((u) => u.dossierId === dossierId);
     if (!target) return;
+    if (slot) slots.set(dossierId, slot);
+    else slots.delete(dossierId);
     target.plannedStart = slot?.start;
     target.plannedEnd = slot?.end;
     target.recurrence = slot?.recurrence;
