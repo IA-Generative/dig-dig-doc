@@ -65,7 +65,11 @@ class AllowAllAccess:
     request. Selected via VERIFY_TOKEN_MODEL=full-access (CI unit tests)."""
 
     def __call__(self, request: Request) -> RequestContext:
-        return RequestContext(user_id="dev-user", email="dev@example.com", roles=["admin"], is_admin=True)
+        # Un groupe de test : un dossier créé par l'API est restreint par défaut (issue #177) et a besoin d'au moins un
+        # groupe. L'identité reste administrateur.
+        return RequestContext(
+            user_id="dev-user", email="dev@example.com", roles=["admin"], is_admin=True, groups=["/dev-tests"]
+        )
 
 
 SECURITY_FACTORY = {"full-access": AllowAllAccess, "keycloak": KeycloakToken}

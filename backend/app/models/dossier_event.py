@@ -20,6 +20,9 @@ class DossierEventType(enum.StrEnum):
     DUE_DATE_CHANGED = "due_date_changed"
     # Affecté, réaffecté ou désaffecté (issue #173) ; `from` / `to` : {id, name} ou null.
     ASSIGNEE_CHANGED = "assignee_changed"
+    # Visibilité ou groupes d'accès modifiés (issue #177) : ``visibility`` {from, to}, ``groups_added``,
+    # ``groups_removed``.
+    ACCESS_CHANGED = "access_changed"
     # Le dossier entre dans un statut final (date de clôture posée) / en sort (réouverture).
     CLOSED = "closed"
     REOPENED = "reopened"

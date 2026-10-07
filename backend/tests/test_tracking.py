@@ -42,6 +42,7 @@ def _person(client: TestClient, suffix: str) -> RequestContext:
         is_admin=False,
         first_name="Suivi",
         last_name=suffix,
+        groups=["/dev-tests"],
     )
     app.dependency_overrides[get_current_user] = lambda: person
     try:

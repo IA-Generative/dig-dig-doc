@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -21,6 +22,11 @@ class AppUser(Base):
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     email: Mapped[str] = mapped_column(String, nullable=False, default="")
+    # Groupes Keycloak et rôle d'administrateur vus à la dernière connexion (issue #177) : sert à savoir si une
+    # personne a accès à un dossier (on ne propose à l'affectation que des personnes qui y ont accès) sans
+    # interroger Keycloak. Une copie d'un instant : elle se met à jour à la prochaine connexion.
+    groups: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     @property

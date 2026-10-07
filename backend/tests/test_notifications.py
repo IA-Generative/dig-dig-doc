@@ -21,6 +21,7 @@ def _person(label: str) -> RequestContext:
         is_admin=False,
         first_name=label,
         last_name=suffix,
+        groups=["/dev-tests"],
     )
 
 
