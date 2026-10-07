@@ -38,6 +38,7 @@ from app.routers.internal import router as internal_router
 from app.routers.internal_agent import agent_conversations_router as internal_agent_conversations_router
 from app.routers.internal_agent import router as internal_agent_router
 from app.routers.models import router as models_router
+from app.routers.notifications import router as notifications_router
 from app.routers.profile import router as profile_router
 from app.routers.reports import router as reports_router
 from app.routers.tracking import router as tracking_router
@@ -161,6 +162,7 @@ app.include_router(profile_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(tracking_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 app.include_router(work_slots_router, prefix="/api")
 app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
