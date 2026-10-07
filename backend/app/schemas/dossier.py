@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -579,6 +579,24 @@ class WorkflowStatusUpdate(BaseModel):
     status_id: uuid.UUID
 
 
+class DueAtUpdate(BaseModel):
+    """Nouvelle échéance du dossier ; ``null`` la supprime."""
+
+    due_at: date | None
+
+
+class DueInfoOut(BaseModel):
+    """Situation du dossier par rapport à son échéance, calculée côté serveur selon les seuils de l'analyse.
+
+    ``level`` : ``ok`` (loin), ``soon`` (proche), ``overdue`` (dépassée), ``closed`` (clos : plus à surveiller).
+    ``color`` : couleur du niveau selon les seuils (``null`` pour un dossier clos). ``days_left`` : jours
+    restants, négatif si l'échéance est dépassée."""
+
+    level: str
+    days_left: int
+    color: str | None
+
+
 class DossierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -594,6 +612,11 @@ class DossierOut(BaseModel):
     # None pour un dossier « à ranger ». `closed_at` : date de clôture (statut final), ou None.
     workflow_status: StatusDefinitionOut | None = None
     closed_at: datetime | None = None
+    # Échéance (issue #172) : la date, son niveau calculé par le serveur, et « clos avant l'échéance » (``null``
+    # si le dossier n'est pas clos ou n'a pas d'échéance).
+    due_at: date | None = None
+    due: DueInfoOut | None = None
+    closed_before_due: bool | None = None
     summary_status: SummaryStatus
     summary_error: str | None
     # Dernier résumé global du dossier (le plus récent), ou None.
