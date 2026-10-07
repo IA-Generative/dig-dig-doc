@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
+import BulkAccessModal from "@/components/access/BulkAccessModal.vue";
 import BulkAssignBar from "@/components/tracking/BulkAssignBar.vue";
 import ColumnsModal from "@/components/tracking/ColumnsModal.vue";
 import CustomFieldsModal from "@/components/tracking/CustomFieldsModal.vue";
@@ -9,8 +10,10 @@ import TrackingFiltersPanel from "@/components/tracking/TrackingFilters.vue";
 import TrackingTable from "@/components/tracking/TrackingTable.vue";
 import TrackingViewsBar from "@/components/tracking/TrackingViewsBar.vue";
 import { useAuth } from "@/composables/useAuth";
+import { useDossierAccess } from "@/composables/useDossierAccess";
 import { useTracking } from "@/composables/useTracking";
 import { BUILT_IN_VIEWS, useTrackingPrefs } from "@/composables/useTrackingPrefs";
+import type { DossierAccess } from "@/types/access";
 import {
   emptyFilters,
   type ColumnId,
@@ -33,6 +36,7 @@ const analyseId = computed(() => String(route.params.id));
 
 const { fields, statuses, assignees, query, queryAll, assign, setValue, assigneeName } = useTracking();
 const prefs = useTrackingPrefs(analyseId, fields);
+const { memberHasAccess, setAccess } = useDossierAccess();
 
 const PAGE_SIZE = 10;
 
@@ -48,6 +52,7 @@ const selected = ref<string[]>([]);
 
 const filtersOpen = ref(false);
 const columnsOpen = ref(false);
+const bulkAccessOpen = ref(false);
 const fieldsOpen = ref(false);
 const notice = ref("");
 
@@ -119,6 +124,15 @@ function announce(message: string) {
 }
 
 function onAssign(ids: string[], assigneeId: string | null) {
+  // On n'affecte qu'une personne qui a accès au dossier (#177).
+  if (assigneeId) {
+    const refused = ids.filter((id) => !memberHasAccess(id, assigneeId));
+    if (refused.length) {
+      announce(`${refused.length} dossier${refused.length > 1 ? "s" : ""} non affecté${refused.length > 1 ? "s" : ""} : ${assigneeName(assigneeId)} n'y a pas accès.`);
+      ids = ids.filter((id) => !refused.includes(id));
+      if (ids.length === 0) return;
+    }
+  }
   assign(ids, assigneeId);
   announce(
     `${ids.length} dossier${ids.length > 1 ? "s" : ""} ${assigneeId ? `affecté${ids.length > 1 ? "s" : ""} à ${assigneeName(assigneeId)}` : "désaffecté" + (ids.length > 1 ? "s" : "")}. Tracé dans l'historique.`,
@@ -134,6 +148,25 @@ function onSetValue(rowId: string, fieldId: string, value: CustomValue, done: (e
     announce("Valeur enregistrée. Tracée dans l'historique du dossier.");
     load();
   }
+}
+
+/** Applique un accès à la sélection ; les affectations des personnes qui perdent l'accès sont annulées. */
+function onBulkAccess(next: DossierAccess) {
+  let cancelled = 0;
+  for (const id of selected.value) {
+    setAccess(id, next);
+    const row = rows.value.find((r) => r.id === id);
+    if (row?.assigneeId && !memberHasAccess(id, row.assigneeId)) {
+      assign([id], null);
+      cancelled++;
+    }
+  }
+  announce(
+    `Accès défini pour ${selected.value.length} dossier${selected.value.length > 1 ? "s" : ""}.${cancelled ? ` ${cancelled} affectation${cancelled > 1 ? "s" : ""} annulée${cancelled > 1 ? "s" : ""}.` : ""} Tracé dans l'historique.`,
+  );
+  bulkAccessOpen.value = false;
+  selected.value = [];
+  load();
 }
 
 function onColumnsSaved(order: ColumnId[], hidden: ColumnId[]) {
@@ -215,7 +248,9 @@ function exportCsv() {
       v-if="selected.length"
       :count="selected.length"
       :assignees="assignees"
+      :can-set-access="isAdmin"
       @assign="(id) => onAssign(selected, id)"
+      @set-access="bulkAccessOpen = true"
       @clear="selected = []"
     />
 
@@ -229,6 +264,7 @@ function exportCsv() {
       :fields="fields"
       :assignees="assignees"
       :loading="loading"
+      :can-assign="memberHasAccess"
       @assign="(id, assigneeId) => onAssign([id], assigneeId)"
       @set-value="onSetValue"
     />
@@ -245,6 +281,7 @@ function exportCsv() {
       @reset="onColumnsReset"
       @close="columnsOpen = false"
     />
+    <BulkAccessModal v-if="bulkAccessOpen" :count="selected.length" @apply="onBulkAccess" @close="bulkAccessOpen = false" />
     <CustomFieldsModal v-if="fieldsOpen" @close="fieldsOpen = false" @saved="announce" />
   </div>
 </template>

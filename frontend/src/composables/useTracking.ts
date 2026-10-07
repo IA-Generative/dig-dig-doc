@@ -11,6 +11,7 @@ import {
   type TrackingSort,
   type TrackingStatus,
 } from "@/types/tracking";
+import { useDossierAccess } from "@/composables/useDossierAccess";
 import { expiryInfo } from "@/utils/expiry";
 import { matchesFieldFilter, validateValue } from "@/utils/trackingFields";
 
@@ -79,7 +80,12 @@ const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const statusOrder = (id: string) => STATUSES.findIndex((s) => s.id === id);
 const assigneeName = (id: string | null) => ASSIGNEES.find((a) => a.id === id)?.name ?? "";
 
+const accessApi = useDossierAccess();
+
 function matches(row: TrackingRow, f: TrackingFilters): boolean {
+  // Visibilité (#177) : un dossier inaccessible n'apparaît jamais (ni dans les compteurs ni dans l'export).
+  if (!accessApi.canSee(row.id)) return false;
+  if (f.access && accessApi.accessOf(row.id).visibility !== f.access) return false;
   if (f.statusId && row.statusId !== f.statusId) return false;
   if (f.assignee === "me" && row.assigneeId !== ME) return false;
   if (f.assignee === "none" && row.assigneeId !== null) return false;

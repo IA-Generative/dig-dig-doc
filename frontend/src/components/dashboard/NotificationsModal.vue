@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
+import { useDossierAccess } from "@/composables/useDossierAccess";
 import { useNotifications } from "@/composables/useNotifications";
 import {
   NOTIFICATION_CATEGORIES,
@@ -12,6 +13,7 @@ import {
 import { formatRelativeTime } from "@/utils/dates";
 
 const emit = defineEmits<{ close: [] }>();
+const { isRevoked } = useDossierAccess();
 
 const {
   notifications,
@@ -104,7 +106,17 @@ function open(id: string) {
     <p v-if="visible.length === 0" class="notifs__empty">Aucune notification.</p>
     <ul v-else class="notifs__list">
       <li v-for="n in visible" :key="n.id">
-        <RouterLink :to="`/dossiers/${n.dossierId}`" class="notifs__row" @click="open(n.id)">
+        <!-- Accès retiré (#177) : la notification reste dans la liste mais sans lien ni nom de dossier. -->
+        <div v-if="isRevoked(n.dossierId)" class="notifs__row notifs__row--revoked">
+          <span class="notifs__dot" aria-hidden="true" />
+          <VIcon name="ri-lock-line" />
+          <span class="notifs__main">
+            <span class="notifs__title">Dossier non accessible</span>
+            <span class="notifs__sub">Vous n'avez plus accès à ce dossier.</span>
+          </span>
+          <span class="notifs__time">{{ formatRelativeTime(n.createdAt) }}</span>
+        </div>
+        <RouterLink v-else :to="`/dossiers/${n.dossierId}`" class="notifs__row" @click="open(n.id)">
           <span class="notifs__dot" :class="{ 'notifs__dot--on': !n.readAt }" aria-hidden="true" />
           <VIcon :name="ICONS[n.kind]" />
           <span class="notifs__main">
@@ -196,6 +208,10 @@ function open(id: string) {
 
 .notifs__row:hover {
   background: var(--background-alt-grey-hover);
+}
+
+.notifs__row--revoked {
+  color: var(--text-mention-grey);
 }
 
 .notifs__dot {
