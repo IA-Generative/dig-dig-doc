@@ -38,7 +38,9 @@ def test_explicit_celery_urls_win_over_the_redis_url(monkeypatch: pytest.MonkeyP
 
 def test_a_bare_host_gets_a_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
     # Le secret peut donner un hôte sans schéma (boto3 le refuserait).
-    assert settings(monkeypatch, AWS_ENDPOINT_URL="s3.fr-par.scw.cloud").s3_endpoint_url == "https://s3.fr-par.scw.cloud"
+    assert (
+        settings(monkeypatch, AWS_ENDPOINT_URL="s3.fr-par.scw.cloud").s3_endpoint_url == "https://s3.fr-par.scw.cloud"
+    )
 
 
 def test_a_local_endpoint_keeps_its_scheme(monkeypatch: pytest.MonkeyPatch) -> None:
