@@ -25,7 +25,7 @@ const allTabs = [
   { title: "Classification documentaire", icon: "ri-price-tag-3-line", tabId: "tab-classification", panelId: "panel-classification", routeName: "analyse-classification" },
   { title: "Extraction d'entités nommées", icon: "ri-braces-line", tabId: "tab-extraction", panelId: "panel-extraction", routeName: "analyse-extraction" },
   { title: "Agents", icon: "ri-robot-line", tabId: "tab-agents", panelId: "panel-agents", routeName: "analyse-agents" },
-  { title: "Statuts", icon: "ri-flag-line", tabId: "tab-statuses", panelId: "panel-statuses", routeName: "analyse-statuses" },
+  { title: "Statuts et échéance", icon: "ri-flag-line", tabId: "tab-statuses", panelId: "panel-statuses", routeName: "analyse-statuses" },
   { title: "Suivi", icon: "ri-table-line", tabId: "tab-tracking", panelId: "panel-tracking", routeName: "analyse-tracking" },
   // Modèles de document de l'analyse : réservés aux administrateurs, comme leur API (backend issue #138).
   { title: "Documents", icon: "ri-file-word-2-line", tabId: "tab-documents", panelId: "panel-documents", routeName: "analyse-documents", adminOnly: true },

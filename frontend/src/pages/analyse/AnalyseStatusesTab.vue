@@ -2,16 +2,18 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 
+import DueSettingsEditor from "@/components/analyses/DueSettingsEditor.vue";
 import StatusesEditor from "@/components/statuses/StatusesEditor.vue";
 import StatusReplacementModal from "@/components/statuses/StatusReplacementModal.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
-import type { StatusDraft } from "@/types/analyse";
+import type { DueSettings, StatusDraft } from "@/types/analyse";
 import { ApiError } from "@/utils/api";
 
-// Onglet « Statuts » d'une analyse (issue #170) : les statuts que peuvent
-// prendre ses dossiers. Supprimer un statut encore utilisé demande un remplaçant.
+// Onglet « Statuts et échéance » d'une analyse : les statuts que peuvent prendre ses dossiers (#170), puis leur
+// échéance (#172). Supprimer un statut encore utilisé demande un remplaçant.
 const route = useRoute();
-const { getById, fetchAnalyse, updateStatuses, restoreStatusesVersion } = useAnalyses();
+const { getById, fetchAnalyse, updateStatuses, restoreStatusesVersion, updateDueSettings, restoreDueSettingsVersion } =
+  useAnalyses();
 
 const analyse = computed(() => getById(String(route.params.id)));
 onMounted(() => {
@@ -69,6 +71,14 @@ function onRestore(versionId: string) {
   run((replacements) => restoreStatusesVersion(analyse.value!.id, versionId, replacements), "Version restaurée.");
 }
 
+function onSaveDue(settings: DueSettings) {
+  run(() => updateDueSettings(analyse.value!.id, settings), "Échéance enregistrée. L'ancien réglage est dans l'historique.");
+}
+
+function onRestoreDue(versionId: string) {
+  run(() => restoreDueSettingsVersion(analyse.value!.id, versionId), "Version restaurée.");
+}
+
 async function confirmReplacement(replacements: Record<string, string>) {
   const current = pending.value;
   pending.value = null;
@@ -93,6 +103,14 @@ async function confirmReplacement(replacements: Record<string, string>) {
       @save="onSave"
       @restore="onRestore"
     />
+    <hr class="analyse-statuses__sep" />
+    <DueSettingsEditor
+      :settings="analyse.dueSettings"
+      :versions="analyse.dueSettingsVersions"
+      :saving="saving"
+      @save="onSaveDue"
+      @restore="onRestoreDue"
+    />
     <p v-if="message" class="analyse-statuses__ok" role="status">{{ message }}</p>
     <p v-if="error" class="analyse-statuses__error" role="alert">{{ error }}</p>
 
@@ -110,6 +128,10 @@ async function confirmReplacement(replacements: Record<string, string>) {
 </template>
 
 <style scoped>
+.analyse-statuses__sep {
+  margin: 2rem 0;
+}
+
 .analyse-statuses__ok {
   margin: 0.75rem 0 0;
   color: var(--text-default-success);

@@ -1,3 +1,4 @@
+import { formatDueDate } from "@/utils/due";
 import { EVENT_CATEGORIES, type DossierEvent } from "@/types/dossierEvent";
 
 export interface EventDescription {
@@ -16,6 +17,7 @@ const formatSize = (bytes: number) => (bytes < 1_000_000 ? `${Math.max(1, Math.r
 
 const REASONS: Record<string, string> = {
   status_removed: "statut supprimé et remplacé",
+  default_duration: "durée par défaut de l'analyse",
   status_flag_changed: "le statut est devenu final ou ne l'est plus",
 };
 
@@ -44,6 +46,15 @@ export function describeEvent(event: DossierEvent, lookups: Lookups): EventDescr
         title: "Statut modifié",
         detail: [p.from?.name ? `${p.from.name} → ${p.to?.name}` : `Statut initial : ${p.to?.name}`, reason].filter(Boolean).join(" · "),
       };
+    case "due_date_changed": {
+      const from = p.from ? formatDueDate(p.from) : null;
+      const to = p.to ? formatDueDate(p.to) : null;
+      return {
+        icon: "ri-calendar-event-line",
+        title: !to ? "Échéance supprimée" : !from ? "Échéance fixée" : "Échéance modifiée",
+        detail: [from && to ? `${from} → ${to}` : to ?? from, reason].filter(Boolean).join(" · "),
+      };
+    }
     case "closed":
       return { icon: "ri-check-double-line", title: "Dossier clôturé", detail: [p.status?.name, reason].filter(Boolean).join(" · ") };
     case "reopened":

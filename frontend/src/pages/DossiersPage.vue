@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
 import AccessBadge from "@/components/access/AccessBadge.vue";
+import DossierDueBadge from "@/components/dossiers/DossierDueBadge.vue";
 import CreateDossierModal from "@/components/dossiers/CreateDossierModal.vue";
 import WorkflowStatusBadge from "@/components/statuses/WorkflowStatusBadge.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
@@ -32,15 +33,23 @@ const pages = computed(() =>
 // Filtre par statut de dossier et tri (#170) ; le filtre se lit dans l'URL (?status=<id>) pour que le
 // tableau de bord et le suivi puissent y renvoyer.
 const statusFilter = ref(typeof route.query.status === "string" ? route.query.status : "");
-const sort = ref<"created_at" | "status">("created_at");
+const dueFilter = ref<"" | "overdue" | "7" | "30" | "none">(
+  ["overdue", "7", "30", "none"].includes(String(route.query.due)) ? (String(route.query.due) as "overdue" | "7" | "30" | "none") : "",
+);
+const sort = ref<"created_at" | "status" | "due">("created_at");
 
 watch(
-  [currentPage, statusFilter, sort],
-  () => fetchList(currentPage.value, PAGE_SIZE, { workflowStatusId: statusFilter.value || undefined, sort: sort.value }),
+  [currentPage, statusFilter, dueFilter, sort],
+  () =>
+    fetchList(currentPage.value, PAGE_SIZE, {
+      workflowStatusId: statusFilter.value || undefined,
+      due: dueFilter.value || undefined,
+      sort: sort.value,
+    }),
   { immediate: true },
 );
 // Un changement de filtre ou de tri ramène à la première page.
-watch([statusFilter, sort], () => (currentPage.value = 1));
+watch([statusFilter, dueFilter, sort], () => (currentPage.value = 1));
 
 /** Statuts de toutes les analyses ; le nom de l'analyse les distingue quand il y en a plusieurs. */
 const statusOptions = computed(() => [
@@ -121,16 +130,27 @@ function isUnassigned(dossier: Dossier) {
         </select>
       </div>
       <div>
+        <label for="dossiers-due-filter" class="dossiers-page__filter-label">Échéance</label>
+        <select id="dossiers-due-filter" v-model="dueFilter" class="fr-select">
+          <option value="">Toutes les échéances</option>
+          <option value="overdue">Dépassée</option>
+          <option value="7">Dans 7 jours ou moins</option>
+          <option value="30">Dans 30 jours ou moins</option>
+          <option value="none">Sans échéance</option>
+        </select>
+      </div>
+      <div>
         <label for="dossiers-sort" class="dossiers-page__filter-label">Trier par</label>
         <select id="dossiers-sort" v-model="sort" class="fr-select">
           <option value="created_at">Date (plus récents d'abord)</option>
           <option value="status">Statut</option>
+          <option value="due">Échéance (la plus proche d'abord)</option>
         </select>
       </div>
     </div>
 
     <p v-if="dossiers.length === 0" class="fr-text--sm">
-      {{ statusFilter ? "Aucun dossier dans ce statut." : "Aucun dossier pour le moment." }}
+      {{ statusFilter || dueFilter ? "Aucun dossier ne correspond à ces filtres." : "Aucun dossier pour le moment." }}
     </p>
 
     <div v-else class="fr-table">
@@ -143,6 +163,7 @@ function isUnassigned(dossier: Dossier) {
                   <th scope="col">Dossier</th>
                   <th scope="col">Analyse</th>
                   <th scope="col">Statut</th>
+                  <th scope="col">Échéance</th>
                   <th scope="col">Exécution</th>
                   <th scope="col">Date</th>
                   <th scope="col" class="dossiers-page__actions-col">Actions</th>
@@ -176,6 +197,10 @@ function isUnassigned(dossier: Dossier) {
                   </td>
                   <td>
                     <WorkflowStatusBadge v-if="dossier.workflowStatus" :status="dossier.workflowStatus" />
+                    <span v-else class="fr-text--xs dossiers-page__no-status">—</span>
+                  </td>
+                  <td>
+                    <DossierDueBadge v-if="dossier.due" :due="dossier.due" compact />
                     <span v-else class="fr-text--xs dossiers-page__no-status">—</span>
                   </td>
                   <td><DsfrBadge :label="DOSSIER_STATUS_LABELS[dossier.status]" :type="statusBadgeType[dossier.status]" small /></td>
@@ -278,12 +303,18 @@ function isUnassigned(dossier: Dossier) {
   background-color: var(--background-alt-grey);
 }
 
+.dossiers-page__table :deep(td:first-child) {
+  max-width: 16rem;
+  white-space: normal;
+}
+
 .dossiers-page__name-link {
   font-weight: 500;
 }
 
 .dossiers-page__table :deep(td),
 .dossiers-page__table :deep(th) {
+  padding: 0.75rem 0.5rem;
   vertical-align: middle;
 }
 
