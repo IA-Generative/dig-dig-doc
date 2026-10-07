@@ -20,4 +20,11 @@ class DossierEventOut(BaseModel):
     payload: dict
 
 
-__all__ = ["DossierEventOut", "DossierEventType"]
+class DossierEventActorOut(BaseModel):
+    """Un auteur d'événements du dossier : identifiant et dernier nom affiché."""
+
+    actor_id: str
+    actor_name: str | None
+
+
+__all__ = ["DossierEventActorOut", "DossierEventOut", "DossierEventType"]
