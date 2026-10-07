@@ -112,6 +112,8 @@ export interface Dossier {
   id: string;
   name: string;
   /** Statut de dossier défini par son analyse (#168) ; absent pour un dossier « à ranger ». */
+  /** Qui voit le dossier (#177) : « restricted » (groupes associés) ou « analyse ». */
+  visibility?: "restricted" | "analyse";
   workflowStatus?: WorkflowStatus;
   /** Date de clôture : posée quand le dossier entre dans un statut final. */
   closedAt?: string;

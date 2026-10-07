@@ -90,7 +90,7 @@ function formatDate(iso: string) {
           <td v-for="c in columns" :key="c.id">
             <template v-if="c.id === 'reference'">
               <RouterLink :to="`/dossiers/${r.id}`" class="tt__ref">{{ r.reference }}</RouterLink>
-              <AccessBadge :dossier-id="r.id" class="fr-ml-1w" />
+              <AccessBadge :visibility="r.visibility" class="fr-ml-1w" />
             </template>
             <template v-else-if="c.id === 'name'">{{ r.name }}</template>
             <RouterLink v-else-if="c.id === 'analyse'" :to="`/analyses/${r.analyse.id}/suivi`">{{ r.analyse.name }}</RouterLink>

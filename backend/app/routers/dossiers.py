@@ -46,6 +46,8 @@ from app.repositories.dossier_repository import DossierRepository
 from app.repositories.user_directory_repository import UserDirectoryRepository
 from app.schemas.dossier import (
     AssigneeUpdate,
+    BulkAccessResult,
+    BulkAccessUpdate,
     BulkAssigneeResult,
     BulkAssigneeUpdate,
     ChatEventOut,
@@ -290,7 +292,11 @@ async def update_assignee(
 
 
 def _access_out(
-    dossier: Dossier, groups: list, user: RequestContext, assignee_unassigned: bool | None = None
+    dossier: Dossier,
+    groups: list,
+    user: RequestContext,
+    assignee_unassigned: bool | None = None,
+    unassigned_person: dict | None = None,
 ) -> DossierAccessChangeOut:
     return DossierAccessChangeOut(
         visibility=dossier.visibility,
@@ -298,6 +304,7 @@ def _access_out(
         can_edit=user.is_admin,
         available_groups=sorted(user.groups),
         assignee_unassigned=bool(assignee_unassigned),
+        unassigned_person=unassigned_person,
     )
 
 
@@ -312,22 +319,15 @@ async def get_dossier_access(
     return _access_out(dossier, list(await DossierAccessRepository(db).groups_of(dossier_id)), user)
 
 
-@router.put("/{dossier_id}/access", response_model=DossierAccessChangeOut)
-async def update_dossier_access(
-    dossier_id: uuid.UUID,
-    body: DossierAccessUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    user: Annotated[RequestContext, Depends(get_current_user)],
-) -> DossierAccessChangeOut:
-    """Change la visibilité et les groupes du dossier. **Réservé aux administrateurs** (le créateur n'a aucun droit
-    propre) ; un groupe ajouté doit faire partie des groupes de la personne qui modifie ; un dossier restreint garde
-    au moins un groupe. Une personne affectée qui perd ainsi l'accès est désaffectée (tracé dans le journal)."""
-    dossier = await _get_or_404(DossierRepository(db), dossier_id, user)
+async def _checked_access_change(
+    access: DossierAccessRepository, dossier_id: uuid.UUID, body: DossierAccessUpdate, user: RequestContext
+) -> tuple[Visibility, list[str]]:
+    """Valide un changement d'accès : seuls les administrateurs (403), un groupe **ajouté** doit être l'un des groupes
+    de la personne (422), un dossier restreint garde au moins un groupe (422)."""
     if not user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les administrateurs modifient l'accès d'un dossier."
         )
-    access = DossierAccessRepository(db)
     visibility = Visibility(body.visibility)
     wanted = list(dict.fromkeys(body.group_paths))
     current = set(await access.group_paths(dossier_id))
@@ -346,11 +346,74 @@ async def update_dossier_access(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={"code": "groups_required", "message": "Un dossier restreint a besoin d'au moins un groupe."},
         )
+    return visibility, wanted
+
+
+@router.put("/bulk-access", response_model=BulkAccessResult)
+async def update_access_in_bulk(
+    body: BulkAccessUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> BulkAccessResult:
+    """Change l'accès de plusieurs dossiers **en une transaction** (administrateurs) : les groupes **remplacent** ceux
+    de chaque dossier. Tout ou rien : un dossier introuvable (ou invisible) donne 404 avec la liste, un groupe qui
+    n'est pas le sien 422. Les personnes affectées qui perdent l'accès sont désaffectées (tracé par dossier)."""
+    repository = DossierRepository(db)
+    access = DossierAccessRepository(db)
+    wanted_ids = list(dict.fromkeys(body.dossier_ids))
+    dossiers = await repository.get_many(wanted_ids, user)
+    missing = sorted(str(i) for i in set(wanted_ids) - {d.id for d in dossiers})
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "dossiers_not_found", "message": "Dossiers introuvables.", "dossier_ids": missing},
+        )
+    updated = unassigned = 0
+    try:
+        for dossier in dossiers:
+            visibility, wanted = await _checked_access_change(access, dossier.id, body, user)
+            change = await access.update(
+                dossier, visibility=visibility, group_paths=wanted, actor=user, granted_by=user.user_id, commit=False
+            )
+            updated += bool(change)
+            unassigned += bool(change.get("assignee_unassigned"))
+    except HTTPException:
+        await db.rollback()
+        raise
+    await db.commit()
+    return BulkAccessResult(updated=updated, unchanged=len(dossiers) - updated, unassigned=unassigned)
+
+
+@router.put("/{dossier_id}/access", response_model=DossierAccessChangeOut)
+async def update_dossier_access(
+    dossier_id: uuid.UUID,
+    body: DossierAccessUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+    dry_run: Annotated[
+        bool, Query(description="Simule : dit qui perdrait l'accès, sans rien enregistrer ni tracer")
+    ] = False,
+) -> DossierAccessChangeOut:
+    """Change la visibilité et les groupes du dossier. **Réservé aux administrateurs** (le créateur n'a aucun droit
+    propre) ; un groupe ajouté doit faire partie des groupes de la personne qui modifie ; un dossier restreint garde
+    au moins un groupe. Une personne affectée qui perd ainsi l'accès est désaffectée (tracé dans le journal).
+    Avec ``dry_run``, rien n'est enregistré : la réponse nomme la personne qui perdrait l'accès (pour la confirmer)."""
+    dossier = await _get_or_404(DossierRepository(db), dossier_id, user)
+    access = DossierAccessRepository(db)
+    visibility, wanted = await _checked_access_change(access, dossier_id, body, user)
     change = await access.update(
-        dossier, visibility=visibility, group_paths=wanted, actor=user, granted_by=user.user_id
+        dossier, visibility=visibility, group_paths=wanted, actor=user, granted_by=user.user_id, commit=not dry_run
     )
+    if dry_run:
+        await db.rollback()
     refreshed = await _get_or_404(DossierRepository(db), dossier_id, user)
-    return _access_out(refreshed, list(await access.groups_of(dossier_id)), user, change.get("assignee_unassigned"))
+    return _access_out(
+        refreshed,
+        list(await access.groups_of(dossier_id)),
+        user,
+        change.get("assignee_unassigned"),
+        change.get("unassigned_person"),
+    )
 
 
 @router.put("/{dossier_id}/due-at", response_model=DossierOut)

@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,9 @@ async def list_tracking(
         Query(pattern="^(overdue|7|30|none)$", description="overdue, 7 ou 30 (jours restants au plus), none"),
     ] = None,
     search: Annotated[str | None, Query(max_length=100, description="Nom ou référence du dossier")] = None,
+    access: Annotated[
+        Literal["restricted", "analyse"] | None, Query(description="Visibilité : restreints, ou selon l'analyse")
+    ] = None,
     sort: SortKey = "created_at",
     direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
 ) -> Page[TrackingRowOut]:
@@ -51,6 +54,7 @@ async def list_tracking(
         assignee=user.user_id if assignee == "me" else assignee,
         due=due,
         search=search,
+        access=access,
         sort=sort,
         descending=direction == "desc",
         user=user,
@@ -63,6 +67,7 @@ async def list_tracking(
             analyse=TrackingAnalyseOut(id=row.dossier.analyse_id, name=row.analyse_name),
             status=row.dossier.workflow_status and StatusDefinitionOut.model_validate(row.dossier.workflow_status),
             assignee=row.dossier.assignee and PersonOut.model_validate(row.dossier.assignee, from_attributes=True),
+            visibility=row.dossier.visibility,
             due_at=row.dossier.due_at,
             due=row.due and DueInfoOut.model_validate(row.due, from_attributes=True),
             created_at=row.dossier.created_at,

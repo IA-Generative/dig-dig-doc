@@ -2,7 +2,7 @@
 
 Issue #177 (partie 1 : modèle, règle, création, modification, affectation), parent #144. Avoir accès à une **analyse** ne donne plus accès à tous ses **dossiers** : un dossier peut être **restreint** à certains groupes Keycloak.
 
-> **État : parties 1 et 2, et agent assistant.** La règle s'applique à **toutes** les routes d'un dossier, au suivi, au tableau de bord, aux notifications, aux créneaux et aux conversations, et l'**agent assistant** agit avec les droits de la personne pour qui il travaille ([détail](acces-de-l-agent-assistant.md)). Restent : l'interface (section « Accès », pastille « Restreint ») et les rôles (voir « Reste à faire »).
+> **État : parties 1 et 2, et agent assistant.** La règle s'applique à **toutes** les routes d'un dossier, au suivi, au tableau de bord, aux notifications, aux créneaux et aux conversations, et l'**agent assistant** agit avec les droits de la personne pour qui il travaille ([détail](acces-de-l-agent-assistant.md)). L'**interface** est branchée ([accès aux dossiers, interface](../frontend/acces-aux-dossiers/README.md)). Restent les rôles et le lien de partage par e-mail (voir « Reste à faire »).
 
 ## Règle
 
@@ -44,7 +44,10 @@ Schéma : [`data-model.png`](data-model.png). Migration : `20261013_0900_d9e0f1a
 | `GET /api/dossiers/{id}/access` | Visibilité, groupes (avec qui les a associés et quand), `can_edit` (administrateur), `available_groups` (les groupes de la personne). Lisible par ceux qui voient le dossier. |
 | `PUT /api/dossiers/{id}/access` | Remplace visibilité et groupes. **Administrateurs seulement** (403 sinon). Un groupe **ajouté** doit faire partie des groupes de l'administrateur ; un groupe déjà associé se garde ou se retire librement. Un dossier restreint garde au moins un groupe. |
 | `PUT /api/dossiers/{id}/assignee`, `PUT /api/dossiers/bulk-assignee` | 422 `assignee_has_no_access` si la personne n'a pas accès (tout ou rien en lot, avec la liste des dossiers concernés) ; 404 pour un dossier qu'on ne voit pas. |
-| `GET /api/dossiers`, `GET /api/dossiers/{id}` | Ne renvoient que les dossiers visibles. |
+| `PUT /api/dossiers/{id}/access?dry_run=true` | **Simulation** : rien n'est enregistré ni tracé ; la réponse dit si la personne affectée perdrait l'accès (`assignee_unassigned`, `unassigned_person`). L'interface s'en sert pour la confirmation. |
+| `PUT /api/dossiers/bulk-access` | Corps `{"dossier_ids": [...], "visibility": …, "group_paths": […]}` (1 à 200 dossiers). **Administrateurs seulement**, **une transaction** (tout ou rien : 404 avec la liste des dossiers introuvables, 422 pour un groupe qui n'est pas le sien ou un dossier restreint sans groupe). Les groupes **remplacent** ceux de chaque dossier. Renvoie `{updated, unchanged, unassigned}`. |
+| `GET /api/dossiers`, `GET /api/dossiers/{id}` | Ne renvoient que les dossiers visibles ; chaque dossier porte `visibility` (pastille « Restreint »). |
+| `GET /api/tracking?access=restricted\|analyse` | Filtre « Accès » du suivi ; chaque ligne porte `visibility`. |
 
 Un changement d'accès est tracé dans le [journal](journal-du-dossier.md) (`access_changed` : visibilité avant et après, groupes ajoutés et retirés). Retirer un groupe **désaffecte** la personne qui perd ainsi l'accès (événement `assignee_changed` avec `reason: access_lost`) ; la réponse l'indique (`assignee_unassigned`). Changer la visibilité vers « selon l'analyse » ne désaffecte personne.
 
@@ -69,7 +72,6 @@ Un administrateur qui entre dans un dossier **restreint dont il n'est pas membre
 
 ## Reste à faire
 
-- **Interface** : section « Accès » du dossier, pastille « Restreint », choix des groupes à la création, filtre « Accès » et action en lot du suivi (aujourd'hui masqués).
 - *(fait, #222)* **Agent assistant** : il agit désormais avec les droits de la personne pour qui il travaille : [accès de l'agent assistant](acces-de-l-agent-assistant.md).
 - Un lien de partage par e-mail ne doit jamais donner plus de droits que ceux du destinataire.
 - Prise en compte des changements de groupes Keycloak en cours de session ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)) ; dossier restreint sans groupe actif ([#181](https://github.com/IA-Generative/dig-dig-doc/issues/181)).

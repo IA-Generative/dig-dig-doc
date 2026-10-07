@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
+import BulkAccessModal from "@/components/access/BulkAccessModal.vue";
 import BulkAssignBar from "@/components/tracking/BulkAssignBar.vue";
 import ColumnsModal from "@/components/tracking/ColumnsModal.vue";
 import CustomFieldsModal from "@/components/tracking/CustomFieldsModal.vue";
@@ -10,9 +11,11 @@ import TrackingTable from "@/components/tracking/TrackingTable.vue";
 import TrackingViewsBar from "@/components/tracking/TrackingViewsBar.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useAuth } from "@/composables/useAuth";
+import { useDossierAccess } from "@/composables/useDossierAccess";
 import { useTracking } from "@/composables/useTracking";
 import { EXPORT_LIMIT, useTrackingApi } from "@/composables/useTrackingApi";
 import { BUILT_IN_VIEWS, useTrackingPrefs } from "@/composables/useTrackingPrefs";
+import type { DossierAccess } from "@/types/access";
 import {
   emptyFilters,
   type Assignee,
@@ -33,9 +36,9 @@ import { formatValue } from "@/utils/trackingFields";
 //    analyses accessibles, avec colonne et filtre « Analyse ».
 // La liste, les filtres, le tri, la pagination et l'affectation passent par l'API (useTrackingApi). Restent simulés
 // (useTracking) : les colonnes personnalisées et leurs valeurs, tant que leur backend n'existe pas. Elles sont
-// masquées (`CUSTOM_FIELDS_ENABLED`), comme le filtre et l'action en lot « Accès » (#177).
+// masquées (`CUSTOM_FIELDS_ENABLED`). L'accès par groupe (#177) est branché : pastille « Restreint », filtre « Accès »
+// et action en lot « Définir l'accès » (administrateurs).
 const CUSTOM_FIELDS_ENABLED = false;
-const ACCESS_ENABLED = false;
 
 const props = defineProps<{ analyseId?: string }>();
 
@@ -45,6 +48,7 @@ const transversal = computed(() => !props.analyseId);
 
 const { setValue, fieldsOf } = useTracking();
 const { query, queryAll, assign, fetchAssignees } = useTrackingApi();
+const { saveAccessInBulk } = useDossierAccess();
 const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 
 const assignees = ref<Assignee[]>([]);
@@ -88,6 +92,7 @@ const selected = ref<string[]>([]);
 const filtersOpen = ref(false);
 const columnsOpen = ref(false);
 const fieldsOpen = ref(false);
+const bulkAccessOpen = ref(false);
 const notice = ref("");
 const loadError = ref("");
 
@@ -175,6 +180,23 @@ function announce(message: string) {
   notice.value = message;
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => (notice.value = ""), 5000);
+}
+
+/** Définit l'accès de la sélection (administrateurs) en une transaction ; le serveur désaffecte qui perd l'accès. */
+async function onBulkAccess(next: DossierAccess) {
+  const count = selected.value.length;
+  try {
+    const result = await saveAccessInBulk(selected.value, next);
+    announce(
+      `Accès défini pour ${count} dossier${count > 1 ? "s" : ""}${result.unassigned ? ` ; ${result.unassigned} affectation${result.unassigned > 1 ? "s" : ""} annulée${result.unassigned > 1 ? "s" : ""}` : ""}. Tracé dans l'historique de chaque dossier.`,
+    );
+    selected.value = [];
+    bulkAccessOpen.value = false;
+  } catch (e) {
+    bulkAccessOpen.value = false;
+    announce(e instanceof Error ? e.message : "Le changement d'accès a échoué.");
+  }
+  load();
 }
 
 async function onAssign(ids: string[], assigneeId: string | null) {
@@ -296,7 +318,7 @@ async function exportCsv() {
       :analyses="analyses"
       :fields="fields"
       :transversal="transversal"
-      :show-access="ACCESS_ENABLED"
+      show-access
       @reset="resetFilters"
     />
 
@@ -304,8 +326,9 @@ async function exportCsv() {
       v-if="selected.length"
       :count="selected.length"
       :assignees="assignees"
-      :can-set-access="ACCESS_ENABLED && isAdmin"
+      :can-set-access="isAdmin"
       @assign="(id) => onAssign(selected, id)"
+      @set-access="bulkAccessOpen = true"
       @clear="selected = []"
     />
 
@@ -333,6 +356,8 @@ async function exportCsv() {
     <DsfrPagination v-if="pageCount > 1" v-model:current-page="pageIndex" :pages="pages" class="track__pagination" />
 
     <p class="track__notice" role="status">{{ notice }}</p>
+
+    <BulkAccessModal v-if="bulkAccessOpen" :count="selected.length" @apply="onBulkAccess" @close="bulkAccessOpen = false" />
 
     <ColumnsModal
       v-if="columnsOpen"

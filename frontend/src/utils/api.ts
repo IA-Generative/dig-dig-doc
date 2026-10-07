@@ -26,7 +26,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const detail = body?.detail;
-    throw new ApiError(response.status, typeof detail === "string" ? detail : response.statusText, detail);
+    // Un détail structuré (`{code, message}`) donne son message ; sinon le libellé HTTP.
+    const message =
+      typeof detail === "string" ? detail : typeof detail?.message === "string" ? detail.message : response.statusText;
+    throw new ApiError(response.status, message, detail);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
