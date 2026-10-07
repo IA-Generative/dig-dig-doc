@@ -16,7 +16,7 @@ import {
 // et leur ordre. MOCK : stockées dans le navigateur ; à terme côté serveur
 // (par utilisateur et par analyse).
 
-const DEFAULT_SORT: TrackingSort = { key: "expiry", dir: "asc" };
+const DEFAULT_SORT: TrackingSort = { key: "due", dir: "asc" };
 
 export const BUILT_IN_VIEWS: TrackingView[] = [
   { id: "all", name: "Tous", builtIn: true, filters: emptyFilters(), sort: DEFAULT_SORT },

@@ -4,7 +4,7 @@ import type { DashboardData, DashboardUrgency } from "@/types/dashboard";
 import type { SlotDraft } from "@/types/schedule";
 
 // MOCK (issue #174, partie UI) : à remplacer par un appel API une fois les
-// statuts (#168), la péremption (#172) et les affectations (#173) livrés.
+// statuts (#168), l'échéance (#172) et les affectations (#173) livrés.
 // Pour valider les états de l'interface, ajouter `?mock=` à l'URL du
 // tableau de bord : `empty` (états vides), `error` (erreur), `loading`
 // (chargement sans fin), `nounassigned` (sans droit « non affectés »).

@@ -5,7 +5,7 @@ import { RouterLink } from "vue-router";
 import AccessBadge from "@/components/access/AccessBadge.vue";
 import ColumnHelp from "@/components/tracking/ColumnHelp.vue";
 import CellEditor from "@/components/tracking/CellEditor.vue";
-import ExpiryBadge from "@/components/tracking/ExpiryBadge.vue";
+import DueBadge from "@/components/tracking/DueBadge.vue";
 import StatusBadge from "@/components/tracking/StatusBadge.vue";
 import type { Assignee, ColumnDef, CustomField, CustomValue, TrackingRow, TrackingSort } from "@/types/tracking";
 
@@ -103,7 +103,7 @@ function formatDate(iso: string) {
               <option value="">Non affecté</option>
               <option v-for="a in assignees.filter((x) => canAssign(r.id, x.id) || x.id === r.assigneeId)" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
-            <ExpiryBadge v-else-if="c.id === 'expiry'" :expires-at="r.expiresAt" />
+            <DueBadge v-else-if="c.id === 'due'" :due-at="r.dueAt" />
             <template v-else-if="c.id === 'createdAt'">{{ formatDate(r.createdAt) }}</template>
             <template v-else-if="c.id === 'lastActivityAt'">{{ formatDate(r.lastActivityAt) }}</template>
             <CellEditor

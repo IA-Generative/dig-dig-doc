@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Assignee, CustomField, FieldFilter, TrackingFilters, TrackingStatus } from "@/types/tracking";
 
-// Filtres du tableau : recherche, statut, affecté à, péremption, puis un
+// Filtres du tableau : recherche, statut, affecté à, échéance, puis un
 // filtre par champ personnalisé adapté à son type.
 const props = defineProps<{
   modelValue: TrackingFilters;
@@ -52,13 +52,13 @@ const rangeOf = (id: string) => {
       </select>
     </div>
     <div class="tf__field">
-      <label for="tf-due">Péremption</label>
+      <label for="tf-due">Échéance</label>
       <select id="tf-due" class="fr-select" :value="modelValue.due" @change="patch({ due: ($event.target as HTMLSelectElement).value })">
         <option value="">Toutes</option>
-        <option value="expired">Expirés</option>
+        <option value="overdue">Dépassées</option>
         <option value="7">Dans 7 jours ou moins</option>
         <option value="30">Dans 30 jours ou moins</option>
-        <option value="none">Sans date</option>
+        <option value="none">Sans échéance</option>
       </select>
     </div>
 
