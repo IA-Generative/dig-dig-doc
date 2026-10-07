@@ -1,8 +1,7 @@
 import type { Recurrence } from "@/types/schedule";
 
-// Tableau de bord utilisateur (issue #174). Partie UI : les données
-// proviennent pour l'instant de mocks (voir useDashboard), en attendant
-// les statuts (#168), l'échéance (#172) et les affectations (#173).
+// Tableau de bord utilisateur (issue #174). Les indicateurs, urgences, statuts, non affectés et activité viennent
+// de l'API (useDashboard) ; les créneaux et les notifications restent simulés.
 
 export type DueLevel = "overdue" | "soon";
 
