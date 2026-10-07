@@ -44,6 +44,8 @@ Le journal ne contient **jamais le contenu du dossier** : ni valeurs de champs, 
 
 Chaque élément : `id`, `type`, `actor_id`, `actor_name`, `created_at`, `payload`. Lire le journal **ne compte pas** comme une consultation.
 
+`GET /api/dossiers/{id}/events/actors` — les **auteurs** distincts du dossier (`actor_id`, dernier `actor_name`), par nom : il alimente le filtre « Auteur » de l'historique ([`historique-du-dossier`](../frontend/historique-du-dossier/README.md), #171). Les actions du système (sans auteur) n'en font pas partie.
+
 ## Choix et limites
 
 - **Droits** : comme les autres routes du dossier, ouvert à tout utilisateur connecté. La lecture du journal suivra les règles d'accès par groupe (#177).

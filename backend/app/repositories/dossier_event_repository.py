@@ -76,6 +76,16 @@ class DossierEventRepository:
         await self.db.commit()
         return True
 
+    async def list_actors(self, dossier_id: uuid.UUID) -> list[tuple[str, str | None]]:
+        """Auteurs distincts d'un dossier (identifiant, dernier nom affiché), par nom : alimente le filtre « Auteur »
+        de l'historique. Les actions du système (sans auteur) n'en font pas partie."""
+        rows = await self.db.execute(
+            select(DossierEvent.actor_id, func.max(DossierEvent.actor_name))
+            .where(DossierEvent.dossier_id == dossier_id, DossierEvent.actor_id.is_not(None))
+            .group_by(DossierEvent.actor_id)
+        )
+        return sorted(((actor_id, name) for actor_id, name in rows.all()), key=lambda a: (a[1] or a[0]).casefold())
+
     async def list_paginated(
         self,
         dossier_id: uuid.UUID,
