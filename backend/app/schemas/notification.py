@@ -11,8 +11,11 @@ class NotificationOut(BaseModel):
 
     id: uuid.UUID
     kind: str
-    dossier_id: uuid.UUID
-    dossier_name: str
+    # ``null`` quand la personne n'a plus accès au dossier (issue #177) : la notification reste dans sa liste, sans
+    # lien ni nom (« Dossier non accessible »).
+    dossier_id: uuid.UUID | None
+    dossier_name: str | None
+    accessible: bool = True
     message: str
     created_at: datetime
     read_at: datetime | None

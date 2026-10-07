@@ -24,9 +24,9 @@ async def get_dashboard(
     d'instruction (#178) élargira ce droit."""
     repository = DashboardRepository(db)
     return DashboardOut(
-        stats=await repository.stats(user.user_id, today_in_paris()),
-        urgencies=await repository.urgencies(user.user_id),
-        status_counts=await repository.status_counts(user.user_id),
-        unassigned=await repository.unassigned() if user.is_admin else None,
-        activity=await repository.activity(user.user_id),
+        stats=await repository.stats(user, today_in_paris()),
+        urgencies=await repository.urgencies(user),
+        status_counts=await repository.status_counts(user),
+        unassigned=await repository.unassigned(user) if user.is_admin else None,
+        activity=await repository.activity(user),
     )

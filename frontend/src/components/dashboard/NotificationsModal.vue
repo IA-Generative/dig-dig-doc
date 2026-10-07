@@ -2,7 +2,6 @@
 import { computed, ref } from "vue";
 import { RouterLink } from "vue-router";
 
-import { useDossierAccess } from "@/composables/useDossierAccess";
 import { useNotifications } from "@/composables/useNotifications";
 import {
   NOTIFICATION_CATEGORIES,
@@ -13,7 +12,6 @@ import {
 import { formatRelativeTime } from "@/utils/dates";
 
 const emit = defineEmits<{ close: [] }>();
-const { isRevoked } = useDossierAccess();
 
 const {
   notifications,
@@ -107,7 +105,7 @@ function open(id: string) {
     <ul v-else class="notifs__list">
       <li v-for="n in visible" :key="n.id">
         <!-- Accès retiré (#177) : la notification reste dans la liste mais sans lien ni nom de dossier. -->
-        <div v-if="isRevoked(n.dossierId)" class="notifs__row notifs__row--revoked">
+        <div v-if="!n.accessible" class="notifs__row notifs__row--revoked">
           <span class="notifs__dot" aria-hidden="true" />
           <VIcon name="ri-lock-line" />
           <span class="notifs__main">

@@ -35,7 +35,13 @@ def as_user(user_id: str, first: str = "", last: str = "") -> Iterator[None]:
     """Fait agir les requêtes en tant qu'un autre instructeur (le client de test est
     « dev-user » par défaut)."""
     app.dependency_overrides[get_current_user] = lambda: RequestContext(
-        user_id=user_id, email=f"{user_id}@example.com", roles=[], is_admin=False, first_name=first, last_name=last
+        user_id=user_id,
+        email=f"{user_id}@example.com",
+        roles=[],
+        is_admin=False,
+        first_name=first,
+        last_name=last,
+        groups=["/dev-tests"],
     )
     try:
         yield

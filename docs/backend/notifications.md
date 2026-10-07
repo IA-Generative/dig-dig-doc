@@ -41,7 +41,7 @@ Les notifications **lues** sont purgées après **90 jours** (à chaque lecture 
 
 ## Choix et limites
 
-- **Accès** (#177) : un retrait d'accès devra masquer le lien et le nom du dossier dans les notifications existantes ; ce n'est pas encore fait côté serveur.
+- **Accès** ([#177](acces-aux-dossiers.md)) : on ne notifie que pour un dossier visible ; après un retrait d'accès, les notifications existantes restent dans la liste **sans lien ni nom** (`accessible: false`).
 - **Statut** : on notifie la personne **responsable au moment de la lecture** ; si le dossier a changé de main entre l'événement et la lecture, c'est le responsable actuel qui est prévenu.
 - **Rappels de créneau** : encore déclenchés par le navigateur. Les déclencher côté serveur demande de développer les récurrences (même mécanique de lecture).
 - **Alertes du navigateur** : l'interface les affiche pour les notifications nouvelles reçues pendant que l'application est ouverte.

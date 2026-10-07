@@ -5,8 +5,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security.factory import RequestContext
+from app.models.dossier import Dossier
 from app.models.work_slot import WorkSlot
 from app.schemas.work_slot import SlotIn
+from app.services.dossier_access import visible_clause
 
 
 class WorkSlotRepository:
@@ -16,9 +19,13 @@ class WorkSlotRepository:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def list_for(self, user_id: str) -> Sequence[WorkSlot]:
+    async def list_for(self, user: RequestContext) -> Sequence[WorkSlot]:
+        """Mes créneaux sur les dossiers que je vois encore (issue #177)."""
         result = await self.db.execute(
-            select(WorkSlot).where(WorkSlot.user_id == user_id).order_by(WorkSlot.start_at, WorkSlot.id)
+            select(WorkSlot)
+            .join(Dossier, Dossier.id == WorkSlot.dossier_id)
+            .where(WorkSlot.user_id == user.user_id, visible_clause(user.is_admin, user.groups))
+            .order_by(WorkSlot.start_at, WorkSlot.id)
         )
         return result.scalars().all()
 

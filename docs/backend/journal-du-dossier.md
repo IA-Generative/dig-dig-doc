@@ -22,6 +22,8 @@ Table `dossier_events` : `id`, `dossier_id` (FK, **cascade** : le journal part a
 | `closed` / `reopened` | Le dossier entre dans un statut final (date de clôture posée) / en sort. Aussi quand un statut devient final ou cesse de l'être. | `status`, et `reason` (`status_removed`, `status_flag_changed`). |
 | `due_date_changed` | Échéance fixée, modifiée ou supprimée (#172), y compris la valeur posée par la durée par défaut de l'analyse. | `from`, `to` (dates `AAAA-MM-JJ` ou `null`), et `reason` (`default_duration`) pour une échéance automatique. |
 | `assignee_changed` | Dossier affecté, réaffecté ou désaffecté (#173). Rien n'est écrit si la personne ne change pas. | `from`, `to` : `{id, name}` ou `null`. |
+| `access_changed` | Visibilité ou groupes d'accès modifiés (#177). | `visibility` {`from`, `to`}, `groups_added`, `groups_removed`. |
+| `admin_access` | Un administrateur entre dans un dossier restreint dont il n'est pas membre (#182). **Lisible des administrateurs seulement.** | `method`, `write`. |
 | `analyse_assigned` | Rattachement d'un dossier « à ranger » à une analyse. | `analyse_id`, `analyse_name`. |
 | `document_added` | Dépôt d'un document. | `document_id`, `mimetype`, `size`. **Pas le nom** du fichier. |
 | `analysis_started` / `analysis_stopped` | Lancement et arrêt manuel de l'analyse. | `analyse_version`. |
@@ -29,7 +31,7 @@ Table `dossier_events` : `id`, `dossier_id` (FK, **cascade** : le journal part a
 | `document_generated` | Génération d'un document de fin d'instruction. | `document_id`, `version_number`, `template_name`, `incomplete`. |
 | `document_downloaded` | Téléchargement d'un document généré (l'**aperçu** dans le navigateur n'en est pas un). | `document_id`, `format`. |
 
-Les changements d'accès (#177) et les accès administrateur (#182) s'ajouteront avec leurs fonctionnalités.
+
 
 ### Données d'usagers
 
@@ -50,7 +52,7 @@ Chaque élément : `id`, `type`, `actor_id`, `actor_name`, `created_at`, `payloa
 
 ## Choix et limites
 
-- **Droits** : comme les autres routes du dossier, ouvert à tout utilisateur connecté. La lecture du journal suivra les règles d'accès par groupe (#177).
+- **Droits** : le journal n'est lisible que par ceux qui voient le dossier ([accès](acces-aux-dossiers.md)) ; les accès administrateur n'y sont montrés qu'aux administrateurs.
 - **Conservation** : le journal est conservé tant que le dossier existe ; la durée de conservation, en particulier des accès administrateur, reste à décider ([#182](https://github.com/IA-Generative/dig-dig-doc/issues/182)).
 - **Historique existant** : la migration donne à chaque dossier existant un événement `created` daté de sa création, sans auteur (`"imported": true`) ; rien d'autre n'est reconstitué.
 - Pas de garantie de base de données contre un `UPDATE` ou un `DELETE` direct en SQL : l'immuabilité est celle de l'application.

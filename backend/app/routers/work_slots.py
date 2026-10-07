@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dossier_guard import require_dossier_visible
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.dossier import Dossier
@@ -12,7 +13,7 @@ from app.schemas.work_slot import SlotIn, SlotOut
 
 # Créneaux de traitement (issue #174) : **privés**, chacun ne voit et ne modifie que les siens. Toujours rattachés
 # à un dossier ; un seul par personne et par dossier.
-router = APIRouter(tags=["Créneaux"], dependencies=[Depends(get_current_user)])
+router = APIRouter(tags=["Créneaux"], dependencies=[Depends(get_current_user), Depends(require_dossier_visible)])
 
 
 @router.get("/slots", response_model=list[SlotOut])
@@ -21,7 +22,7 @@ async def list_my_slots(
     user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> list[SlotOut]:
     """Mes créneaux, par début."""
-    return [SlotOut.model_validate(slot) for slot in await WorkSlotRepository(db).list_for(user.user_id)]
+    return [SlotOut.model_validate(slot) for slot in await WorkSlotRepository(db).list_for(user)]
 
 
 @router.put("/dossiers/{dossier_id}/slot", response_model=SlotOut)

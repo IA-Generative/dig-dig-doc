@@ -21,7 +21,7 @@ Le périmètre « mes dossiers » est celui des dossiers **affectés à la perso
 
 ## Choix et limites
 
-- **Accès** (#177) : le tableau de bord ne porte que sur des dossiers affectés à la personne, mais la règle d'accès par groupe ne s'y applique pas encore ; elle s'appliquera à la liste des non affectés et aux comptes.
+- **Accès** ([#177](acces-aux-dossiers.md)) : indicateurs, urgences, statuts, non affectés et activité ne portent que sur des dossiers **visibles** ; un dossier dont on perd l'accès disparaît de ses indicateurs.
 - **Non affectés** : réservé aux administrateurs en attendant les rôles d'instruction (#178).
 - **À venir** : rappels de créneau côté serveur.
 - Le calcul se fait à chaque appel ; si le volume l'exige, des agrégats précalculés viendront plus tard.

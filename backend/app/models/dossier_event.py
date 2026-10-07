@@ -23,6 +23,9 @@ class DossierEventType(enum.StrEnum):
     # Visibilité ou groupes d'accès modifiés (issue #177) : ``visibility`` {from, to}, ``groups_added``,
     # ``groups_removed``.
     ACCESS_CHANGED = "access_changed"
+    # Un administrateur est entré dans un dossier restreint dont il n'est pas membre d'un groupe (issue #182). Réservé
+    # à la lecture des administrateurs ; ``method`` : verbe HTTP, ``write`` : vrai pour une modification.
+    ADMIN_ACCESS = "admin_access"
     # Le dossier entre dans un statut final (date de clôture posée) / en sort (réouverture).
     CLOSED = "closed"
     REOPENED = "reopened"

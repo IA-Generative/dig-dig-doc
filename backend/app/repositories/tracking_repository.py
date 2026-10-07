@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from sqlalchemy import Select, String, cast, extract, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,11 @@ from app.models.app_user import AppUser
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEvent, DossierEventType
 from app.repositories.dossier_repository import DossierRepository
+from app.services.dossier_access import visible_clause
 from app.services.due_date import due_info, today_in_paris
+
+if TYPE_CHECKING:
+    from app.core.security.factory import RequestContext
 
 SortKey = Literal["reference", "name", "analyse", "status", "assignee", "due", "created_at", "last_activity_at"]
 StatusCategory = Literal["initial", "progress", "final"]
@@ -58,9 +62,13 @@ class TrackingRepository:
         assignee: str | None,
         due: str | None,
         search: str | None,
+        user: "RequestContext | None",
     ) -> list:
         # Le suivi porte sur les dossiers rangés dans une analyse : un dossier « à ranger » n'a ni statut ni seuils.
         filters: list = [Dossier.analyse_id.is_not(None)]
+        # Seuls les dossiers visibles de la personne sont listés, et donc comptés et exportés (issue #177).
+        if user is not None:
+            filters.append(visible_clause(user.is_admin, user.groups))
         if analyse_ids:
             filters.append(Dossier.analyse_id.in_(analyse_ids))
         if status_id:
@@ -113,10 +121,17 @@ class TrackingRepository:
         search: str | None = None,
         sort: SortKey = "created_at",
         descending: bool = True,
+        user: "RequestContext | None" = None,
     ) -> tuple[list[TrackingRow], int]:
         last_activity = self._last_activity().label("last_activity_at")
         filters = self._filters(
-            analyse_ids=analyse_ids, status_id=status_id, category=category, assignee=assignee, due=due, search=search
+            analyse_ids=analyse_ids,
+            status_id=status_id,
+            category=category,
+            assignee=assignee,
+            due=due,
+            search=search,
+            user=user,
         )
 
         def joined(statement: Select) -> Select:

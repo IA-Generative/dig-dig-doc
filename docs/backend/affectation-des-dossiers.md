@@ -34,7 +34,7 @@ L'identité vit dans Keycloak : l'application n'a pas de table d'utilisateurs ma
 
 ## Choix et limites
 
-- **Droits** : tout utilisateur connecté peut affecter. Les rôles (#178) préciseront qui. Les personnes proposées ne sont pas encore filtrées par **accès au dossier** : c'est l'objet de #177, qui devra aussi annuler l'affectation d'une personne qui perd l'accès.
+- **Droits** : tout utilisateur connecté peut affecter. Les rôles (#178) préciseront qui. On n'affecte qu'une personne qui a **accès au dossier** (422 sinon), et `GET /api/users?dossier_id=…` ne propose qu'elles ; retirer un groupe désaffecte la personne qui perd l'accès ([accès](acces-aux-dossiers.md)).
 - **Notification** au nouvel affecté : elle arrivera avec le tableau de bord (#174), à partir de l'événement `assignee_changed` (sans notifier l'auteur de l'action).
 - L'annuaire est la **copie d'un instant** : un nom modifié dans Keycloak se met à jour à la prochaine connexion de la personne. Le journal garde le nom de l'époque.
 - Migration : `20261009_0900_f5a6b7c8d9e0_affectation_des_dossiers.py` (testée en montée, descente et remontée). Schéma : [`data-model.png`](data-model.png).

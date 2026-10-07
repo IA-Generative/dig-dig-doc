@@ -7,10 +7,12 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.security.factory import RequestContext
 from app.models.analyse import Analyse
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEvent, DossierEventType
 from app.models.notification import Notification, NotificationCursor
+from app.services.dossier_access import visible_clause
 from app.services.due_date import due_info, today_in_paris
 from app.services.notification_messages import (
     CATEGORIES,
@@ -41,14 +43,15 @@ class NotificationRepository:
 
     # --- Génération ---
 
-    async def sync(self, user_id: str, now: datetime | None = None) -> None:
+    async def sync(self, user: RequestContext, now: datetime | None = None) -> None:
+        user_id = user.user_id
         now = now or datetime.now(UTC)
         cursor = await self.db.get(NotificationCursor, user_id)
         first = cursor is None
         max_seq = await self.db.scalar(select(func.coalesce(func.max(DossierEvent.seq), 0)))
 
-        rows = await self._event_notifications(user_id, cursor.last_seq if cursor else None, max_seq, now)
-        rows += await self._due_notifications(user_id, now, already_read=first)
+        rows = await self._event_notifications(user, cursor.last_seq if cursor else None, max_seq, now)
+        rows += await self._due_notifications(user, now, already_read=first)
         if rows:
             await self.db.execute(
                 insert(Notification).values(rows).on_conflict_do_nothing(constraint="uq_notifications_user_dedup")
@@ -67,7 +70,10 @@ class NotificationRepository:
         )
         await self.db.commit()
 
-    async def _event_notifications(self, user_id: str, last_seq: int | None, max_seq: int, now: datetime) -> list[dict]:
+    async def _event_notifications(
+        self, user: RequestContext, last_seq: int | None, max_seq: int, now: datetime
+    ) -> list[dict]:
+        user_id = user.user_id
         started = aliased(DossierEvent)
         # La personne qui a lancé l'analyse : l'auteur du dernier « analyse lancée » avant la fin.
         launcher = (
@@ -95,6 +101,8 @@ class NotificationRepository:
             .where(
                 window,
                 DossierEvent.seq <= max_seq,
+                # On ne notifie que de dossiers que la personne voit (issue #177).
+                visible_clause(user.is_admin, user.groups),
                 or_(
                     and_(
                         DossierEvent.type == DossierEventType.ASSIGNEE_CHANGED.value,
@@ -142,14 +150,20 @@ class NotificationRepository:
             )
         return rows
 
-    async def _due_notifications(self, user_id: str, now: datetime, *, already_read: bool) -> list[dict]:
+    async def _due_notifications(self, user: RequestContext, now: datetime, *, already_read: bool) -> list[dict]:
+        user_id = user.user_id
         """Une notification par dossier ouvert qui entre dans un niveau d'échéance (proche, dépassée), **une seule
         fois par niveau et par date d'échéance**. Au premier passage, l'état existant est enregistré comme déjà lu :
         l'agenda l'affiche déjà, inutile d'en faire un déluge de notifications."""
         result = await self.db.execute(
             select(Dossier, Analyse.due_thresholds)
             .join(Analyse, Analyse.id == Dossier.analyse_id)
-            .where(Dossier.assignee_id == user_id, Dossier.closed_at.is_(None), Dossier.due_at.is_not(None))
+            .where(
+                Dossier.assignee_id == user_id,
+                Dossier.closed_at.is_(None),
+                Dossier.due_at.is_not(None),
+                visible_clause(user.is_admin, user.groups),
+            )
             .order_by(Dossier.due_at, Dossier.ref_number)
         )
         today = today_in_paris(now)
@@ -198,6 +212,15 @@ class NotificationRepository:
         for kind, count in result.all():
             by_category[KIND_CATEGORY[kind]] += count
         return sum(by_category.values()), by_category
+
+    async def accessible_dossiers(self, user: RequestContext, dossier_ids: Sequence[uuid.UUID]) -> set[uuid.UUID]:
+        """Parmi ces dossiers, ceux que la personne voit (#177) : les autres sont masqués dans ses notifications."""
+        if not dossier_ids:
+            return set()
+        result = await self.db.execute(
+            select(Dossier.id).where(Dossier.id.in_(set(dossier_ids)), visible_clause(user.is_admin, user.groups))
+        )
+        return set(result.scalars().all())
 
     # --- Écriture ---
 
