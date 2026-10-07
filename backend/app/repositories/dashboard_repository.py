@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.analyse import Analyse, StatusDefinition
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEvent
+from app.repositories.work_slot_repository import WorkSlotRepository
 from app.schemas.dashboard import (
     DashboardActivityOut,
     DashboardStatsOut,
@@ -13,6 +14,7 @@ from app.schemas.dashboard import (
     DashboardUnassignedOut,
     DashboardUrgencyOut,
 )
+from app.schemas.work_slot import SlotOut
 from app.services.dashboard_stats import ACTIVITY_KINDS, activity_message, bucket_by_week, week_windows
 from app.services.due_date import PARIS, due_info, today_in_paris
 
@@ -72,8 +74,10 @@ class DashboardRepository:
             .order_by(Dossier.due_at.asc(), Dossier.ref_number.asc())
         )
         today = today_in_paris()
+        rows = result.all()
+        slots = await WorkSlotRepository(self.db).map_for(user_id, [row[0].id for row in rows])
         urgencies = []
-        for dossier, analyse_name, thresholds, status_name in result.all():
+        for dossier, analyse_name, thresholds, status_name in rows:
             info = due_info(dossier.due_at, thresholds, today)
             if info is None or info.level not in ("soon", "overdue"):
                 continue
@@ -88,6 +92,7 @@ class DashboardRepository:
                     level=info.level,
                     days_left=info.days_left,
                     color=info.color,
+                    slot=SlotOut.model_validate(slots[dossier.id]) if dossier.id in slots else None,
                 )
             )
             if len(urgencies) >= URGENCY_LIMIT:

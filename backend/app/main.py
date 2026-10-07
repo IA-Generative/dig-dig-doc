@@ -43,6 +43,7 @@ from app.routers.reports import router as reports_router
 from app.routers.tracking import router as tracking_router
 from app.routers.user_tasks import router as user_tasks_router
 from app.routers.users import router as users_router
+from app.routers.work_slots import router as work_slots_router
 
 # Uvicorn configure son logging avant d'importer l'app : on le remplace ici par du JSON (access log inclus).
 configure_logging()
@@ -160,6 +161,7 @@ app.include_router(profile_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(tracking_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(work_slots_router, prefix="/api")
 app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par
