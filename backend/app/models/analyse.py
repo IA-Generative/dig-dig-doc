@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.services.due_date import DEFAULT_THRESHOLDS
 
 if TYPE_CHECKING:
     from app.models.analyse_share import AnalyseShare
@@ -46,6 +47,8 @@ class VersionedField(enum.StrEnum):
     # Statuts de dossier de l'analyse (issue #168) : liste ordonnée avec identifiants
     # stables (un dossier y fait référence), restaurée à l'identique.
     STATUSES = "statuses"
+    # Échéance des dossiers de l'analyse (issue #172) : durée par défaut et seuils de couleur.
+    DUE_SETTINGS = "due_settings"
 
 
 class Analyse(UUIDMixin, TimestampMixin, Base):
@@ -58,6 +61,11 @@ class Analyse(UUIDMixin, TimestampMixin, Base):
     # appliqué systématiquement, pas un agent) : un seul jeu de labels/
     # entités par analyse, embarqué directement plutôt qu'en table à part -
     # il n'y a jamais qu'une seule classification/extraction par analyse.
+    # Échéance des dossiers (issue #172) : durée par défaut en jours depuis la création (NULL = pas d'échéance
+    # automatique) et seuils de couleur {far_color, steps: [{days, color}], overdue_color}.
+    default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    due_thresholds: Mapped[dict] = mapped_column(JSONB, nullable=False, default=lambda: dict(DEFAULT_THRESHOLDS))
+
     classification_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     extraction_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
@@ -180,3 +188,15 @@ class FieldVersion(UUIDMixin, TimestampMixin, Base):
 
     analyse: Mapped["Analyse"] = relationship(back_populates="field_versions")
     agent: Mapped["Agent | None"] = relationship(back_populates="field_versions")
+
+
+# Seuils d'échéance de l'analyse du dossier (issue #172), lus avec le dossier lui-même : une sous-requête
+# plutôt qu'une relation, pour ne pas charger (ni périmer) l'objet Analyse et ses listes.
+from sqlalchemy import select as _select  # noqa: E402
+from sqlalchemy.orm import column_property as _column_property  # noqa: E402
+
+from app.models.dossier import Dossier as _Dossier  # noqa: E402
+
+_Dossier.analyse_due_thresholds = _column_property(
+    _select(Analyse.due_thresholds).where(Analyse.id == _Dossier.analyse_id).correlate_except(Analyse).scalar_subquery()
+)

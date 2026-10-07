@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +55,7 @@ from app.models.summary import (
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_event_repository import DossierEventRepository
+from app.services.due_date import today_in_paris
 from app.services.prediction_validation import record_validation
 
 
@@ -105,18 +106,25 @@ class DossierRepository:
         page: int,
         page_size: int,
         workflow_status_id: uuid.UUID | None = None,
+        due: str | None = None,
         sort: str = "created_at",
     ) -> tuple[Sequence[Dossier], int]:
         """Liste paginée, du plus récent au plus ancien par défaut.
 
         - ``workflow_status_id`` : ne garde que les dossiers de ce statut (issue #170) ;
+        - ``due`` : filtre d'échéance, ne garde que les dossiers **non clos** (``overdue`` : échéance dépassée ;
+          ``7`` / ``30`` : dans 7 / 30 jours ou moins ; ``none`` : sans échéance) ;
         - ``sort="status"`` : trie par statut, dans l'ordre défini par chaque analyse (les dossiers sans
-          statut en dernier), puis du plus récent au plus ancien.
+          statut en dernier), puis du plus récent au plus ancien ;
+        - ``sort="due"`` : échéance la plus proche d'abord (sans échéance en dernier).
         """
         filters = [Dossier.workflow_status_id == workflow_status_id] if workflow_status_id else []
+        filters += self._due_filters(due)
         total = await self.db.scalar(select(func.count()).select_from(Dossier).where(*filters))
         query = self._base_query().where(*filters)
-        if sort == "status":
+        if sort == "due":
+            query = query.order_by(Dossier.due_at.asc().nulls_last(), Dossier.created_at.desc())
+        elif sort == "status":
             query = query.outerjoin(StatusDefinition, StatusDefinition.id == Dossier.workflow_status_id).order_by(
                 StatusDefinition.position.asc().nulls_last(), Dossier.created_at.desc()
             )
@@ -124,6 +132,20 @@ class DossierRepository:
             query = query.order_by(Dossier.created_at.desc())
         result = await self.db.execute(query.limit(page_size).offset((page - 1) * page_size))
         return result.scalars().all(), total or 0
+
+    @staticmethod
+    def _due_filters(due: str | None) -> list:
+        """Conditions SQL d'un filtre d'échéance (jour courant à Paris). Un dossier clos n'est plus à surveiller."""
+        if due is None:
+            return []
+        today = today_in_paris()
+        if due == "none":
+            return [Dossier.due_at.is_(None)]
+        open_dossier = Dossier.closed_at.is_(None)
+        if due == "overdue":
+            return [open_dossier, Dossier.due_at < today]
+        days = int(due)  # « 7 » ou « 30 » : valeurs contrôlées par la route
+        return [open_dossier, Dossier.due_at >= today, Dossier.due_at <= today + timedelta(days=days)]
 
     async def get(self, dossier_id: uuid.UUID) -> Dossier | None:
         result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))
@@ -137,6 +159,7 @@ class DossierRepository:
             status=DossierStatus.EN_ATTENTE,
             # Statut initial de l'analyse (issue #168) ; rien pour un dossier « à ranger ».
             workflow_status_id=self._initial_status_id(analyse),
+            due_at=self._default_due_at(analyse),
         )
         self.db.add(dossier)
         await self.db.flush()  # donne son identifiant au dossier, que l'événement référence
@@ -144,11 +167,35 @@ class DossierRepository:
             dossier.id,
             DossierEventType.CREATED,
             actor,
-            {"analyse_id": str(analyse.id) if analyse else None},
+            {
+                "analyse_id": str(analyse.id) if analyse else None,
+                **({"due_at": dossier.due_at.isoformat()} if dossier.due_at else {}),
+            },
         )
         await self.db.commit()
         await self.db.refresh(dossier)
         return dossier
+
+    @staticmethod
+    def _default_due_at(analyse: Analyse | None) -> date | None:
+        """Échéance d'un dossier qui rejoint l'analyse : aujourd'hui + sa durée par défaut, s'il y en a une."""
+        if analyse is None or analyse.default_due_days is None:
+            return None
+        return today_in_paris() + timedelta(days=analyse.default_due_days)
+
+    async def set_due_at(self, dossier: Dossier, due_at: date | None, actor=None, reason: str | None = None) -> None:
+        """Change l'échéance du dossier (ou la supprime avec ``None``) et trace le changement dans le journal (#169)."""
+        if dossier.due_at == due_at:
+            return
+        payload: dict = {
+            "from": dossier.due_at.isoformat() if dossier.due_at else None,
+            "to": due_at.isoformat() if due_at else None,
+        }
+        if reason:
+            payload["reason"] = reason
+        dossier.due_at = due_at
+        self.events.add(dossier.id, DossierEventType.DUE_DATE_CHANGED, actor, payload)
+        await self.db.commit()
 
     def _initial_status_id(self, analyse: Analyse | None) -> uuid.UUID | None:
         initial = self._analyse_repository.initial_status(analyse) if analyse else None
@@ -982,6 +1029,16 @@ class DossierRepository:
         # Le dossier reçoit le statut initial de l'analyse qui l'accueille (issue #168).
         dossier.workflow_status_id = self._initial_status_id(analyse)
         dossier.closed_at = None
+        # Un dossier sans échéance prend celle de l'analyse qui l'accueille, si elle en a une par défaut.
+        default_due = self._default_due_at(analyse)
+        if dossier.due_at is None and default_due is not None:
+            dossier.due_at = default_due
+            self.events.add(
+                dossier.id,
+                DossierEventType.DUE_DATE_CHANGED,
+                actor,
+                {"from": None, "to": default_due.isoformat(), "reason": "default_duration"},
+            )
         self.events.add(
             dossier.id,
             DossierEventType.ANALYSE_ASSIGNED,

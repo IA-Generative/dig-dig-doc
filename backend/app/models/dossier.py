@@ -1,15 +1,16 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Date, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
 from app.models.summary import SummaryStatus
+from app.services.due_date import DEFAULT_THRESHOLDS, DueInfo, closed_before_due, due_info, today_in_paris
 
 if TYPE_CHECKING:
     from app.models.analyse import StatusDefinition
@@ -93,6 +94,8 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     # Date de clôture : posée quand le dossier passe dans un statut final,
     # effacée s'il est rouvert. Alimente les indicateurs du tableau de bord (#174).
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Date d'échéance (issue #172) : un jour du calendrier, pas un instant. NULL = pas d'échéance.
+    due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     # État de génération du résumé global du dossier (issue #52).
     summary_status: Mapped[SummaryStatus] = mapped_column(
         Enum(SummaryStatus, name="summary_status"),
@@ -124,6 +127,17 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     summaries: Mapped[list["DossierSummary"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="DossierSummary.created_at.desc()"
     )
+
+    @property
+    def due(self) -> DueInfo | None:
+        """Niveau d'échéance (loin, proche, dépassée, clos) selon les seuils de l'analyse (issue #172)."""
+        thresholds = self.__dict__.get("analyse_due_thresholds") or DEFAULT_THRESHOLDS
+        return due_info(self.due_at, thresholds, today_in_paris(), closed=self.closed_at is not None)
+
+    @property
+    def closed_before_due(self) -> bool | None:
+        """Clos au plus tard le jour de l'échéance ? ``None`` si la question ne se pose pas."""
+        return closed_before_due(self.closed_at, self.due_at)
 
     @property
     def summary(self) -> "DossierSummary | None":

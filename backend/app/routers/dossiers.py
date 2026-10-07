@@ -48,6 +48,7 @@ from app.schemas.dossier import (
     DossierDocumentLabelIn,
     DossierDocumentOut,
     DossierOut,
+    DueAtUpdate,
     FeedbackIn,
     MessageIn,
     MessageOut,
@@ -77,13 +78,23 @@ async def list_dossiers(
     workflow_status_id: Annotated[
         uuid.UUID | None, Query(description="Ne garder que les dossiers de ce statut")
     ] = None,
+    due: Annotated[
+        Literal["overdue", "7", "30", "none"] | None,
+        Query(
+            description="Échéance, dossiers non clos : overdue (dépassée), 7 ou 30 (dans 7 / 30 jours ou moins), "
+            "none (sans échéance)"
+        ),
+    ] = None,
     sort: Annotated[
-        Literal["created_at", "status"],
-        Query(description="created_at : plus récents d'abord ; status : par statut (ordre de l'analyse)"),
+        Literal["created_at", "status", "due"],
+        Query(
+            description="created_at : plus récents d'abord ; status : par statut (ordre de l'analyse) ; "
+            "due : échéance la plus proche d'abord"
+        ),
     ] = "created_at",
 ) -> Page[DossierOut]:
     dossiers, total = await DossierRepository(db).list_paginated(
-        page=page, page_size=page_size, workflow_status_id=workflow_status_id, sort=sort
+        page=page, page_size=page_size, workflow_status_id=workflow_status_id, due=due, sort=sort
     )
     return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
@@ -135,6 +146,21 @@ async def update_workflow_status(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Ce statut n'appartient pas à l'analyse du dossier."
         )
     await repository.set_workflow_status(dossier, new_status, actor=user)
+    return await _get_or_404(repository, dossier_id)
+
+
+@router.put("/{dossier_id}/due-at", response_model=DossierOut)
+async def update_due_at(
+    dossier_id: uuid.UUID,
+    body: DueAtUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> Dossier:
+    """Change la date d'échéance du dossier (``null`` la supprime). Le changement est tracé dans le journal (#169) ;
+    le niveau d'échéance (``due``) est recalculé par le serveur selon les seuils de l'analyse."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id)
+    await repository.set_due_at(dossier, body.due_at, actor=user)
     return await _get_or_404(repository, dossier_id)
 
 
