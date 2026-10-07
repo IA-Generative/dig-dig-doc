@@ -26,6 +26,7 @@ Les événements sont **groupés par jour** (« Aujourd'hui », « Hier », puis
 | **Statuts** | Statut modifié (« À instruire → En instruction »), dossier clôturé, dossier rouvert. Un statut supprimé et remplacé, ou devenu final, est précisé dans le détail. |
 | **Affectation** | Affecté à, réaffecté à (« Camille → Samir »), affectation retirée ; une affectation annulée parce que la personne a perdu l'accès l'indique dans le détail. |
 | **Accès** | Accès modifié (« Dossier restreint », groupe ajouté ou retiré) ; **accès administrateur** (un administrateur est entré dans un dossier restreint hors de ses groupes), montré aux **seuls administrateurs**. |
+| **Colonnes** | Valeur d'une colonne personnalisée modifiée (« Montant demandé » modifiée : « 1 000 → 1 500 », « (vide) » pour une valeur absente) ; voir les [colonnes personnalisées](../tableau-de-suivi/README.md). |
 | **Échéance** | Échéance fixée, modifiée (« 12 octobre 2026 → 28 octobre 2026 ») ou supprimée ; « durée par défaut de l'analyse » quand elle a été posée automatiquement ([échéance du dossier](../echeance-du-dossier/README.md)). |
 | **Analyse** | Rattaché à une analyse, analyse lancée, arrêtée, terminée, en échec. |
 | **Documents** | Document ajouté, document généré (modèle, version, « incomplet »), document téléchargé (ODT ou PDF). Un simple aperçu dans le navigateur n'est pas un téléchargement. |

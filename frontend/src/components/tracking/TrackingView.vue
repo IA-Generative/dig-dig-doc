@@ -12,7 +12,6 @@ import TrackingViewsBar from "@/components/tracking/TrackingViewsBar.vue";
 import { useAnalyses } from "@/composables/useAnalyses";
 import { useAuth } from "@/composables/useAuth";
 import { useDossierAccess } from "@/composables/useDossierAccess";
-import { useTracking } from "@/composables/useTracking";
 import { EXPORT_LIMIT, useTrackingApi } from "@/composables/useTrackingApi";
 import { BUILT_IN_VIEWS, useTrackingPrefs } from "@/composables/useTrackingPrefs";
 import type { DossierAccess } from "@/types/access";
@@ -34,11 +33,8 @@ import { formatValue } from "@/utils/trackingFields";
 //    statuts, ses colonnes personnalisées ;
 //  - vue transversale (#186, `analyseId` absent) : les dossiers de toutes les
 //    analyses accessibles, avec colonne et filtre « Analyse ».
-// La liste, les filtres, le tri, la pagination et l'affectation passent par l'API (useTrackingApi). Restent simulés
-// (useTracking) : les colonnes personnalisées et leurs valeurs, tant que leur backend n'existe pas. Elles sont
-// masquées (`CUSTOM_FIELDS_ENABLED`). L'accès par groupe (#177) est branché : pastille « Restreint », filtre « Accès »
-// et action en lot « Définir l'accès » (administrateurs).
-const CUSTOM_FIELDS_ENABLED = false;
+// La liste, les filtres, le tri, la pagination, l'affectation, les colonnes personnalisées (définitions et valeurs) et
+// l'accès par groupe passent par l'API (useTrackingApi, useAnalyses, useDossierAccess).
 
 const props = defineProps<{ analyseId?: string }>();
 
@@ -46,10 +42,9 @@ const route = useRoute();
 const { isAdmin } = useAuth();
 const transversal = computed(() => !props.analyseId);
 
-const { setValue, fieldsOf } = useTracking();
-const { query, queryAll, assign, fetchAssignees } = useTrackingApi();
+const { query, queryAll, assign, setValue, fetchAssignees } = useTrackingApi();
 const { saveAccessInBulk } = useDossierAccess();
-const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
+const { list: analyses, fetchList: fetchAnalyses, getById, fetchAnalyse } = useAnalyses();
 
 const assignees = ref<Assignee[]>([]);
 const assigneeName = (id: string | null) => assignees.value.find((a) => a.id === id)?.name ?? "";
@@ -71,16 +66,24 @@ const sort = ref<TrackingSort>({ key: "due", dir: "asc" });
 const page = ref(1);
 
 /** Dans une analyse le périmètre est imposé ; en transversal il vient des filtres. */
-const effectiveFilters = computed<TrackingFilters>(() =>
-  props.analyseId ? { ...filters.value, analyseIds: [props.analyseId] } : filters.value,
-);
+const effectiveFilters = computed<TrackingFilters>(() => {
+  const scoped = props.analyseId ? { ...filters.value, analyseIds: [props.analyseId] } : filters.value;
+  // Les colonnes personnalisées dépendent de l'analyse : le serveur n'accepte leurs filtres que pour une seule.
+  return singleAnalyseId.value ? scoped : { ...scoped, fieldFilters: {} };
+});
 
 /** Colonnes personnalisées : celles de l'analyse, ou celles de l'unique analyse filtrée en transversal. */
 const singleAnalyseId = computed(() =>
   props.analyseId ?? (filters.value.analyseIds.length === 1 ? filters.value.analyseIds[0] : undefined),
 );
-const fields = computed(() => (CUSTOM_FIELDS_ENABLED && singleAnalyseId.value ? fieldsOf(singleAnalyseId.value) : []));
+const fields = computed(() => (singleAnalyseId.value ? (getById(singleAnalyseId.value)?.customFields ?? []) : []));
 const fieldsAreHidden = computed(() => transversal.value && !singleAnalyseId.value);
+// Les définitions des colonnes viennent de l'analyse : on les charge (ou les rafraîchit) dès qu'une seule est concernée.
+watch(singleAnalyseId, (id) => id && fetchAnalyse(id), { immediate: true });
+// Sans analyse unique, plus de colonne personnalisée : un tri sur l'une d'elles n'a plus de sens.
+watch(singleAnalyseId, (id) => {
+  if (!id && sort.value.key.startsWith("field:")) sort.value = { key: "due", dir: "asc" };
+});
 
 const prefs = useTrackingPrefs(props.analyseId ?? "all", fields);
 
@@ -215,13 +218,22 @@ async function onAssign(ids: string[], assigneeId: string | null) {
   load();
 }
 
-function onSetValue(rowId: string, fieldId: string, value: CustomValue, done: (error: string | null) => void) {
-  const error = setValue(rowId, fieldId, value);
-  done(error);
-  if (!error) {
-    announce("Valeur enregistrée. Tracée dans l'historique du dossier.");
-    load();
+function onFieldsSaved(message: string) {
+  announce(message);
+  load();
+}
+
+/** Enregistre une valeur de colonne : le serveur la valide selon le type et renvoie le message à afficher en cas d'erreur. */
+async function onSetValue(rowId: string, fieldId: string, value: CustomValue, done: (error: string | null) => void) {
+  try {
+    await setValue(rowId, fieldId, value);
+  } catch (e) {
+    done(e instanceof Error ? e.message : "L'enregistrement a échoué.");
+    return;
   }
+  done(null);
+  announce("Valeur enregistrée. Tracée dans l'historique du dossier.");
+  load();
 }
 
 function onColumnsSaved(order: ColumnId[], hidden: ColumnId[]) {
@@ -301,7 +313,7 @@ async function exportCsv() {
           <summary class="track__tool"><VIcon name="ri-more-2-fill" /> Options</summary>
           <ul class="track__menu">
             <li><button type="button" class="track__menu-item" @click="columnsOpen = true"><VIcon name="ri-layout-column-line" /> Colonnes</button></li>
-            <li v-if="CUSTOM_FIELDS_ENABLED && isAdmin && analyseId">
+            <li v-if="isAdmin && analyseId">
               <button type="button" class="track__menu-item" @click="fieldsOpen = true"><VIcon name="ri-table-line" /> Champs personnalisés</button>
             </li>
             <li><button type="button" class="track__menu-item" @click="exportCsv"><VIcon name="ri-download-2-line" /> Exporter en CSV</button></li>
@@ -336,7 +348,7 @@ async function exportCsv() {
       {{ loadError }} <button type="button" class="track__tool" @click="load">Réessayer</button>
     </p>
     <p class="track__count" aria-live="polite">{{ total }} dossier{{ total > 1 ? "s" : "" }}</p>
-    <p v-if="CUSTOM_FIELDS_ENABLED && fieldsAreHidden" class="track__hint">
+    <p v-if="fieldsAreHidden" class="track__hint">
       Les colonnes personnalisées dépendent de l'analyse : filtrez sur une seule analyse pour les afficher.
     </p>
 
@@ -367,7 +379,7 @@ async function exportCsv() {
       @reset="onColumnsReset"
       @close="columnsOpen = false"
     />
-    <CustomFieldsModal v-if="fieldsOpen && analyseId" :analyse-id="analyseId" @close="fieldsOpen = false" @saved="announce" />
+    <CustomFieldsModal v-if="fieldsOpen && analyseId" :analyse-id="analyseId" @close="fieldsOpen = false" @saved="onFieldsSaved" />
   </div>
 </template>
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -32,3 +33,5 @@ class TrackingRowOut(BaseModel):
     created_at: datetime
     # Dernière action enregistrée au journal, consultations exclues ; à défaut, la création.
     last_activity_at: datetime
+    # Valeurs des colonnes personnalisées de l'analyse : {identifiant du champ: valeur} (#173).
+    values: dict[str, Any] = {}

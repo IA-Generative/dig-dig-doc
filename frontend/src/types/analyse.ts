@@ -1,3 +1,4 @@
+import type { CustomField } from "@/types/tracking";
 export type EntityType = "texte" | "date" | "nombre" | "booléen" | "identifiant";
 
 export type AgentTool =
@@ -129,6 +130,9 @@ export interface Analyse {
   statusesVersions: Version<WorkflowStatus[]>[];
   dueSettings: DueSettings;
   dueSettingsVersions: Version<DueSettings>[];
+  /** Colonnes personnalisées du suivi (#173) et leur historique. */
+  customFields: CustomField[];
+  customFieldsVersions: Version<CustomField[]>[];
   agents: Agent[];
 }
 
