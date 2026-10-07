@@ -8,6 +8,7 @@ from .analyse import (
     EntityType,
     FieldVersion,
     LabelDefinition,
+    StatusDefinition,
     VersionedField,
 )
 from .analyse_ephemere import AnalyseEphemere
@@ -159,6 +160,7 @@ __all__ = [
     "Report",
     "ReportStatus",
     "ReportType",
+    "StatusDefinition",
     "SummaryStatus",
     "TextExtractionStatus",
     "UserPreference",

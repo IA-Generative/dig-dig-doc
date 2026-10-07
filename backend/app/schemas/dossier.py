@@ -16,6 +16,7 @@ from app.models.dossier import (
 from app.models.execution_log import ExecutionLogLevel
 from app.models.feedback import FeedbackReasonCode, FeedbackValue
 from app.models.summary import SummaryStatus
+from app.schemas.analyse import StatusDefinitionOut
 
 
 class BoundingBoxIn(BaseModel):
@@ -574,6 +575,10 @@ class InternalAnalyseOut(BaseModel):
     agents: list[InternalAgentOut] = []
 
 
+class WorkflowStatusUpdate(BaseModel):
+    status_id: uuid.UUID
+
+
 class DossierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -585,6 +590,10 @@ class DossierOut(BaseModel):
     status: DossierStatus
     started_at: datetime | None
     ended_at: datetime | None
+    # Statut de dossier défini par son analyse (issue #168), distinct de `status` (exécution) ;
+    # None pour un dossier « à ranger ». `closed_at` : date de clôture (statut final), ou None.
+    workflow_status: StatusDefinitionOut | None = None
+    closed_at: datetime | None = None
     summary_status: SummaryStatus
     summary_error: str | None
     # Dernier résumé global du dossier (le plus récent), ou None.
