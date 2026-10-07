@@ -8,6 +8,7 @@ import AccessModal from "@/components/access/AccessModal.vue";
 import ModelPicker from "@/components/ModelPicker.vue";
 import ChatWindow, { type ChatWindowSource } from "@/components/ChatWindow.vue";
 import SourceViewerModal from "@/components/SourceViewerModal.vue";
+import DueDatePicker from "@/components/dossiers/DueDatePicker.vue";
 import DossierDocuments from "@/components/dossiers/DossierDocuments.vue";
 import DossierResults from "@/components/dossiers/DossierResults.vue";
 import FeedbackReasonsModal from "@/components/dossiers/FeedbackReasonsModal.vue";
@@ -38,6 +39,7 @@ const {
   suggestAnalyse,
   assignAnalyse,
   setWorkflowStatus,
+  setDueAt,
 } = useDossiers();
 const { getById: getAnalyseById, fetchAnalyse } = useAnalyses();
 const {
@@ -170,6 +172,18 @@ const suggestionBadgeType: Record<SuggestionStatus, "new" | "info" | "success" |
 const isUnassigned = computed(() => !dossier.value?.analyseId);
 
 const statusError = ref("");
+const dueBusy = ref(false);
+async function onDueChange(dueAt: string | null) {
+  statusError.value = "";
+  dueBusy.value = true;
+  try {
+    await setDueAt(dossierId, dueAt);
+  } catch (e) {
+    statusError.value = e instanceof Error ? e.message : "Le changement d'échéance a échoué.";
+  } finally {
+    dueBusy.value = false;
+  }
+}
 async function onWorkflowStatusChange(statusId: string) {
   statusError.value = "";
   try {
@@ -250,6 +264,14 @@ async function onDeleteConversation() {
           :current="dossier.workflowStatus"
           :closed-at="dossier.closedAt"
           @change="onWorkflowStatusChange"
+        />
+        <!-- Échéance (#172) : niveau et couleur calculés par le serveur selon les seuils de l'analyse. -->
+        <DueDatePicker
+          v-if="!isUnassigned"
+          :due-at="dossier.dueAt"
+          :due="dossier.due"
+          :busy="dueBusy"
+          @change="onDueChange"
         />
         <p v-if="statusError" class="fr-error-text" role="alert">{{ statusError }}</p>
       </div>

@@ -98,6 +98,16 @@ export interface DossierDocument {
   summary?: Summary;
 }
 
+export type DueLevel = "ok" | "soon" | "overdue" | "closed";
+
+export interface DueInfo {
+  level: DueLevel;
+  /** Jours restants, négatif si l'échéance est dépassée. */
+  daysLeft: number;
+  /** Couleur du niveau selon les seuils de l'analyse ; absente pour un dossier clos. */
+  color?: string;
+}
+
 export interface Dossier {
   id: string;
   name: string;
@@ -105,6 +115,12 @@ export interface Dossier {
   workflowStatus?: WorkflowStatus;
   /** Date de clôture : posée quand le dossier entre dans un statut final. */
   closedAt?: string;
+  /** Échéance (#172) : un jour du calendrier (AAAA-MM-JJ), absente si le dossier n'en a pas. */
+  dueAt?: string;
+  /** Situation par rapport à l'échéance, calculée par le serveur selon les seuils de l'analyse. */
+  due?: DueInfo;
+  /** Clos au plus tard le jour de l'échéance ; absent si la question ne se pose pas. */
+  closedBeforeDue?: boolean;
   /**
    * Analyse rattachée au dossier. Optionnel : un dossier « à ranger » peut
    * être créé sans analyse, puis recevoir des suggestions via le LLM

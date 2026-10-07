@@ -10,6 +10,7 @@ import type {
   LabelDefinition,
   Version,
   StatusDraft,
+  DueSettings,
   WorkflowStatus,
 } from "@/types/analyse";
 
@@ -35,6 +36,17 @@ function mapStatus(api: any): WorkflowStatus {
     position: api.position,
     isInitial: api.is_initial,
     isFinal: api.is_final,
+  };
+}
+
+function mapDueSettings(api: any): DueSettings {
+  return {
+    defaultDueDays: api.default_due_days ?? null,
+    thresholds: {
+      farColor: api.thresholds.far_color,
+      steps: api.thresholds.steps.map((s: any) => ({ days: s.days, color: s.color })),
+      overdueColor: api.thresholds.overdue_color,
+    },
   };
 }
 
@@ -79,6 +91,8 @@ function mapAnalyse(api: any): Analyse {
     statusesVersions: (api.statuses_versions ?? []).map((v: any) =>
       mapVersion(v, (content: any[]) => content.map(mapStatus)),
     ),
+    dueSettings: mapDueSettings(api.due_settings),
+    dueSettingsVersions: (api.due_settings_versions ?? []).map((v: any) => mapVersion(v, mapDueSettings)),
     agents: api.agents.map(mapAgent),
   };
 }
@@ -251,6 +265,27 @@ export function useAnalyses() {
     cache[analyseId] = mapAnalyse(data);
   };
 
+  /** Enregistre la durée par défaut et les seuils de couleur de l'échéance ; l'ancien état entre dans l'historique. */
+  const updateDueSettings = async (analyseId: string, settings: DueSettings) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/due-settings`, {
+      method: "PUT",
+      body: JSON.stringify({
+        default_due_days: settings.defaultDueDays,
+        thresholds: {
+          far_color: settings.thresholds.farColor,
+          steps: settings.thresholds.steps,
+          overdue_color: settings.thresholds.overdueColor,
+        },
+      }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
+  const restoreDueSettingsVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/due-settings/restore/${versionId}`, { method: "POST" });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
   // --- Agents (créés librement par l'utilisateur pour un but métier) ---
 
   const addAgent = async (
@@ -352,6 +387,8 @@ export function useAnalyses() {
     restoreExtractionEntitiesVersion,
     updateStatuses,
     restoreStatusesVersion,
+    updateDueSettings,
+    restoreDueSettingsVersion,
     addAgent,
     updateAgentPrompt,
     restoreAgentPromptVersion,
