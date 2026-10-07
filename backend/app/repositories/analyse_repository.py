@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,7 +28,7 @@ from app.repositories.dossier_event_repository import DossierEventRepository
 from app.services.due_date import normalize_thresholds
 
 if TYPE_CHECKING:
-    from app.schemas.analyse import AgentOut, AnalyseOut, DueSettingsIn, StatusDefinitionIn
+    from app.schemas.analyse import AgentOut, AnalyseOut, CustomFieldsUpdate, DueSettingsIn, StatusDefinitionIn
 
 
 # Statuts donnés à toute nouvelle analyse (nom, couleur, initial, final) : un point de départ que
@@ -502,6 +502,60 @@ class AnalyseRepository:
         await self.update_due_settings(analyse, DueSettingsIn.model_validate(version.content))
         return True
 
+    # --- Colonnes personnalisées du suivi (issue #173) ---
+
+    @staticmethod
+    def custom_fields_snapshot(analyse: Analyse) -> list[dict]:
+        """Définitions des colonnes personnalisées, telles qu'elles sont conservées dans une version."""
+        return [dict(field) for field in analyse.custom_fields]
+
+    async def update_custom_fields(self, analyse: Analyse, update_in: "CustomFieldsUpdate") -> list[str]:
+        """Remplace les définitions des colonnes personnalisées ; l'état précédent est conservé dans l'historique
+        (restaurable). Renvoie les identifiants des champs dont les **valeurs ont été supprimées** des dossiers :
+        - un champ dont le **type change** perd ses valeurs (elles n'auraient plus de sens) ;
+        - un champ **supprimé** garde ses valeurs (récupérables en le restaurant) sauf si ``purge_removed``."""
+        existing = {field["id"]: field for field in analyse.custom_fields}
+        fresh: list[dict] = []
+        for field_in in update_in.fields:
+            data = field_in.model_dump()
+            data["id"] = data["id"] or f"f_{uuid.uuid4().hex[:10]}"
+            fresh.append(data)
+
+        removed = [field_id for field_id in existing if field_id not in {f["id"] for f in fresh}]
+        retyped = [f["id"] for f in fresh if f["id"] in existing and existing[f["id"]]["type"] != f["type"]]
+        to_purge = [*retyped, *(removed if update_in.purge_removed else [])]
+        if fresh == self.custom_fields_snapshot(analyse) and not to_purge:
+            return []  # rien ne change : pas de version inutile
+
+        if fresh != self.custom_fields_snapshot(analyse):
+            self._record_version(analyse, VersionedField.CUSTOM_FIELDS, self.custom_fields_snapshot(analyse))
+            analyse.custom_fields = fresh
+        if to_purge:
+            await self.db.execute(
+                text(
+                    "UPDATE dossiers SET custom_values = custom_values - CAST(:keys AS text[]) WHERE analyse_id = :id"
+                ),
+                {"keys": to_purge, "id": analyse.id},
+            )
+        await self.db.commit()
+        await self.db.refresh(analyse)
+        return to_purge
+
+    async def restore_custom_fields_version(self, analyse: Analyse, version_id: uuid.UUID) -> bool:
+        """Restaure une version antérieure ; l'état courant devient lui-même une version. False si inconnue."""
+        from app.schemas.analyse import CustomFieldIn, CustomFieldsUpdate
+
+        version = next(
+            (v for v in analyse.field_versions if v.id == version_id and v.field == VersionedField.CUSTOM_FIELDS),
+            None,
+        )
+        if version is None:
+            return False
+        await self.update_custom_fields(
+            analyse, CustomFieldsUpdate(fields=[CustomFieldIn.model_validate(item) for item in version.content])
+        )
+        return True
+
     # --- Agents ---
 
     async def add_agent(
@@ -613,6 +667,7 @@ class AnalyseRepository:
         from app.schemas.analyse import (
             AnalyseOut,
             ClassificationOut,
+            CustomFieldOut,
             DueSettingsOut,
             EntityDefinitionOut,
             ExtractionOut,
@@ -660,6 +715,15 @@ class AnalyseRepository:
             created_at=analyse.created_at,
             classification=classification,
             extraction=extraction,
+            custom_fields=[CustomFieldOut.model_validate(field) for field in analyse.custom_fields],
+            custom_fields_versions=[
+                Version(
+                    id=v.id,
+                    content=[CustomFieldOut.model_validate(item) for item in v.content],
+                    created_at=v.created_at,
+                )
+                for v in self.field_versions(analyse, VersionedField.CUSTOM_FIELDS)
+            ],
             due_settings=DueSettingsOut.model_validate(self.due_settings_snapshot(analyse)),
             due_settings_versions=[
                 Version(id=v.id, content=DueSettingsOut.model_validate(v.content), created_at=v.created_at)

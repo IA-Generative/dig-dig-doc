@@ -1,16 +1,18 @@
 import uuid
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
+from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.tracking_repository import SortKey, StatusCategory, TrackingRepository
 from app.schemas.analyse import StatusDefinitionOut
 from app.schemas.dossier import DueInfoOut, PersonOut
 from app.schemas.pagination import Page
 from app.schemas.tracking import TrackingAnalyseOut, TrackingRowOut
+from app.services.custom_fields import FieldFilterError, current_values, parse_field_filters
 
 # Tableau de suivi (issue #173) : la même route sert l'onglet « Suivi » d'une analyse (`analyse_id`) et la vue
 # transversale (aucun `analyse_id`). Les dossiers « à ranger » n'y figurent pas.
@@ -42,9 +44,48 @@ async def list_tracking(
     access: Annotated[
         Literal["restricted", "analyse"] | None, Query(description="Visibilité : restreints, ou selon l'analyse")
     ] = None,
+    field_filters: Annotated[
+        str | None,
+        Query(
+            max_length=4000,
+            description="Filtres de colonnes personnalisées, un objet JSON {identifiant du champ: texte ou "
+            "{min, max}} ; une seule analyse (analyse_id) est exigée",
+        ),
+    ] = None,
     sort: SortKey = "created_at",
+    sort_field: Annotated[
+        str | None, Query(max_length=40, description="Avec sort=field : identifiant de la colonne personnalisée")
+    ] = None,
     direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
 ) -> Page[TrackingRowOut]:
+    parsed_filters: list = []
+    sort_definition = None
+    if field_filters or sort == "field":
+        # Les colonnes personnalisées sont propres à une analyse : on filtre ou on trie sur une seule à la fois.
+        if len(analyse_id or []) != 1:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "code": "single_analyse_required",
+                    "message": "Les colonnes personnalisées dépendent de l'analyse : choisissez-en une seule.",
+                },
+            )
+        analyse = await AnalyseRepository(db).get(analyse_id[0])
+        fields = analyse.custom_fields if analyse else []
+        try:
+            parsed_filters = parse_field_filters(field_filters, fields)
+        except FieldFilterError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={"code": "invalid_field_filter", "message": str(error)},
+            ) from error
+        if sort == "field":
+            sort_definition = next((f for f in fields if f["id"] == sort_field), None)
+            if sort_definition is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={"code": "unknown_field", "message": "Colonne inconnue pour cette analyse."},
+                )
     rows, total = await TrackingRepository(db).list_rows(
         page=page,
         page_size=page_size,
@@ -55,7 +96,9 @@ async def list_tracking(
         due=due,
         search=search,
         access=access,
+        field_filters=parsed_filters,
         sort=sort,
+        sort_field=sort_definition,
         descending=direction == "desc",
         user=user,
     )
@@ -72,6 +115,7 @@ async def list_tracking(
             due=row.due and DueInfoOut.model_validate(row.due, from_attributes=True),
             created_at=row.dossier.created_at,
             last_activity_at=row.last_activity_at,
+            values=current_values(row.fields, row.dossier.custom_values),
         )
         for row in rows
     ]

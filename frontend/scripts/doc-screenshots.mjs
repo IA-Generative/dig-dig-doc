@@ -150,6 +150,18 @@ const SUBJECTS = {
   "an-urba": ["Permis de construire", "Déclaration préalable de travaux", "Certificat d'urbanisme", "Permis d'aménager"],
   "an-cmd": ["Marché fournitures bureau", "Marché entretien espaces verts", "Accord-cadre fournitures scolaires", "Marché de nettoyage"],
 };
+// Colonnes personnalisées du suivi (#173) : celles de l'analyse « Instruction subventions », modifiables le temps du
+// scénario, avec leurs versions ; les valeurs sont portées par les dossiers simulés.
+const SUBV_FIELDS = () => [
+  { id: "f_montant01", name: "Montant demandé", definition: "Montant de l'aide sollicité par le demandeur, tel qu'indiqué dans le formulaire.", type: "amount", required: false, default_value: null, choices: [], currency: "EUR" },
+  { id: "f_service01", name: "Service", definition: "Service instructeur en charge du dossier.", type: "choice", required: true, default_value: "Culture", choices: ["Culture", "Sport", "Social", "Éducation"], currency: "EUR" },
+  { id: "f_depot0001", name: "Date de dépôt", definition: "Date de réception du dossier complet. Sert de point de départ au délai d'instruction.", type: "date", required: false, default_value: null, choices: [], currency: "EUR" },
+  { id: "f_priorite1", name: "Prioritaire", definition: "À cocher quand le dossier doit être traité avant les autres.", type: "boolean", required: false, default_value: false, choices: [], currency: "EUR" },
+];
+let customFields = SUBV_FIELDS();
+let customVersions = [{ id: "cfv-1", created_at: iso(-15), content: SUBV_FIELDS().slice(0, 2) }];
+const SERVICES = ["Culture", "Sport", "Social", "Éducation"];
+
 const TRACKED = TRACKED_ANALYSES.flatMap((analyse, a) =>
   SUBJECTS[analyse.id].map((subject, i) => {
     const n = a * 10 + i;
@@ -167,6 +179,10 @@ const TRACKED = TRACKED_ANALYSES.flatMap((analyse, a) =>
       closed,
       created_at: iso(-30 + n),
       last_activity_at: iso(-(n % 9)),
+      values:
+        analyse.id === ANALYSE_ID
+          ? { f_montant01: 800 + n * 350, f_service01: SERVICES[n % 4], f_depot0001: dayKey(-40 + n * 3), f_priorite1: n % 3 === 0 }
+          : {},
     };
   }),
 );
@@ -190,6 +206,7 @@ const trackingRow = (d) => ({
   due: dueOfTracked(d),
   created_at: d.created_at,
   last_activity_at: d.last_activity_at,
+  values: d.analyse.id === ANALYSE_ID ? Object.fromEntries(Object.entries(d.values).filter(([id]) => customFields.some((f) => f.id === id))) : {},
 });
 // Notifications (#174) : `GET /api/notifications` et marquage comme lu.
 const notificationsOf = () => {
@@ -317,6 +334,8 @@ function api(role) {
     statuses_versions: versions,
     due_settings: dueSettings,
     due_settings_versions: dueVersions,
+    custom_fields: customFields,
+    custom_fields_versions: customVersions,
     agents: [],
   });
   return (route) => {
@@ -355,6 +374,24 @@ function api(role) {
       return json(analyseOut());
     }
     if (path === "/api/tracking") return json(trackingPage(url.searchParams));
+    // Colonnes personnalisées (#173) : définitions (versionnées) et valeurs validées par type.
+    if (path === `/api/analyses/${ANALYSE_ID}/custom-fields` && method === "PUT") {
+      const body = route.request().postDataJSON();
+      customVersions = [{ id: `cfv-${customVersions.length + 1}`, created_at: new Date().toISOString(), content: customFields }, ...customVersions];
+      customFields = body.fields.map((f, i) => ({ ...f, id: f.id ?? `f_new${i}${Date.now() % 100000}` }));
+      return json(analyseOut());
+    }
+    const valueMatch = path.match(/^\/api\/dossiers\/(trk-\d+)\/custom-values\/(f_\w+)$/);
+    if (valueMatch && method === "PUT") {
+      const { value } = route.request().postDataJSON();
+      const field = customFields.find((f) => f.id === valueMatch[2]);
+      if (field?.type === "amount" && typeof value === "number" && value < 0) {
+        return json({ detail: { code: "invalid_value", message: "Saisissez un montant positif." } }, 422);
+      }
+      const target = TRACKED.find((d) => d.id === valueMatch[1]);
+      if (target) target.values[valueMatch[2]] = value;
+      return json({ field_id: valueMatch[2], value });
+    }
     // Accès aux dossiers (#177) : lecture, simulation et enregistrement ; un seul dossier de démonstration (dos-3).
     const accessMatch = path.match(/^\/api\/dossiers\/(dos-\d+)\/access$/);
     if (accessMatch && method === "GET") return json(accessState(accessMatch[1], role === "admin"));
@@ -601,6 +638,35 @@ async function tracking(browser) {
   await page.getByRole("button", { name: /Colonnes/ }).first().click();
   await shotModal(page, dir, "06-choix-des-colonnes.png");
   await closeModal(page);
+
+  // Champs personnalisés, puis historique après une modification
+  await openOptions(page);
+  await page.getByRole("button", { name: /Champs personnalisés/ }).click();
+  await page.locator(".cf__head").first().click();
+  await shotModal(page, dir, "07-champs-personnalises.png");
+  await page.locator("input[id^='cf-name-']").first().fill("Montant sollicité");
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await page.getByText(/Colonnes personnalisées enregistrées/).waitFor();
+  await settle(page, 400);
+  await openOptions(page);
+  await page.getByRole("button", { name: /Champs personnalisés/ }).click();
+  await page.getByText(/Historique des versions/).click();
+  await shotModal(page, dir, "08-historique-des-champs.png");
+  await closeModal(page);
+
+  // Édition en cellule avec erreur de validation (montant négatif, refusé par le serveur)
+  if (await page.locator("details.track__more").evaluate((el) => el.open)) await page.getByText("Options").click();
+  await page.getByRole("button", { name: /^Modifier Montant sollicité/ }).first().click();
+  await page.locator("tbody input.cell__input").first().fill("-5");
+  await page.keyboard.press("Enter");
+  await page.getByText("Saisissez un montant positif.").waitFor();
+  await shot(page, dir, "09-edition-en-cellule.png");
+
+  // Filtres sur les colonnes personnalisées
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /Filtres/ }).click();
+  await shot(page, dir, "13-filtres-sur-les-colonnes.png");
+  await page.getByRole("button", { name: /Filtres/ }).click();
 
   // Vue transversale
   await page.goto(`${baseUrl}/suivi`, { waitUntil: "networkidle" });

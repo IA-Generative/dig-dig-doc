@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -659,6 +659,17 @@ class BulkAssigneeResult(BaseModel):
     unchanged: int
 
 
+class CustomValueIn(BaseModel):
+    """Nouvelle valeur d'une colonne personnalisée (issue #173) ; ``null`` ou une chaîne vide l'efface."""
+
+    value: Any = None
+
+
+class CustomValueOut(BaseModel):
+    field_id: str
+    value: Any = None
+
+
 class DueAtUpdate(BaseModel):
     """Nouvelle échéance du dossier ; ``null`` la supprime."""
 
@@ -696,6 +707,9 @@ class DossierOut(BaseModel):
     closed_at: datetime | None = None
     # Qui voit le dossier (#177) : « restricted » (groupes associés) ou « analyse ».
     visibility: Literal["restricted", "analyse"] = "analyse"
+    # Valeurs des colonnes personnalisées du suivi (#173) : {identifiant du champ: valeur}. Les définitions sont sur
+    # l'analyse (`GET /api/analyses/{id}`).
+    custom_values: dict[str, Any] = {}
     # Responsable du dossier (#173), ``null`` si non affecté, et depuis quand.
     assignee: PersonOut | None = None
     assigned_at: datetime | None = None

@@ -2,29 +2,38 @@
 import { computed, ref } from "vue";
 
 import VersionHistory from "@/components/analyses/VersionHistory.vue";
-import { useTracking } from "@/composables/useTracking";
+import { useAnalyses } from "@/composables/useAnalyses";
 import { FIELD_TYPE_LABELS, type CustomField, type CustomValue, type FieldType } from "@/types/tracking";
 
-// Définition des colonnes personnalisées (administrateur de l'analyse).
-// Versionnée avec historique et restauration, comme les autres champs
-// d'une analyse (cf. VersionHistory).
+// Définition des colonnes personnalisées (administrateurs). Versionnée avec historique et restauration, comme les
+// autres champs d'une analyse (cf. VersionHistory). Le serveur valide la définition (noms uniques, au plus 20 champs,
+// valeurs par défaut cohérentes) ; ses messages s'affichent sous la liste.
 const props = defineProps<{ analyseId: string }>();
 const emit = defineEmits<{ close: []; saved: [message: string] }>();
 
-const { fieldsOf, fieldsVersionsOf, saveFields, restoreFieldsVersion } = useTracking();
-const fields = computed(() => fieldsOf(props.analyseId));
-const fieldsVersions = computed(() => fieldsVersionsOf(props.analyseId));
+const { getById, updateCustomFields, restoreCustomFieldsVersion } = useAnalyses();
+const analyse = computed(() => getById(props.analyseId));
+const fields = computed(() => analyse.value?.customFields ?? []);
+const fieldsVersions = computed(() => analyse.value?.customFieldsVersions ?? []);
+
+const MAX_FIELDS = 20;
 
 const draft = ref<CustomField[]>(JSON.parse(JSON.stringify(fields.value)));
 const openId = ref<string | null>(null);
 const purge = ref(false);
 const removed = ref<CustomField[]>([]);
 const choicesText = ref<Record<string, string>>(Object.fromEntries(draft.value.map((f) => [f.id, f.choices.join("\n")])));
+/** Identifiants provisoires des champs créés ici : le serveur leur donne leur identifiant définitif à l'enregistrement. */
+const newIds = ref<Set<string>>(new Set());
+const saving = ref(false);
+const saveError = ref("");
 
 const typeOptions = Object.entries(FIELD_TYPE_LABELS) as [FieldType, string][];
 
 function addField() {
-  const id = `f_${Date.now()}`;
+  if (draft.value.length >= MAX_FIELDS) return;
+  const id = `new-${Date.now()}`;
+  newIds.value.add(id);
   draft.value.push({ id, name: "", definition: "", type: "text", required: false, defaultValue: null, choices: [], currency: "EUR" });
   choicesText.value[id] = "";
   openId.value = id;
@@ -55,6 +64,11 @@ function setDefault(f: CustomField, raw: string) {
   f.defaultValue = raw === "" ? null : f.type === "number" || f.type === "amount" ? Number(raw) : raw;
 }
 
+/** Les champs dont le type change perdent leurs valeurs : on prévient avant d'enregistrer. */
+const retyped = computed(() =>
+  draft.value.filter((f) => !newIds.value.has(f.id) && fields.value.find((x) => x.id === f.id)?.type !== f.type),
+);
+
 const errors = computed(() => {
   const list: string[] = [];
   const names = new Set<string>();
@@ -68,26 +82,44 @@ const errors = computed(() => {
   return [...new Set(list)];
 });
 
-const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(fields.value));
+const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(fields.value) || (removed.value.length > 0 && purge.value));
 
-function save() {
-  if (errors.value.length) return;
-  saveFields(props.analyseId, draft.value.map((f) => ({ ...f, name: f.name.trim() })), purge.value);
-  emit("saved", "Colonnes personnalisées enregistrées. L'ancienne version est dans l'historique.");
-  emit("close");
+async function save() {
+  if (errors.value.length || saving.value) return;
+  saving.value = true;
+  saveError.value = "";
+  try {
+    await updateCustomFields(
+      props.analyseId,
+      draft.value.map((f) => ({ ...f, name: f.name.trim() })),
+      purge.value,
+      newIds.value,
+    );
+    emit("saved", "Colonnes personnalisées enregistrées. L'ancienne version est dans l'historique.");
+    emit("close");
+  } catch (e) {
+    saveError.value = e instanceof Error ? e.message : "L'enregistrement a échoué.";
+  } finally {
+    saving.value = false;
+  }
 }
 
-function restore(versionId: string) {
-  restoreFieldsVersion(props.analyseId, versionId);
-  emit("saved", "Version restaurée.");
-  emit("close");
+async function restore(versionId: string) {
+  saveError.value = "";
+  try {
+    await restoreCustomFieldsVersion(props.analyseId, versionId);
+    emit("saved", "Version restaurée.");
+    emit("close");
+  } catch (e) {
+    saveError.value = e instanceof Error ? e.message : "La restauration a échoué.";
+  }
 }
 
 const summarize = (content: CustomField[]) =>
   content.length === 0 ? "Aucun champ" : content.map((f) => `${f.name} (${FIELD_TYPE_LABELS[f.type].toLowerCase()})`).join(", ");
 
 const actions = computed(() => [
-  { label: "Enregistrer", disabled: !dirty.value || errors.value.length > 0, onClick: save },
+  { label: saving.value ? "Enregistrement…" : "Enregistrer", disabled: !dirty.value || errors.value.length > 0 || saving.value, onClick: save },
   { label: "Annuler", secondary: true, onClick: () => emit("close") },
 ]);
 
@@ -154,7 +186,16 @@ const defaultAsString = (v: CustomValue) => (v === null ? "" : String(v));
       </li>
     </ul>
 
-    <button type="button" class="fr-btn fr-btn--sm fr-btn--secondary" style="gap: 0.375rem" @click="addField"><VIcon name="ri-add-line" /> Ajouter un champ</button>
+    <button
+      type="button"
+      class="fr-btn fr-btn--sm fr-btn--secondary"
+      style="gap: 0.375rem"
+      :disabled="draft.length >= MAX_FIELDS"
+      @click="addField"
+    >
+      <VIcon name="ri-add-line" /> Ajouter un champ
+    </button>
+    <span v-if="draft.length >= MAX_FIELDS" class="cf__hint">Vingt champs au plus par analyse.</span>
 
     <div v-if="removed.length" class="cf__removed" role="status">
       <p>
@@ -168,9 +209,16 @@ const defaultAsString = (v: CustomValue) => (v === null ? "" : String(v));
       </fieldset>
     </div>
 
+    <p v-if="retyped.length" class="cf__warn" role="status">
+      <VIcon name="ri-alert-line" /> Changer le type de {{ retyped.map((f) => `« ${f.name || "Champ"} »`).join(", ") }} supprime
+      les valeurs déjà saisies dans ce champ.
+    </p>
+
     <ul v-if="errors.length" class="cf__errors" role="alert">
       <li v-for="e in errors" :key="e">{{ e }}</li>
     </ul>
+
+    <p v-if="saveError" class="cf__errors" role="alert">{{ saveError }}</p>
 
     <div class="cf__history">
       <VersionHistory :versions="fieldsVersions" :format-content="summarize" @restore="restore" />
@@ -179,6 +227,17 @@ const defaultAsString = (v: CustomValue) => (v === null ? "" : String(v));
 </template>
 
 <style scoped>
+.cf__warn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--background-contrast-warning);
+  font-size: 0.875rem;
+}
+
 .cf__hint {
   margin: 0 0 0.75rem;
   color: var(--text-mention-grey);

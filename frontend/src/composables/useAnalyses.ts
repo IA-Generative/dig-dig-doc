@@ -1,5 +1,6 @@
 import { computed, reactive, ref } from "vue";
 
+import type { CustomField } from "@/types/tracking";
 import { apiFetch } from "@/utils/api";
 import type {
   Agent,
@@ -50,6 +51,19 @@ function mapDueSettings(api: any): DueSettings {
   };
 }
 
+function mapCustomField(api: any): CustomField {
+  return {
+    id: api.id,
+    name: api.name,
+    definition: api.definition ?? "",
+    type: api.type,
+    required: api.required,
+    defaultValue: api.default_value ?? null,
+    choices: api.choices ?? [],
+    currency: api.currency ?? "EUR",
+  };
+}
+
 function mapAgent(api: any): Agent {
   return {
     id: api.id,
@@ -90,6 +104,10 @@ function mapAnalyse(api: any): Analyse {
     statuses: (api.statuses ?? []).map(mapStatus),
     statusesVersions: (api.statuses_versions ?? []).map((v: any) =>
       mapVersion(v, (content: any[]) => content.map(mapStatus)),
+    ),
+    customFields: (api.custom_fields ?? []).map(mapCustomField),
+    customFieldsVersions: (api.custom_fields_versions ?? []).map((v: any) =>
+      mapVersion(v, (content: any[]) => content.map(mapCustomField)),
     ),
     dueSettings: mapDueSettings(api.due_settings),
     dueSettingsVersions: (api.due_settings_versions ?? []).map((v: any) => mapVersion(v, mapDueSettings)),
@@ -281,6 +299,35 @@ export function useAnalyses() {
     cache[analyseId] = mapAnalyse(data);
   };
 
+  /**
+   * Remplace les colonnes personnalisées du suivi (administrateurs). Un champ sans `id` est nouveau ; un champ supprimé
+   * garde ses valeurs sauf `purgeRemoved` ; un champ dont le type change perd ses valeurs.
+   */
+  const updateCustomFields = async (analyseId: string, fields: CustomField[], purgeRemoved: boolean, newIds: Set<string>) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/custom-fields`, {
+      method: "PUT",
+      body: JSON.stringify({
+        fields: fields.map((f) => ({
+          id: newIds.has(f.id) ? null : f.id,
+          name: f.name,
+          definition: f.definition,
+          type: f.type,
+          required: f.required,
+          default_value: f.defaultValue,
+          choices: f.choices,
+          currency: f.currency,
+        })),
+        purge_removed: purgeRemoved,
+      }),
+    });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
+  const restoreCustomFieldsVersion = async (analyseId: string, versionId: string) => {
+    const data = await apiFetch<any>(`/api/analyses/${analyseId}/custom-fields/restore/${versionId}`, { method: "POST" });
+    cache[analyseId] = mapAnalyse(data);
+  };
+
   const restoreDueSettingsVersion = async (analyseId: string, versionId: string) => {
     const data = await apiFetch<any>(`/api/analyses/${analyseId}/due-settings/restore/${versionId}`, { method: "POST" });
     cache[analyseId] = mapAnalyse(data);
@@ -388,6 +435,8 @@ export function useAnalyses() {
     updateStatuses,
     restoreStatusesVersion,
     updateDueSettings,
+    updateCustomFields,
+    restoreCustomFieldsVersion,
     restoreDueSettingsVersion,
     addAgent,
     updateAgentPrompt,

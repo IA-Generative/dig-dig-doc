@@ -28,7 +28,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     const detail = body?.detail;
     // Un détail structuré (`{code, message}`) donne son message ; sinon le libellé HTTP.
     const message =
-      typeof detail === "string" ? detail : typeof detail?.message === "string" ? detail.message : response.statusText;
+      typeof detail === "string"
+        ? detail
+        : typeof detail?.message === "string"
+          ? detail.message
+          : // Erreur de validation FastAPI : le premier message, sans le préfixe technique de Pydantic.
+            typeof detail?.[0]?.msg === "string"
+            ? detail[0].msg.replace(/^Value error, /, "")
+            : response.statusText;
     throw new ApiError(response.status, message, detail);
   }
   if (response.status === 204) return undefined as T;

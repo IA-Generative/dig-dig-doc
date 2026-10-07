@@ -24,6 +24,8 @@ from app.schemas.analyse import (
     AnalyseOut,
     AnalyseShareCreate,
     AnalyseShareOut,
+    CustomFieldOut,
+    CustomFieldsUpdate,
     DueSettingsIn,
     DueSettingsOut,
     EntitiesUpdate,
@@ -314,6 +316,55 @@ async def restore_due_settings(
     repository = AnalyseRepository(db)
     analyse = await _get_or_404(repository, analyse_id)
     if not await repository.restore_due_settings_version(analyse, version_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
+    return repository.to_schema(analyse)
+
+
+def _require_admin(user: RequestContext) -> None:
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les administrateurs définissent les colonnes du suivi."
+        )
+
+
+@router.get("/{analyse_id}/custom-fields", response_model=list[CustomFieldOut])
+async def get_custom_fields(
+    analyse_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+) -> list[CustomFieldOut]:
+    """Colonnes personnalisées du suivi de l'analyse (issue #173)."""
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    return [CustomFieldOut.model_validate(field) for field in repository.custom_fields_snapshot(analyse)]
+
+
+@router.put("/{analyse_id}/custom-fields", response_model=AnalyseOut)
+async def update_custom_fields(
+    analyse_id: uuid.UUID,
+    body: CustomFieldsUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> AnalyseOut:
+    """Remplace les colonnes personnalisées (administrateurs). L'état précédent est conservé dans
+    ``custom_fields_versions`` (restaurable). Un champ sans ``id`` est nouveau ; un champ supprimé garde ses valeurs
+    sauf ``purge_removed`` ; un champ dont le type change perd ses valeurs."""
+    _require_admin(user)
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    await repository.update_custom_fields(analyse, body)
+    return repository.to_schema(analyse)
+
+
+@router.post("/{analyse_id}/custom-fields/restore/{version_id}", response_model=AnalyseOut)
+async def restore_custom_fields(
+    analyse_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> AnalyseOut:
+    _require_admin(user)
+    repository = AnalyseRepository(db)
+    analyse = await _get_or_404(repository, analyse_id)
+    if not await repository.restore_custom_fields_version(analyse, version_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Version introuvable")
     return repository.to_schema(analyse)
 

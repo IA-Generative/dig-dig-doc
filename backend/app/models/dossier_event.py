@@ -22,6 +22,8 @@ class DossierEventType(enum.StrEnum):
     ASSIGNEE_CHANGED = "assignee_changed"
     # Visibilité ou groupes d'accès modifiés (issue #177) : ``visibility`` {from, to}, ``groups_added``,
     # ``groups_removed``.
+    # Valeur d'une colonne personnalisée modifiée (issue #173) : ``field`` {id, name}, ``from``, ``to``.
+    CUSTOM_VALUE_CHANGED = "custom_value_changed"
     ACCESS_CHANGED = "access_changed"
     # Un administrateur est entré dans un dossier restreint dont il n'est pas membre d'un groupe (issue #182). Réservé
     # à la lecture des administrateurs ; ``method`` : verbe HTTP, ``write`` : vrai pour une modification.
