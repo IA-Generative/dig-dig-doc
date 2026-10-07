@@ -140,6 +140,8 @@ class AnalyseListItem(BaseModel):
     description: str
     created_at: datetime
     agent_count: int
+    # Statuts de dossier de l'analyse (issue #168) : la liste des dossiers s'en sert pour son filtre.
+    statuses: list["StatusDefinitionOut"] = []
 
 
 class AnalyseOut(BaseModel):

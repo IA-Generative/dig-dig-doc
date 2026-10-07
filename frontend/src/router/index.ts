@@ -8,6 +8,7 @@ import AnalyseClassificationTab from "@/pages/analyse/AnalyseClassificationTab.v
 import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
 import AnalyseDocumentsTab from "@/pages/analyse/AnalyseDocumentsTab.vue";
 import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
+import AnalyseStatusesTab from "@/pages/analyse/AnalyseStatusesTab.vue";
 import AnalyseTrackingTab from "@/pages/analyse/AnalyseTrackingTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
 import DashboardPage from "@/pages/DashboardPage.vue";
@@ -47,6 +48,11 @@ export const router = createRouter({
           path: "agents",
           name: "analyse-agents",
           component: AnalyseAgentsTab,
+        },
+        {
+          path: "statuts",
+          name: "analyse-statuses",
+          component: AnalyseStatusesTab,
         },
         {
           path: "suivi",

@@ -61,6 +61,17 @@ function mapDossier(api: any): Dossier {
   return {
     id: api.id,
     name: api.name,
+    workflowStatus: api.workflow_status
+      ? {
+          id: api.workflow_status.id,
+          name: api.workflow_status.name,
+          color: api.workflow_status.color,
+          position: api.workflow_status.position,
+          isInitial: api.workflow_status.is_initial,
+          isFinal: api.workflow_status.is_final,
+        }
+      : undefined,
+    closedAt: api.closed_at ?? undefined,
     analyseId: api.analyse_id ?? undefined,
     analyseVersion: api.analyse_version,
     createdAt: api.created_at,
@@ -86,9 +97,18 @@ const pageCount = ref(1);
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-async function fetchList(page = currentPage.value, size = pageSize.value) {
+/** Filtre et tri de la liste (issue #170) : par statut de dossier, tri par date (défaut) ou par statut. */
+export interface DossierListOptions {
+  workflowStatusId?: string;
+  sort?: "created_at" | "status";
+}
+
+async function fetchList(page = currentPage.value, size = pageSize.value, options: DossierListOptions = {}) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(size) });
+  if (options.workflowStatusId) query.set("workflow_status_id", options.workflowStatusId);
+  if (options.sort && options.sort !== "created_at") query.set("sort", options.sort);
   const data = await apiFetch<{ items: any[]; total: number; page: number; page_size: number; pages: number }>(
-    `/api/dossiers?page=${page}&page_size=${size}`,
+    `/api/dossiers?${query}`,
   );
   dossiers.splice(0, dossiers.length, ...data.items.map(mapDossier));
   total.value = data.total;
@@ -123,6 +143,17 @@ export function useDossiers() {
     const data = await apiFetch<any>("/api/dossiers", {
       method: "POST",
       body: JSON.stringify(body),
+    });
+    const dossier = mapDossier(data);
+    upsert(dossier);
+    return dossier;
+  };
+
+  /** Change le statut de dossier ; le serveur pose ou efface la date de clôture. */
+  const setWorkflowStatus = async (dossierId: string, statusId: string) => {
+    const data = await apiFetch<any>(`/api/dossiers/${dossierId}/workflow-status`, {
+      method: "PUT",
+      body: JSON.stringify({ status_id: statusId }),
     });
     const dossier = mapDossier(data);
     upsert(dossier);
@@ -229,6 +260,7 @@ export function useDossiers() {
     fetchDossier,
     fetchList,
     create,
+    setWorkflowStatus,
     addDocuments,
     setDocumentLabel,
     launch,

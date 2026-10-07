@@ -1,3 +1,5 @@
+import type { WorkflowStatus } from "@/types/analyse";
+
 export type DossierStatus = "en_attente" | "en_cours" | "terminé" | "arrêté" | "échec";
 
 export const DOSSIER_STATUS_LABELS: Record<DossierStatus, string> = {
@@ -99,6 +101,10 @@ export interface DossierDocument {
 export interface Dossier {
   id: string;
   name: string;
+  /** Statut de dossier défini par son analyse (#168) ; absent pour un dossier « à ranger ». */
+  workflowStatus?: WorkflowStatus;
+  /** Date de clôture : posée quand le dossier entre dans un statut final. */
+  closedAt?: string;
   /**
    * Analyse rattachée au dossier. Optionnel : un dossier « à ranger » peut
    * être créé sans analyse, puis recevoir des suggestions via le LLM

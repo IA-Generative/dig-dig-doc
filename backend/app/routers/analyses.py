@@ -87,6 +87,7 @@ async def list_analyses(
             description=a.description,
             created_at=a.created_at,
             agent_count=len(a.agents),
+            statuses=[StatusDefinitionOut.model_validate(s) for s in a.statuses],
         )
         for a in analyses
     ]

@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
@@ -72,8 +72,17 @@ async def list_dossiers(
     db: Annotated[AsyncSession, Depends(get_db)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    workflow_status_id: Annotated[
+        uuid.UUID | None, Query(description="Ne garder que les dossiers de ce statut")
+    ] = None,
+    sort: Annotated[
+        Literal["created_at", "status"],
+        Query(description="created_at : plus récents d'abord ; status : par statut (ordre de l'analyse)"),
+    ] = "created_at",
 ) -> Page[DossierOut]:
-    dossiers, total = await DossierRepository(db).list_paginated(page=page, page_size=page_size)
+    dossiers, total = await DossierRepository(db).list_paginated(
+        page=page, page_size=page_size, workflow_status_id=workflow_status_id, sort=sort
+    )
     return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
 
