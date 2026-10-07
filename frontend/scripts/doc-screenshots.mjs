@@ -131,6 +131,103 @@ const EVENTS = [
   event(12, "created", CAMILLE, at(-3, 10, 55), { analyse_id: null }),
 ];
 
+// Tableau de suivi (#173) : dossiers de trois analyses, servis par `GET /api/tracking` comme le fait le backend.
+const USERS = [
+  { id: "u1", name: "Alex Martin" },
+  { id: "u2", name: "Camille Durand" },
+  { id: "u3", name: "Samir Benali" },
+  { id: "u4", name: "Léa Petit" },
+];
+const TRACKED_ANALYSES = [
+  { id: ANALYSE_ID, name: "Instruction subventions", statuses: STATUSES },
+  { id: "an-urba", name: "Urbanisme", statuses: STATUSES.map((s) => ({ ...s, id: `urba:${s.id}` })) },
+  { id: "an-cmd", name: "Commande publique", statuses: STATUSES.map((s) => ({ ...s, id: `cmd:${s.id}` })) },
+];
+const SUBJECTS = {
+  [ANALYSE_ID]: ["Subvention association Les Mouettes", "Convention de partenariat culturelle", "Aide au projet sportif jeunesse", "Subvention festival de quartier", "Aide aux séjours de vacances", "Soutien à une résidence d'artistes"],
+  "an-urba": ["Permis de construire", "Déclaration préalable de travaux", "Certificat d'urbanisme", "Permis d'aménager"],
+  "an-cmd": ["Marché fournitures bureau", "Marché entretien espaces verts", "Accord-cadre fournitures scolaires", "Marché de nettoyage"],
+};
+const TRACKED = TRACKED_ANALYSES.flatMap((analyse, a) =>
+  SUBJECTS[analyse.id].map((subject, i) => {
+    const n = a * 10 + i;
+    const status = analyse.statuses[(n * 2) % analyse.statuses.length];
+    const closed = status.is_final;
+    return {
+      id: `trk-${n}`,
+      ref: n + 1,
+      name: `${subject} n°${100 + n}`,
+      analyse,
+      status,
+      assignee: n % 3 === 0 ? null : USERS[n % USERS.length],
+      due_at: n % 5 === 4 ? null : dayKey((n % 7) * 9 - 12),
+      closed,
+      created_at: iso(-30 + n),
+      last_activity_at: iso(-(n % 9)),
+    };
+  }),
+);
+const dueOfTracked = (d) => {
+  if (!d.due_at) return null;
+  const days_left = daysUntil(d.due_at);
+  if (d.closed) return { level: "closed", days_left, color: null };
+  if (days_left < 0) return { level: "overdue", days_left, color: DEFAULT_DUE.thresholds.overdue_color };
+  const step = [...DEFAULT_DUE.thresholds.steps].sort((x, y) => x.days - y.days).find((s) => days_left <= s.days);
+  return { level: step ? "soon" : "ok", days_left, color: step ? step.color : DEFAULT_DUE.thresholds.far_color };
+};
+const trackingRow = (d) => ({
+  id: d.id,
+  reference: `DOS-${new Date().getFullYear()}-${String(d.ref).padStart(4, "0")}`,
+  name: d.name,
+  analyse: { id: d.analyse.id, name: d.analyse.name },
+  status: d.status,
+  assignee: d.assignee,
+  due_at: d.due_at,
+  due: dueOfTracked(d),
+  created_at: d.created_at,
+  last_activity_at: d.last_activity_at,
+});
+function trackingPage(params) {
+  const get = (k) => params.get(k);
+  const analyses = params.getAll("analyse_id");
+  const search = (get("search") ?? "").toLowerCase();
+  let rows = TRACKED.filter((d) => {
+    if (analyses.length && !analyses.includes(d.analyse.id)) return false;
+    if (get("status_id") && d.status.id !== get("status_id")) return false;
+    const category = get("status_category");
+    if (category === "initial" && !d.status.is_initial) return false;
+    if (category === "final" && !d.status.is_final) return false;
+    if (category === "progress" && (d.status.is_initial || d.status.is_final)) return false;
+    const assignee = get("assignee");
+    if (assignee === "none" && d.assignee) return false;
+    if (assignee === "me" && d.assignee?.id !== "u1") return false;
+    if (assignee && !["none", "me"].includes(assignee) && d.assignee?.id !== assignee) return false;
+    const due = get("due");
+    if (due) {
+      if (d.closed) return false;
+      const left = d.due_at ? daysUntil(d.due_at) : null;
+      if (due === "none" ? left !== null : left === null || (due === "overdue" ? left >= 0 : left < 0 || left > Number(due))) return false;
+    }
+    return !search || d.name.toLowerCase().includes(search) || trackingRow(d).reference.toLowerCase().includes(search);
+  });
+  const sortKey = get("sort") ?? "created_at";
+  const dir = get("direction") === "asc" ? 1 : -1;
+  const value = (d) => ({ reference: d.ref, name: d.name.toLowerCase(), analyse: d.analyse.name, status: d.status.position, assignee: d.assignee?.name ?? null, due: d.due_at, created_at: d.created_at, last_activity_at: d.last_activity_at })[sortKey];
+  rows = [...rows].sort((x, y) => {
+    const a = value(x), b = value(y);
+    if (a === null) return b === null ? 0 : 1; // les valeurs absentes restent en dernier
+    if (b === null) return -1;
+    return (a < b ? -1 : a > b ? 1 : 0) * dir;
+  });
+  const size = Number(get("page_size") ?? 20);
+  const page = Number(get("page") ?? 1);
+  return { items: rows.slice((page - 1) * size, page * size).map(trackingRow), total: rows.length, page, page_size: size, pages: Math.max(1, Math.ceil(rows.length / size)) };
+}
+
+// Les analyses supplémentaires (Urbanisme, Commande publique) ne servent qu'au tableau de suivi ; ailleurs elles
+// changeraient les libellés des filtres de statut des autres captures.
+let trackingScenario = false;
+
 const page_of = (items) => ({ items, total: items.length, page: 1, page_size: 20, pages: 1 });
 
 function api(role) {
@@ -170,7 +267,7 @@ function api(role) {
     if (path === "/api/cgu/acceptance") return json({ accepted: true, cgu: null });
     if (path === "/api/cgu") return json({}, 404);
     if (path === "/api/analyses") {
-      return json(page_of([{ id: ANALYSE_ID, name: "Instruction subventions", description: "Instruction des demandes de subvention des associations.", created_at: iso(-90), agent_count: 2, statuses }]));
+      return json(page_of([{ id: ANALYSE_ID, name: "Instruction subventions", description: "Instruction des demandes de subvention des associations.", created_at: iso(-90), agent_count: 2, statuses }, ...(trackingScenario ? TRACKED_ANALYSES.slice(1) : []).map((a) => ({ id: a.id, name: a.name, description: "", created_at: iso(-60), agent_count: 1, statuses: a.statuses }))]));
     }
     if (path === `/api/analyses/${ANALYSE_ID}`) return json(analyseOut());
     if (path === `/api/analyses/${ANALYSE_ID}/statuses` && method === "PUT") {
@@ -193,6 +290,18 @@ function api(role) {
       dueVersions = [{ id: `dv-${dueVersions.length + 1}`, created_at: new Date().toISOString(), content: dueSettings }, ...dueVersions];
       dueSettings = body;
       return json(analyseOut());
+    }
+    if (path === "/api/tracking") return json(trackingPage(url.searchParams));
+    if (path === "/api/users") return json(USERS);
+    if (path === "/api/dossiers/bulk-assignee" && method === "PUT") {
+      const body = route.request().postDataJSON();
+      const person = USERS.find((u) => u.id === body.assignee_id) ?? null;
+      let updated = 0;
+      for (const d of TRACKED.filter((t) => body.dossier_ids.includes(t.id))) {
+        if ((d.assignee?.id ?? null) !== (person?.id ?? null)) updated++;
+        d.assignee = person;
+      }
+      return json({ updated, unchanged: body.dossier_ids.length - updated });
     }
     if (path === "/api/dossiers" && method === "GET") {
       const wanted = url.searchParams.get("workflow_status_id");
@@ -340,6 +449,7 @@ async function dashboard(browser) {
 // Tableau de suivi
 // ---------------------------------------------------------------------------
 async function tracking(browser) {
+  trackingScenario = true;
   const dir = "tableau-de-suivi";
   const page = await newPage(browser, "admin", { width: 1800, height: 1900 });
   await page.goto(`${baseUrl}/analyses/${ANALYSE_ID}/suivi`, { waitUntil: "networkidle" });
@@ -356,7 +466,11 @@ async function tracking(browser) {
   await boxes.nth(0).check();
   await boxes.nth(1).check();
   await shot(page, dir, "03-affectation-en-lot.png");
-  await page.getByRole("button", { name: "Tout désélectionner" }).click();
+  await page.locator("#bulk-assignee").selectOption({ label: "Camille Durand" });
+  await page.getByRole("button", { name: "Affecter", exact: true }).click();
+  await page.getByText(/affectés? à Camille Durand/).waitFor();
+  await settle(page, 400);
+  await shot(page, dir, "12-affectation-confirmee.png");
 
   // Aide d'une colonne
   await page.getByRole("button", { name: "Aide sur la colonne Échéance" }).click();
@@ -370,27 +484,6 @@ async function tracking(browser) {
   await shotModal(page, dir, "06-choix-des-colonnes.png");
   await closeModal(page);
 
-  // Champs personnalisés, puis historique après une modification
-  await openOptions(page);
-  await page.getByRole("button", { name: /Champs personnalisés/ }).click();
-  await page.locator(".cf__head").first().click();
-  await shotModal(page, dir, "07-champs-personnalises.png");
-  await page.locator("input[id^='cf-name-']").first().fill("Montant sollicité");
-  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
-  await settle(page, 400);
-  await openOptions(page);
-  await page.getByRole("button", { name: /Champs personnalisés/ }).click();
-  await page.getByText(/Historique des versions/).click();
-  await shotModal(page, dir, "08-historique-des-champs.png");
-  await closeModal(page);
-
-  // Édition en cellule avec erreur de validation (montant négatif)
-  if (await page.locator("details.track__more").evaluate((el) => el.open)) await page.getByText("Options").click();
-  await page.getByRole("button", { name: /^Modifier Montant sollicité/ }).first().click();
-  await page.locator("tbody input.cell__input").first().fill("-5");
-  await page.keyboard.press("Enter");
-  await shot(page, dir, "09-edition-en-cellule.png");
-
   // Vue transversale
   await page.goto(`${baseUrl}/suivi`, { waitUntil: "networkidle" });
   await page.getByText(/\d+ dossiers?/).first().waitFor();
@@ -402,6 +495,7 @@ async function tracking(browser) {
   await shot(page, dir, "11-vue-transversale-une-analyse.png");
 
   await page.context().close();
+  trackingScenario = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -470,12 +564,12 @@ async function workflowStatuses(browser) {
   await page.getByText("Statuts de dossier").first().waitFor();
   await shot(page, dir, "01-onglet-statuts.png");
 
-  await page.getByText(/Historique des versions/).click();
+  await page.getByText(/Historique des versions/).first().click();
   await shot(page, dir, "02-historique-des-statuts.png");
 
   // Supprimer un statut encore utilisé : le serveur répond 409 et on choisit un remplaçant.
   await page.getByRole("button", { name: "Supprimer Pièces manquantes" }).click();
-  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).first().click();
   await shotModal(page, dir, "03-remplacer-un-statut-utilise.png");
   await closeModal(page);
 
