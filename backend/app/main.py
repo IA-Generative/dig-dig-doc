@@ -25,6 +25,7 @@ from app.routers.auth import router as auth_router
 from app.routers.cgu import admin_router as cgu_admin_router
 from app.routers.cgu import public_router as cgu_public_router
 from app.routers.conversations import router as conversations_router
+from app.routers.dashboard import router as dashboard_router
 from app.routers.document_drafts import router as document_drafts_router
 from app.routers.dossier_analyses import router as dossier_analyses_router
 from app.routers.dossier_events import router as dossier_events_router
@@ -158,6 +159,7 @@ app.include_router(admin_generation_prompt_router, prefix="/api")
 app.include_router(profile_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(tracking_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 app.include_router(user_tasks_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 # /mcp/helper doit être monté avant /mcp : Starlette résout les Mount par

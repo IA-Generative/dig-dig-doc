@@ -1,137 +1,100 @@
 import { ref } from "vue";
 
-import { useDossierAccess } from "@/composables/useDossierAccess";
-import { useTracking } from "@/composables/useTracking";
-import { ME, STATUSES } from "@/mocks/dossiers";
 import type { DashboardActivity, DashboardData, DashboardUrgency } from "@/types/dashboard";
 import type { SlotDraft } from "@/types/schedule";
-import { dayOffset } from "@/utils/dates";
+import { apiFetch } from "@/utils/api";
 
-// MOCK (issue #174, partie UI) : à remplacer par un appel API une fois les
-// statuts (#168), l'échéance (#172) et les affectations (#173) livrés.
-// Pour valider les états de l'interface, ajouter `?mock=` à l'URL du
-// tableau de bord : `empty` (états vides), `error` (erreur), `loading`
-// (chargement sans fin), `nounassigned` (sans droit « non affectés »).
-
-const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+// Tableau de bord branché sur l'API (issue #174) : `GET /api/dashboard` donne les indicateurs, les urgences
+// (échéance proche ou dépassée selon les seuils de l'analyse), mes dossiers par statut, les dossiers non affectés
+// (administrateurs) et l'activité récente. Restent simulés, faute de backend : les créneaux planifiés (gardés le
+// temps de la session) et les notifications (useNotifications).
+// Pour valider les états de l'interface, ajouter `?mock=` à l'URL : `empty` (états vides), `error` (erreur),
+// `loading` (chargement sans fin), `nounassigned` (sans droit « non affectés »).
 
 /** Créneaux planifiés, conservés tant que la page n'est pas rechargée (ils survivent à la navigation). */
 const slots = new Map<string, SlotDraft>();
-let slotsSeeded = false;
 
-function demoSlot(position: number): SlotDraft | null {
-  const hours: Record<number, [number, number]> = { 2: [9, 10.5], 5: [11, 12], 7: [14, 16] };
-  const range = hours[position];
-  if (!range) return null;
-  const at = (h: number) => {
-    const d = new Date();
-    d.setHours(Math.floor(h), (h % 1) * 60, 0, 0);
-    return d.toISOString();
-  };
+function mapUrgency(api: any): DashboardUrgency {
+  const slot = slots.get(api.dossier_id);
   return {
-    start: at(range[0]),
-    end: at(range[1]),
-    // Démo : le premier créneau se répète chaque jour ouvré, avec un rappel.
-    recurrence: position === 2 ? { unit: "week", interval: 1, weekdays: [0, 1, 2, 3, 4], end: { type: "never" } } : undefined,
-    reminders: position === 2 ? [15] : [],
+    dossierId: api.dossier_id,
+    dossierName: api.dossier_name,
+    analyseId: api.analyse_id,
+    analyseName: api.analyse_name,
+    statusLabel: api.status_label ?? "",
+    dueAt: api.due_at,
+    level: api.level,
+    plannedStart: slot?.start,
+    plannedEnd: slot?.end,
+    recurrence: slot?.recurrence,
+    reminders: slot?.reminders,
   };
 }
 
-const URGENCY_HORIZON_DAYS = 14;
+function mapActivity(api: any): DashboardActivity {
+  return {
+    id: api.id,
+    kind: api.kind,
+    dossierId: api.dossier_id,
+    dossierName: api.dossier_name,
+    message: api.message,
+    at: api.at,
+  };
+}
 
-/**
- * Construit le tableau de bord à partir du jeu de données commun (@/mocks/dossiers) :
- * mes dossiers affectés, ceux sans responsable, les statuts. Seuls les dossiers
- * accessibles (#177) sont pris en compte. Ainsi les affectations faites dans le
- * tableau de suivi se retrouvent ici.
- */
-function mockData(): DashboardData {
-  const { rows, analyseName } = useTracking();
-  const { canSee } = useDossierAccess();
-  const isFinal = (statusId: string) => STATUSES.find((s) => s.id === statusId)?.final ?? false;
-  const statusLabel = (statusId: string) => STATUSES.find((s) => s.id === statusId)?.label ?? statusId;
-
-  const visible = rows.value.filter((r) => canSee(r.id));
-  const mine = visible.filter((r) => r.assigneeId === ME);
-  const open = mine.filter((r) => !isFinal(r.statusId));
-
-  const urgentRows = open
-    .filter((r) => r.dueAt && dayOffset(r.dueAt) <= URGENCY_HORIZON_DAYS)
-    .sort((a, b) => Date.parse(a.dueAt!) - Date.parse(b.dueAt!));
-
-  if (!slotsSeeded && urgentRows.length) {
-    slotsSeeded = true;
-    urgentRows.forEach((r, i) => {
-      const slot = demoSlot(i);
-      if (slot) slots.set(r.id, slot);
-    });
-  }
-
-  const urgencies: DashboardUrgency[] = urgentRows.map((r) => {
-    const slot = slots.get(r.id);
-    return {
-      dossierId: r.id,
-      dossierName: r.name,
-      analyseId: r.analyseId,
-      analyseName: analyseName(r.analyseId),
-      statusLabel: statusLabel(r.statusId),
-      dueAt: r.dueAt!,
-      level: dayOffset(r.dueAt!) < 0 ? "overdue" : "soon",
-      plannedStart: slot?.start,
-      plannedEnd: slot?.end,
-      recurrence: slot?.recurrence,
-      reminders: slot?.reminders,
-    };
-  });
-
-  const statusCounts = STATUSES.filter((s) => !s.final)
-    .map((s) => ({ statusId: s.id, label: s.label, count: open.filter((r) => r.statusId === s.id).length }))
-    .filter((s) => s.count > 0);
-
-  const unassigned = visible
-    .filter((r) => r.assigneeId === null && !isFinal(r.statusId))
-    .map((r) => ({
-      dossierId: r.id,
-      dossierName: r.name,
-      analyseName: analyseName(r.analyseId),
-      createdAt: r.createdAt,
-    }));
-
-  const messages: { kind: DashboardActivity["kind"]; text: string }[] = [
-    { kind: "analysis_done", text: "Analyse terminée" },
-    { kind: "status_changed", text: "Statut modifié par Camille D." },
-    { kind: "document_added", text: "Document ajouté : devis-fournisseur.pdf" },
-    { kind: "analysis_failed", text: "L'analyse a échoué" },
-  ];
-  const activity = mine.slice(0, messages.length).map((r, i) => ({
-    id: `act-${i + 1}`,
-    kind: messages[i].kind,
-    dossierId: r.id,
-    dossierName: r.name,
-    message: messages[i].text,
-    at: hoursAgo([1, 4, 22, 47][i]),
+/** Les statuts sont propres à chaque analyse : dès que plusieurs analyses sont concernées, le libellé nomme la sienne. */
+function mapStatusCounts(api: any[]) {
+  const several = new Set(api.map((s) => s.analyse_name)).size > 1;
+  return api.map((s) => ({
+    statusId: s.status_id,
+    label: several ? `${s.label} · ${s.analyse_name}` : s.label,
+    count: s.count,
   }));
+}
 
+function mapDashboard(api: any): DashboardData {
   return {
     stats: {
-      totalDossiers: mine.length,
-      closedDossiers: mine.length - open.length,
-      completedThisWeek: 9,
-      completedPrevWeek: 6,
-      weeklyClosed: [5, 8, 6, 9],
-      avgProcessingDays: 2.4,
-      onTimeRate: 0.87,
+      totalDossiers: api.stats.total_dossiers,
+      closedDossiers: api.stats.closed_dossiers,
+      completedThisWeek: api.stats.completed_this_week,
+      completedPrevWeek: api.stats.completed_prev_week,
+      weeklyClosed: api.stats.weekly_closed,
+      avgProcessingDays: api.stats.avg_processing_days,
+      onTimeRate: api.stats.on_time_rate,
     },
-    urgencies,
-    statusCounts,
-    unassigned,
-    activity,
+    urgencies: api.urgencies.map(mapUrgency),
+    statusCounts: mapStatusCounts(api.status_counts),
+    unassigned:
+      api.unassigned === null
+        ? null
+        : api.unassigned.map((u: any) => ({
+            dossierId: u.dossier_id,
+            dossierName: u.dossier_name,
+            analyseName: u.analyse_name,
+            createdAt: u.created_at,
+          })),
+    activity: api.activity.map(mapActivity),
   };
 }
 
-function mockScenario(): string | null {
-  return new URLSearchParams(window.location.search).get("mock");
-}
+const emptyDashboard = (): DashboardData => ({
+  stats: {
+    totalDossiers: 0,
+    closedDossiers: 0,
+    completedThisWeek: 0,
+    completedPrevWeek: 0,
+    weeklyClosed: [0, 0, 0, 0],
+    avgProcessingDays: 0,
+    onTimeRate: 0,
+  },
+  urgencies: [],
+  statusCounts: [],
+  unassigned: [],
+  activity: [],
+});
+
+const mockScenario = () => new URLSearchParams(window.location.search).get("mock");
 
 export function useDashboard() {
   const data = ref<DashboardData | null>(null);
@@ -142,36 +105,26 @@ export function useDashboard() {
     loading.value = true;
     error.value = null;
     const scenario = mockScenario();
-    // Latence simulée pour pouvoir juger l'état de chargement.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    if (scenario === "loading") return;
-    if (scenario === "error") {
-      error.value = "Impossible de charger le tableau de bord.";
-    } else if (scenario === "empty") {
-      data.value = {
-        stats: {
-          totalDossiers: 0,
-          closedDossiers: 0,
-          completedThisWeek: 0,
-          completedPrevWeek: 0,
-          weeklyClosed: [0, 0, 0, 0],
-          avgProcessingDays: 0,
-          onTimeRate: 0,
-        },
-        urgencies: [],
-        statusCounts: [],
-        unassigned: [],
-        activity: [],
-      };
-    } else {
-      const mock = mockData();
-      if (scenario === "nounassigned") mock.unassigned = null;
-      data.value = mock;
+    try {
+      if (scenario === "loading") {
+        await new Promise(() => {}); // chargement sans fin, pour juger l'état
+      } else if (scenario === "error") {
+        throw new Error("Impossible de charger le tableau de bord.");
+      } else if (scenario === "empty") {
+        data.value = emptyDashboard();
+      } else {
+        const loaded = mapDashboard(await apiFetch<any>("/api/dashboard"));
+        if (scenario === "nounassigned") loaded.unassigned = null;
+        data.value = loaded;
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Impossible de charger le tableau de bord.";
+    } finally {
+      loading.value = false;
     }
-    loading.value = false;
   }
 
-  /** Planifie (ou retire, avec `null`) le créneau de traitement d'un dossier. */
+  /** Planifie (ou retire, avec `null`) le créneau de traitement d'un dossier (simulé : gardé le temps de la session). */
   function setSchedule(dossierId: string, slot: SlotDraft | null) {
     const target = data.value?.urgencies.find((u) => u.dossierId === dossierId);
     if (!target) return;

@@ -187,6 +187,34 @@ const trackingRow = (d) => ({
   created_at: d.created_at,
   last_activity_at: d.last_activity_at,
 });
+// Tableau de bord (#174) : `GET /api/dashboard`, bâti sur les mêmes dossiers que le suivi.
+function dashboardPayload(isAdmin) {
+  const open = TRACKED.filter((d) => !d.closed);
+  const urgencies = open
+    .filter((d) => d.due_at && ["soon", "overdue"].includes(dueOfTracked(d).level))
+    .sort((a, b) => a.due_at.localeCompare(b.due_at))
+    .map((d) => {
+      const due = dueOfTracked(d);
+      return { dossier_id: d.id, dossier_name: d.name, analyse_id: d.analyse.id, analyse_name: d.analyse.name, status_label: d.status.name, due_at: d.due_at, level: due.level, days_left: due.days_left, color: due.color };
+    });
+  const counts = new Map();
+  for (const d of open) counts.set(d.status.id, { status_id: d.status.id, label: d.status.name, analyse_name: d.analyse.name, count: (counts.get(d.status.id)?.count ?? 0) + 1 });
+  const hoursAgo = (h) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const first = open[0], second = open[1], third = open[2], fourth = open[3];
+  return {
+    stats: { total_dossiers: TRACKED.length, closed_dossiers: TRACKED.length - open.length, completed_this_week: 9, completed_prev_week: 6, weekly_closed: [5, 8, 6, 9], avg_processing_days: 2.4, on_time_rate: 0.87 },
+    urgencies,
+    status_counts: [...counts.values()],
+    unassigned: isAdmin ? open.filter((d) => !d.assignee).map((d) => ({ dossier_id: d.id, dossier_name: d.name, analyse_name: d.analyse.name, created_at: d.created_at })) : null,
+    activity: [
+      { id: "act-1", kind: "analysis_done", dossier_id: first.id, dossier_name: first.name, message: "Analyse terminée", at: hoursAgo(1) },
+      { id: "act-2", kind: "status_changed", dossier_id: second.id, dossier_name: second.name, message: "Statut : À instruire → En instruction, par Camille Durand", at: hoursAgo(4) },
+      { id: "act-3", kind: "document_added", dossier_id: third.id, dossier_name: third.name, message: "Document ajouté, par Samir Benali", at: hoursAgo(22) },
+      { id: "act-4", kind: "analysis_failed", dossier_id: fourth.id, dossier_name: fourth.name, message: "L'analyse a échoué", at: hoursAgo(47) },
+    ],
+  };
+}
+
 function trackingPage(params) {
   const get = (k) => params.get(k);
   const analyses = params.getAll("analyse_id");
@@ -292,6 +320,7 @@ function api(role) {
       return json(analyseOut());
     }
     if (path === "/api/tracking") return json(trackingPage(url.searchParams));
+    if (path === "/api/dashboard") return json(dashboardPayload(role === "admin"));
     if (path === "/api/users") return json(USERS);
     if (path === "/api/dossiers/bulk-assignee" && method === "PUT") {
       const body = route.request().postDataJSON();
@@ -395,10 +424,24 @@ async function waitDashboard(page) {
 // ---------------------------------------------------------------------------
 // Tableau de bord
 // ---------------------------------------------------------------------------
+/** Planifie un créneau pour le premier dossier de la section « À planifier » (les créneaux ne sont pas encore côté serveur). */
+async function planSlot(page, start, end) {
+  const toPlan = page.locator("details.cal__toplan");
+  if (!(await toPlan.evaluate((el) => el.open))) await toPlan.locator("summary").click();
+  await toPlan.getByRole("button", { name: "Planifier", exact: true }).first().click();
+  await page.locator("#slot-start").fill(start);
+  await page.locator("#slot-end").fill(end);
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await settle(page, 300);
+}
+
 async function dashboard(browser) {
   const dir = "tableau-de-bord";
   const page = await newPage(browser, "admin", { width: 1280, height: 2000 });
   await waitDashboard(page);
+  // Quelques créneaux pour montrer l'agenda du jour (ils restent en mémoire le temps de la session).
+  await page.getByRole("button", { name: "Jour", exact: true }).click();
+  for (const [start, end] of [["09:00", "10:30"], ["11:00", "12:00"], ["14:00", "16:00"]]) await planSlot(page, start, end);
 
   await shot(page, dir, "01-tableau-de-bord.png");
 
@@ -425,7 +468,7 @@ async function dashboard(browser) {
   await closeModal(page);
 
   // Indicateurs
-  await page.getByRole("button", { name: /Dossiers/ }).first().click();
+  await page.getByRole("button", { name: /^\d+\s*Dossiers$/ }).click();
   await shotModal(page, dir, "07-indicateurs.png");
   await closeModal(page);
 
