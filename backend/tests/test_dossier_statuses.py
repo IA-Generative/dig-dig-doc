@@ -408,3 +408,70 @@ def test_restore_that_removes_a_used_status_requires_a_replacement(client: TestC
 def test_restore_unknown_version_is_404(client: TestClient) -> None:
     analyse = _create_analyse(client, "Version inconnue")
     assert client.post(f"/api/analyses/{analyse['id']}/statuses/restore/{uuid.uuid4()}").status_code == 404
+
+
+# --- Liste des dossiers : filtre et tri par statut (issue #170) ---
+
+
+def _list_dossiers(client: TestClient, **params) -> list[dict]:
+    """Tous les dossiers de la liste (toutes les pages) : la base de test en contient beaucoup d'autres."""
+    items: list[dict] = []
+    page = 1
+    while True:
+        body = client.get("/api/dossiers", params={"page": page, "page_size": 100, **params}).json()
+        items += body["items"]
+        if page >= body["pages"]:
+            return items
+        page += 1
+
+
+def test_list_dossiers_can_be_filtered_by_status(client: TestClient) -> None:
+    analyse = _create_analyse(client, "Filtre par statut")
+    initial, middle, _final = analyse["statuses"]
+    waiting = _create_dossier(client, analyse["id"], "Dossier en attente")
+    working = _create_dossier(client, analyse["id"], "Dossier en cours d'instruction")
+    client.put(f"/api/dossiers/{working['id']}/workflow-status", json={"status_id": middle["id"]})
+
+    only_initial = {d["id"] for d in _list_dossiers(client, workflow_status_id=initial["id"])}
+    only_middle = {d["id"] for d in _list_dossiers(client, workflow_status_id=middle["id"])}
+
+    assert waiting["id"] in only_initial and working["id"] not in only_initial
+    assert only_middle == {working["id"]}
+
+
+def test_list_dossiers_can_be_sorted_by_status_in_the_analyse_order(client: TestClient) -> None:
+    analyse = _create_analyse(client, "Tri par statut")
+    initial, middle, final = analyse["statuses"]
+    first = _create_dossier(client, analyse["id"], "Dossier A")
+    second = _create_dossier(client, analyse["id"], "Dossier B")
+    third = _create_dossier(client, analyse["id"], "Dossier C")
+    client.put(f"/api/dossiers/{first['id']}/workflow-status", json={"status_id": final["id"]})
+    client.put(f"/api/dossiers/{second['id']}/workflow-status", json={"status_id": middle["id"]})
+
+    ids = [d["id"] for d in _list_dossiers(client, sort="status") if d["analyse_id"] == analyse["id"]]
+
+    assert ids == [third["id"], second["id"], first["id"]]  # initial, puis intermédiaire, puis final
+
+
+def test_list_dossiers_sorted_by_status_puts_dossiers_without_status_last(client: TestClient) -> None:
+    analyse = _create_analyse(client, "Tri avec dossier à ranger")
+    ranged = _create_dossier(client, analyse["id"], "Dossier rangé")
+    to_sort = _create_dossier(client, None, "Dossier à ranger")
+
+    items = _list_dossiers(client, sort="status")
+    ids = [d["id"] for d in items]
+
+    assert ids.index(ranged["id"]) < ids.index(to_sort["id"])
+
+
+def test_list_dossiers_rejects_an_unknown_sort(client: TestClient) -> None:
+    assert client.get("/api/dossiers", params={"sort": "name"}).status_code == 422
+
+
+def test_analyse_list_items_carry_their_statuses(client: TestClient) -> None:
+    analyse = _create_analyse(client, "Statuts dans la liste")
+
+    items = client.get("/api/analyses", params={"q": "Statuts dans la liste"}).json()["items"]
+
+    listed = next(item for item in items if item["id"] == analyse["id"])
+    assert listed["statuses"] == analyse["statuses"]

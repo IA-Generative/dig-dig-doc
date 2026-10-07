@@ -83,6 +83,26 @@ export interface Agent {
   modelVersions: Version<string | null>[];
 }
 
+/**
+ * Statut de dossier défini par une analyse (issue #168). Distinct du statut
+ * d'exécution d'un dossier : c'est l'avancement du traitement (À instruire,
+ * En instruction…). Un statut garde son identifiant quand on modifie la liste.
+ */
+export interface WorkflowStatus {
+  id: string;
+  name: string;
+  /** Couleur d'affichage, au format #RRGGBB. */
+  color: string;
+  position: number;
+  /** Statut reçu à la création du dossier (un seul par analyse). */
+  isInitial: boolean;
+  /** Le dossier est clos dans ce statut (il reçoit une date de clôture). */
+  isFinal: boolean;
+}
+
+/** Statut en cours d'édition : `id` absent tant qu'il n'a pas été enregistré. */
+export type StatusDraft = Omit<WorkflowStatus, "id" | "position"> & { id: string | null };
+
 export interface Analyse {
   id: string;
   name: string;
@@ -90,6 +110,8 @@ export interface Analyse {
   createdAt: string;
   classification: Classification;
   extraction: Extraction;
+  statuses: WorkflowStatus[];
+  statusesVersions: Version<WorkflowStatus[]>[];
   agents: Agent[];
 }
 
@@ -100,4 +122,6 @@ export interface AnalyseSummary {
   description: string;
   createdAt: string;
   agentCount: number;
+  /** Statuts de dossier de l'analyse : la liste des dossiers s'en sert pour son filtre (#170). */
+  statuses: WorkflowStatus[];
 }

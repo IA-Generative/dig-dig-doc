@@ -24,6 +24,9 @@ Issue #168, parent #167. Chaque **analyse** définit ses propres **statuts de do
 | `POST /api/analyses/{id}/statuses/restore/{version_id}` | Restaure une version antérieure. |
 | `PUT /api/dossiers/{id}/workflow-status` | `{"status_id": …}` : change le statut du dossier. |
 
+| `GET /api/dossiers?workflow_status_id=…&sort=…` | Liste des dossiers : `workflow_status_id` ne garde que ce statut ; `sort=status` trie par statut, dans l'ordre défini par chaque analyse (dossiers sans statut en dernier), puis du plus récent au plus ancien (`sort=created_at`, par défaut). |
+| `GET /api/analyses` | Chaque élément porte aussi ses `statuses` (la liste des dossiers s'en sert pour son filtre). |
+
 `DossierOut` expose `workflow_status` (`id`, `name`, `color`, `position`, `is_initial`, `is_final`) et `closed_at`.
 
 ### Modifier la liste
@@ -63,4 +66,4 @@ La migration `c2d3e4f5a6b7` crée la table, ajoute les deux colonnes, donne **le
 - Les transitions entre statuts sont **libres** (n'importe quel statut de l'analyse) : « transitions autorisées » reste une question ouverte de #167.
 - Comme les autres routes de configuration d'une analyse, celles-ci sont ouvertes à tout utilisateur connecté ; les restrictions de droits arriveront avec l'accès par groupe (#177) et les rôles (#178).
 - Le **journal d'événements** (#169) enregistrera les changements de statut quand il existera ; `DossierRepository.set_workflow_status` est le point d'accroche.
-- L'interface (configuration des statuts, pastille dans la liste) est l'objet de #170.
+- L'interface (configuration des statuts, pastille, filtre et tri dans la liste, changement de statut) est décrite dans [`statuts-de-dossier`](../frontend/statuts-de-dossier/README.md) (#170).

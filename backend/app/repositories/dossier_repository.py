@@ -96,11 +96,30 @@ class DossierRepository:
         result = await self.db.execute(self._base_query().order_by(Dossier.created_at.desc()))
         return result.scalars().all()
 
-    async def list_paginated(self, *, page: int, page_size: int) -> tuple[Sequence[Dossier], int]:
-        total = await self.db.scalar(select(func.count()).select_from(Dossier))
-        result = await self.db.execute(
-            self._base_query().order_by(Dossier.created_at.desc()).limit(page_size).offset((page - 1) * page_size)
-        )
+    async def list_paginated(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        workflow_status_id: uuid.UUID | None = None,
+        sort: str = "created_at",
+    ) -> tuple[Sequence[Dossier], int]:
+        """Liste paginée, du plus récent au plus ancien par défaut.
+
+        - ``workflow_status_id`` : ne garde que les dossiers de ce statut (issue #170) ;
+        - ``sort="status"`` : trie par statut, dans l'ordre défini par chaque analyse (les dossiers sans
+          statut en dernier), puis du plus récent au plus ancien.
+        """
+        filters = [Dossier.workflow_status_id == workflow_status_id] if workflow_status_id else []
+        total = await self.db.scalar(select(func.count()).select_from(Dossier).where(*filters))
+        query = self._base_query().where(*filters)
+        if sort == "status":
+            query = query.outerjoin(StatusDefinition, StatusDefinition.id == Dossier.workflow_status_id).order_by(
+                StatusDefinition.position.asc().nulls_last(), Dossier.created_at.desc()
+            )
+        else:
+            query = query.order_by(Dossier.created_at.desc())
+        result = await self.db.execute(query.limit(page_size).offset((page - 1) * page_size))
         return result.scalars().all(), total or 0
 
     async def get(self, dossier_id: uuid.UUID) -> Dossier | None:
