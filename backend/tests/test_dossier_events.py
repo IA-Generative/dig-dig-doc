@@ -369,3 +369,23 @@ def test_dossier_created_by_the_internal_agent_is_journaled_as_a_system_action(c
     assert created.status_code == 201, created.text
     (event,) = _events(client, created.json()["id"])
     assert event["type"] == "created" and event["actor_id"] is None
+
+
+# --- Auteurs (filtre de l'historique) ---
+
+
+def test_event_actors_lists_distinct_authors_without_the_system(client: TestClient) -> None:
+    analyse = _create_analyse(client)
+    dossier = _create_dossier(client, analyse["id"])
+    client.get(f"/api/dossiers/{dossier['id']}")
+    launched = client.post(f"/api/dossiers/{dossier['id']}/launch").json()
+    _finish_all_steps(client, launched, "terminé")  # événement du système : sans auteur
+
+    response = client.get(f"/api/dossiers/{dossier['id']}/events/actors")
+
+    assert response.status_code == 200
+    assert response.json() == [{"actor_id": ME, "actor_name": "dev@example.com"}]
+
+
+def test_event_actors_of_unknown_dossier_is_404(client: TestClient) -> None:
+    assert client.get(f"/api/dossiers/{uuid.uuid4()}/events/actors").status_code == 404

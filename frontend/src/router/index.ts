@@ -15,6 +15,7 @@ import DashboardPage from "@/pages/DashboardPage.vue";
 import DocumentReviewPage from "@/pages/DocumentReviewPage.vue";
 import DossierAnalysisPage from "@/pages/DossierAnalysisPage.vue";
 import DossierDocumentsPage from "@/pages/DossierDocumentsPage.vue";
+import DossierHistoryPage from "@/pages/DossierHistoryPage.vue";
 import DossierDetailPage from "@/pages/DossierDetailPage.vue";
 import DossiersPage from "@/pages/DossiersPage.vue";
 import ProfilePage from "@/pages/ProfilePage.vue";
@@ -72,6 +73,7 @@ export const router = createRouter({
     { path: "/dossiers/:id", name: "dossier-detail", component: DossierDetailPage },
     { path: "/dossiers/:id/analyse", name: "dossier-analysis", component: DossierAnalysisPage },
     { path: "/dossiers/:id/documents", name: "dossier-documents", component: DossierDocumentsPage },
+    { path: "/dossiers/:id/historique", name: "dossier-history", component: DossierHistoryPage },
     { path: "/dossiers/:id/documents/:draftId", name: "document-review", component: DocumentReviewPage },
     { path: "/suivi", name: "tracking", component: TrackingPage },
     { path: "/profile", name: "profile", component: ProfilePage },

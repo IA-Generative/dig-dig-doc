@@ -9,12 +9,24 @@ from app.db import get_db
 from app.models.dossier import Dossier
 from app.models.dossier_event import DossierEventType
 from app.repositories.dossier_event_repository import DossierEventRepository
-from app.schemas.dossier_event import DossierEventOut
+from app.schemas.dossier_event import DossierEventActorOut, DossierEventOut
 from app.schemas.pagination import Page
 
 # Journal d'événements d'un dossier (issue #169) : **lecture seule**. Aucune route de création, de
 # modification ou de suppression n'existe : les événements ne sont écrits que par les actions du serveur.
 router = APIRouter(prefix="/dossiers", tags=["Journal du dossier"], dependencies=[Depends(get_current_user)])
+
+
+@router.get("/{dossier_id}/events/actors", response_model=list[DossierEventActorOut])
+async def list_dossier_event_actors(
+    dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+) -> list[DossierEventActorOut]:
+    """Auteurs ayant agi sur le dossier, par nom (filtre « Auteur » de l'historique). Les actions du système n'y
+    figurent pas."""
+    if await db.get(Dossier, dossier_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
+    actors = await DossierEventRepository(db).list_actors(dossier_id)
+    return [DossierEventActorOut(actor_id=actor_id, actor_name=name) for actor_id, name in actors]
 
 
 @router.get("/{dossier_id}/events", response_model=Page[DossierEventOut])

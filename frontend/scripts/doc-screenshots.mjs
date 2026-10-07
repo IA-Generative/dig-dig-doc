@@ -1,4 +1,4 @@
-// Prend les captures d'écran de la documentation du tableau de bord (#174), des statuts de dossier (#170),
+// Prend les captures d'écran de la documentation du tableau de bord (#174), des statuts de dossier (#170), de l'historique du dossier (#171),
 // du tableau de suivi (#173, #186) et de l'accès par groupe (#177), sous
 // docs/frontend/<fonctionnalité>/.
 //
@@ -62,9 +62,52 @@ const dossier = (n, name, extra = {}) => ({
 });
 
 const dossiers = [
-  dossier(3, "Subvention association Les Mouettes n°102"),
+  dossier(3, "Subvention association Les Mouettes n°102", {
+    documents: [
+      {
+        id: "doc-1",
+        name: "dossier-de-demande.pdf",
+        size: 482113,
+        s3_key: "dossiers/dos-3/doc-1",
+        mimetype: "application/pdf",
+        label: null,
+        text_extraction_status: "terminé",
+        text_extraction_error: null,
+        file_hash: null,
+        summary_status: "terminé",
+        summary_error: null,
+        summary: null,
+      },
+    ],
+  }),
   dossier(1, "Convention de partenariat culturelle n°100"),
   dossier(9, "Aide au projet sportif jeunesse n°108", { workflow_status: STATUSES[2] }),
+];
+
+// Journal d'événements d'un dossier (#169, #171), du plus récent au plus ancien.
+const ALEX = { actor_id: "u1", actor_name: "Alex Martin" };
+const CAMILLE = { actor_id: "u2", actor_name: "Camille Durand" };
+const SYSTEM = { actor_id: null, actor_name: null };
+const at = (days, hours, minutes) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  d.setHours(hours, minutes, 0, 0);
+  return d.toISOString();
+};
+const event = (n, type, who, when, payload = {}) => ({ id: `ev-${n}`, type, ...who, created_at: when, payload });
+const EVENTS = [
+  event(1, "status_changed", ALEX, at(0, 10, 12), { from: { id: "st-2", name: "En instruction" }, to: { id: "st-5", name: "Clos" } }),
+  event(2, "closed", ALEX, at(0, 10, 12), { status: { id: "st-5", name: "Clos" } }),
+  event(3, "consulted", ALEX, at(0, 9, 55)),
+  event(4, "document_downloaded", ALEX, at(0, 9, 40), { document_id: "gen-1", format: "pdf" }),
+  event(5, "document_generated", ALEX, at(0, 9, 31), { document_id: "gen-1", version_number: 2, template_name: "Décision d'octroi", incomplete: false }),
+  event(6, "analysis_finished", SYSTEM, at(-1, 17, 5)),
+  event(7, "analysis_started", CAMILLE, at(-1, 16, 58), { analyse_version: "v1" }),
+  event(8, "consulted", CAMILLE, at(-1, 14, 22)),
+  event(9, "status_changed", CAMILLE, at(-1, 14, 20), { from: { id: "st-1", name: "À instruire" }, to: { id: "st-2", name: "En instruction" } }),
+  event(10, "document_added", CAMILLE, at(-3, 11, 2), { document_id: "doc-1", mimetype: "application/pdf", size: 482113 }),
+  event(11, "analyse_assigned", CAMILLE, at(-3, 10, 58), { analyse_id: "an-subv", analyse_name: "Instruction subventions" }),
+  event(12, "created", CAMILLE, at(-3, 10, 55), { analyse_id: null }),
 ];
 
 const page_of = (items) => ({ items, total: items.length, page: 1, page_size: 20, pages: 1 });
@@ -125,6 +168,15 @@ function api(role) {
     }
     const match = path.match(/^\/api\/dossiers\/(dos-\d+)$/);
     if (match) return json(dossiers.find((d) => `dos-${match[1].slice(4)}` === d.id) ?? dossiers[0]);
+    if (path === "/api/dossiers/dos-3/events/actors") return json([ALEX, CAMILLE].map(({ actor_id, actor_name }) => ({ actor_id, actor_name })));
+    if (path === "/api/dossiers/dos-3/events") {
+      const types = url.searchParams.getAll("type");
+      const actor = url.searchParams.get("actor_id");
+      const wanted = EVENTS.filter((e) => (!types.length || types.includes(e.type)) && (!actor || e.actor_id === actor));
+      const size = Number(url.searchParams.get("page_size") ?? 20);
+      const page = Number(url.searchParams.get("page") ?? 1);
+      return json({ items: wanted.slice((page - 1) * size, page * size), total: wanted.length, page, page_size: size, pages: Math.max(1, Math.ceil(wanted.length / size)) });
+    }
     if (path === "/api/conversations") return json(page_of([]));
     if (path.startsWith("/api/reports") || path.startsWith("/api/me/tasks")) return json([]);
     if (path === "/api/me/stats") return json({});
@@ -390,12 +442,42 @@ async function workflowStatuses(browser) {
   await page.context().close();
 }
 
+// ---------------------------------------------------------------------------
+// Historique du dossier
+// ---------------------------------------------------------------------------
+async function history(browser) {
+  const dir = "historique-du-dossier";
+  const page = await newPage(browser, "admin", { width: 1280, height: 1300 });
+
+  await page.goto(`${baseUrl}/dossiers/dos-3`, { waitUntil: "networkidle" });
+  await page.getByRole("link", { name: "Voir l'historique du dossier" }).waitFor();
+  await page.getByRole("link", { name: "Voir l'historique du dossier" }).click();
+  await page.getByText("Statut modifié").first().waitFor();
+  await shot(page, dir, "01-historique-du-dossier.png");
+
+  await page.getByRole("button", { name: /Consultations/ }).click();
+  await settle(page);
+  await shot(page, dir, "02-avec-les-consultations.png");
+  await page.getByRole("button", { name: /Consultations/ }).click();
+
+  await page.locator("#ef-actor").selectOption("u2");
+  await settle(page);
+  await shot(page, dir, "03-filtre-par-auteur.png");
+  await page.locator("#ef-actor").selectOption("");
+
+  for (const label of ["Création", "Analyse", "Documents"]) await page.getByRole("button", { name: new RegExp(label) }).click();
+  await settle(page);
+  await shot(page, dir, "04-filtre-par-type.png");
+  await page.context().close();
+}
+
 const browser = await chromium.launch();
 try {
   await dashboard(browser);
   await tracking(browser);
   await access(browser);
   await workflowStatuses(browser);
+  await history(browser);
 } finally {
   await browser.close();
 }

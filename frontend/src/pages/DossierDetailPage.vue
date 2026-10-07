@@ -269,6 +269,14 @@ async function onDeleteConversation() {
           <VIcon name="ri-lock-line" />
         </button>
         <RouterLink
+          :to="`/dossiers/${dossierId}/historique`"
+          class="dossier-detail__icon-button"
+          aria-label="Voir l'historique du dossier"
+          title="Historique : qui a fait quoi sur ce dossier, et quand"
+        >
+          <VIcon name="ri-history-line" />
+        </RouterLink>
+        <RouterLink
           :to="`/dossiers/${dossierId}/analyse`"
           class="dossier-detail__icon-button"
           aria-label="Voir l'analyse du dossier"
