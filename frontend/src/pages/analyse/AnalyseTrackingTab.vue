@@ -23,11 +23,11 @@ import {
   type TrackingSort,
 } from "@/types/tracking";
 import { downloadCsv, toCsv } from "@/utils/csv";
-import { expiryInfo } from "@/utils/expiry";
+import { dueInfo } from "@/utils/due";
 import { formatValue } from "@/utils/trackingFields";
 
 // Onglet « Suivi » d'une analyse : tableau de pilotage des dossiers
-// (affectations, statuts, péremption, colonnes personnalisées). Données
+// (affectations, statuts, échéance, colonnes personnalisées). Données
 // simulées (useTracking) en attendant l'API (#168, #172, #173).
 
 const route = useRoute();
@@ -42,7 +42,7 @@ const PAGE_SIZE = 10;
 
 const activeViewId = ref("all");
 const filters = ref<TrackingFilters>(emptyFilters());
-const sort = ref<TrackingSort>({ key: "expiry", dir: "asc" });
+const sort = ref<TrackingSort>({ key: "due", dir: "asc" });
 const page = ref(1);
 
 const rows = ref<TrackingRow[]>([]);
@@ -191,8 +191,8 @@ function exportCsv() {
         return statuses.find((s) => s.id === r.statusId)?.label ?? "";
       case "assignee":
         return assigneeName(r.assigneeId);
-      case "expiry":
-        return r.expiresAt ? `${new Date(r.expiresAt).toLocaleDateString("fr-FR")} (${expiryInfo(r.expiresAt).label})` : "";
+      case "due":
+        return r.dueAt ? `${new Date(r.dueAt).toLocaleDateString("fr-FR")} (${dueInfo(r.dueAt).label})` : "";
       case "createdAt":
         return new Date(r.createdAt).toLocaleDateString("fr-FR");
       case "lastActivityAt":

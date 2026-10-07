@@ -12,11 +12,11 @@ import {
   type TrackingStatus,
 } from "@/types/tracking";
 import { useDossierAccess } from "@/composables/useDossierAccess";
-import { expiryInfo } from "@/utils/expiry";
+import { dueInfo } from "@/utils/due";
 import { matchesFieldFilter, validateValue } from "@/utils/trackingFields";
 
 // MOCK (issue #173, partie UI) : état partagé au niveau du module, à
-// remplacer par l'API (affectations, statuts #168, péremption #172, champs
+// remplacer par l'API (affectations, statuts #168, échéance #172, champs
 // personnalisés). Les signatures de `query` / `assign` / `setValue` suivent
 // ce que fera l'API : filtres, tri et pagination côté serveur.
 
@@ -56,7 +56,7 @@ function initialRows(): TrackingRow[] {
     reference: `DOS-2026-${String(i + 1).padStart(4, "0")}`,
     statusId: STATUSES[i % STATUSES.length].id,
     assigneeId: i % 4 === 3 ? null : ASSIGNEES[i % ASSIGNEES.length].id,
-    expiresAt: i % 9 === 8 ? null : daysFromNow(((i * 7) % 70) - 8),
+    dueAt: i % 9 === 8 ? null : daysFromNow(((i * 7) % 70) - 8),
     createdAt: daysFromNow(-60 + i),
     lastActivityAt: daysFromNow(-((i * 3) % 20)),
     values: {
@@ -91,9 +91,9 @@ function matches(row: TrackingRow, f: TrackingFilters): boolean {
   if (f.assignee === "none" && row.assigneeId !== null) return false;
   if (f.assignee && f.assignee !== "me" && f.assignee !== "none" && row.assigneeId !== f.assignee) return false;
   if (f.due) {
-    const { days } = expiryInfo(row.expiresAt);
-    if (f.due === "none" && row.expiresAt !== null) return false;
-    if (f.due === "expired" && !(days !== null && days < 0)) return false;
+    const { days } = dueInfo(row.dueAt);
+    if (f.due === "none" && row.dueAt !== null) return false;
+    if (f.due === "overdue" && !(days !== null && days < 0)) return false;
     if ((f.due === "7" || f.due === "30") && !(days !== null && days >= 0 && days <= Number(f.due))) return false;
   }
   const query = f.search.trim().toLowerCase();
@@ -116,8 +116,8 @@ function sortValue(row: TrackingRow, key: ColumnId): string | number {
       return statusOrder(row.statusId);
     case "assignee":
       return assigneeName(row.assigneeId) || "￿"; // les non affectés en dernier
-    case "expiry":
-      return row.expiresAt ? Date.parse(row.expiresAt) : Infinity;
+    case "due":
+      return row.dueAt ? Date.parse(row.dueAt) : Infinity;
     case "createdAt":
       return Date.parse(row.createdAt);
     case "lastActivityAt":

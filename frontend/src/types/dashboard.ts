@@ -2,7 +2,7 @@ import type { Recurrence } from "@/types/schedule";
 
 // Tableau de bord utilisateur (issue #174). Partie UI : les données
 // proviennent pour l'instant de mocks (voir useDashboard), en attendant
-// les statuts (#168), la péremption (#172) et les affectations (#173).
+// les statuts (#168), l'échéance (#172) et les affectations (#173).
 
 export type DueLevel = "overdue" | "soon";
 
