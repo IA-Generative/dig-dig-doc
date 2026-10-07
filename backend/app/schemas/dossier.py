@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.chat_event import ChatEventKind
 from app.models.conversation import MessageRole
@@ -579,6 +579,32 @@ class WorkflowStatusUpdate(BaseModel):
     status_id: uuid.UUID
 
 
+class PersonOut(BaseModel):
+    """Une personne de l'annuaire local (#173) : identifiant Keycloak et nom affiché. Pas d'e-mail : un dossier
+    n'a pas à le diffuser."""
+
+    id: str
+    name: str
+
+
+class AssigneeUpdate(BaseModel):
+    """Nouvelle personne responsable du dossier ; ``null`` le désaffecte."""
+
+    assignee_id: str | None
+
+
+class BulkAssigneeUpdate(AssigneeUpdate):
+    # Plafond : l'affectation en lot est une seule transaction, et une page du tableau de suivi en compte 100 au plus.
+    dossier_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class BulkAssigneeResult(BaseModel):
+    """``updated`` : dossiers dont le responsable a changé ; ``unchanged`` : déjà affectés à cette personne."""
+
+    updated: int
+    unchanged: int
+
+
 class DueAtUpdate(BaseModel):
     """Nouvelle échéance du dossier ; ``null`` la supprime."""
 
@@ -612,6 +638,9 @@ class DossierOut(BaseModel):
     # None pour un dossier « à ranger ». `closed_at` : date de clôture (statut final), ou None.
     workflow_status: StatusDefinitionOut | None = None
     closed_at: datetime | None = None
+    # Responsable du dossier (#173), ``null`` si non affecté, et depuis quand.
+    assignee: PersonOut | None = None
+    assigned_at: datetime | None = None
     # Échéance (issue #172) : la date, son niveau calculé par le serveur, et « clos avant l'échéance » (``null``
     # si le dossier n'est pas clos ou n'a pas d'échéance).
     due_at: date | None = None

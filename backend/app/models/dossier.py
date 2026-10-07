@@ -14,6 +14,7 @@ from app.services.due_date import DEFAULT_THRESHOLDS, DueInfo, closed_before_due
 
 if TYPE_CHECKING:
     from app.models.analyse import StatusDefinition
+    from app.models.app_user import AppUser
     from app.models.conversation import Conversation
     from app.models.document_page import DocumentPage
     from app.models.execution_log import ExecutionLog
@@ -96,6 +97,12 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Date d'échéance (issue #172) : un jour du calendrier, pas un instant. NULL = pas d'échéance.
     due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    # Personne responsable du dossier (issue #173) : une seule ; NULL = non affecté. Doit figurer dans
+    # l'annuaire local (app_users) ; SET NULL si la ligne disparaît, l'historique garde le nom.
+    assignee_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("app_users.user_id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # État de génération du résumé global du dossier (issue #52).
     summary_status: Mapped[SummaryStatus] = mapped_column(
         Enum(SummaryStatus, name="summary_status"),
@@ -115,6 +122,7 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     )
 
     workflow_status: Mapped["StatusDefinition | None"] = relationship(lazy="selectin")
+    assignee: Mapped["AppUser | None"] = relationship(lazy="selectin")
     execution_steps: Mapped[list["ExecutionStep"]] = relationship(
         back_populates="dossier", cascade="all, delete-orphan", order_by="ExecutionStep.started_at"
     )

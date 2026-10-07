@@ -21,6 +21,7 @@ Table `dossier_events` : `id`, `dossier_id` (FK, **cascade** : le journal part a
 | `status_changed` | Changement de statut de dossier (#168), y compris les dossiers déplacés quand un statut supprimé est remplacé. | `from`, `to` (`id`, `name`), et `reason` (`status_removed`) dans le cas d'un remplacement. |
 | `closed` / `reopened` | Le dossier entre dans un statut final (date de clôture posée) / en sort. Aussi quand un statut devient final ou cesse de l'être. | `status`, et `reason` (`status_removed`, `status_flag_changed`). |
 | `due_date_changed` | Échéance fixée, modifiée ou supprimée (#172), y compris la valeur posée par la durée par défaut de l'analyse. | `from`, `to` (dates `AAAA-MM-JJ` ou `null`), et `reason` (`default_duration`) pour une échéance automatique. |
+| `assignee_changed` | Dossier affecté, réaffecté ou désaffecté (#173). Rien n'est écrit si la personne ne change pas. | `from`, `to` : `{id, name}` ou `null`. |
 | `analyse_assigned` | Rattachement d'un dossier « à ranger » à une analyse. | `analyse_id`, `analyse_name`. |
 | `document_added` | Dépôt d'un document. | `document_id`, `mimetype`, `size`. **Pas le nom** du fichier. |
 | `analysis_started` / `analysis_stopped` | Lancement et arrêt manuel de l'analyse. | `analyse_version`. |
@@ -28,7 +29,7 @@ Table `dossier_events` : `id`, `dossier_id` (FK, **cascade** : le journal part a
 | `document_generated` | Génération d'un document de fin d'instruction. | `document_id`, `version_number`, `template_name`, `incomplete`. |
 | `document_downloaded` | Téléchargement d'un document généré (l'**aperçu** dans le navigateur n'en est pas un). | `document_id`, `format`. |
 
-Les changements d'affectation (#173), d'accès (#177) et les accès administrateur (#182) s'ajouteront avec leurs fonctionnalités.
+Les changements d'accès (#177) et les accès administrateur (#182) s'ajouteront avec leurs fonctionnalités.
 
 ### Données d'usagers
 
