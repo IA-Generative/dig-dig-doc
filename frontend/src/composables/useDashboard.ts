@@ -7,8 +7,8 @@ import { apiFetch } from "@/utils/api";
 // Tableau de bord branché sur l'API (issue #174) : `GET /api/dashboard` donne les indicateurs, les urgences
 // (échéance proche ou dépassée selon les seuils de l'analyse), mes dossiers par statut, les dossiers non affectés
 // (administrateurs) et l'activité récente ; chaque urgence porte mon créneau de traitement, s'il y en a un
-// (`PUT` / `DELETE /api/dossiers/{id}/slot`, privés). Restent simulés, faute de backend : les notifications et
-// les rappels (useNotifications).
+// (`PUT` / `DELETE /api/dossiers/{id}/slot`, privés). Les rappels de ces créneaux sont des notifications du serveur
+// (useNotifications, #219).
 // Pour valider les états de l'interface, ajouter `?mock=` à l'URL : `empty` (états vides), `error` (erreur),
 // `loading` (chargement sans fin), `nounassigned` (sans droit « non affectés »).
 

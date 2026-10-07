@@ -1,5 +1,6 @@
 """Catégories et messages des notifications (issue #174). Logique **pure** : aucun accès à la base."""
 
+from datetime import datetime
 from typing import Literal
 
 Kind = Literal["assigned", "due_soon", "overdue", "status_changed", "analysis_done", "analysis_failed", "reminder"]
@@ -36,6 +37,11 @@ def status_changed_message(new_status: str, actor_name: str | None) -> str:
 
 def analysis_message(failed: bool) -> str:
     return "L'analyse que vous avez lancée a échoué." if failed else "L'analyse que vous avez lancée est terminée."
+
+
+def reminder_message(local: datetime) -> str:
+    """« Rappel : créneau de traitement à 09:00. » ; ``local`` : l'occurrence, à l'heure de Paris."""
+    return f"Rappel : créneau de traitement à {local:%H:%M}."
 
 
 def due_message(level: str, days_left: int) -> str:

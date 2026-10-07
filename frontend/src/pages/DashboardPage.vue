@@ -20,23 +20,9 @@ import type { SlotDraft } from "@/types/schedule";
 // (components/dashboard/…), les données dans useDashboard / useNotifications.
 
 const { data, loading, error, fetchDashboard, setSchedule } = useDashboard();
-const { unreadCount, setReminders } = useNotifications();
+const { unreadCount } = useNotifications();
 
-// Les créneaux viennent du serveur : au chargement, leurs rappels sont reprogrammés (le navigateur les déclenche
-// tant que la page est ouverte).
-onMounted(async () => {
-  await fetchDashboard();
-  for (const u of data.value?.urgencies ?? []) {
-    if (u.plannedStart && u.plannedEnd) {
-      setReminders(u.dossierId, u.dossierName, {
-        start: u.plannedStart,
-        end: u.plannedEnd,
-        recurrence: u.recurrence,
-        reminders: u.reminders ?? [],
-      });
-    }
-  }
-});
+onMounted(fetchDashboard);
 
 // La journée est la vue par défaut : c'est l'agenda du jour.
 const view = ref<AgendaView>("day");
@@ -51,7 +37,7 @@ const { search, dueFilter, analyseFilter, sorted, analyseOptions, searched, filt
 
 const scheduleError = ref("");
 
-/** Enregistre le créneau d'un dossier sur le serveur puis (re)programme ses rappels. */
+/** Enregistre le créneau d'un dossier sur le serveur : ses rappels deviennent des notifications du serveur (#219). */
 async function onSchedule(dossierId: string, slot: SlotDraft | null) {
   scheduleError.value = "";
   try {
@@ -60,8 +46,6 @@ async function onSchedule(dossierId: string, slot: SlotDraft | null) {
     scheduleError.value = e instanceof Error ? e.message : "Le créneau n'a pas pu être enregistré.";
     return;
   }
-  const name = urgencies.value.find((u) => u.dossierId === dossierId)?.dossierName ?? "";
-  setReminders(dossierId, name, slot);
 }
 </script>
 
