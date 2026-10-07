@@ -4,7 +4,7 @@ Issue : [#174](https://github.com/IA-Generative/dig-dig-doc/issues/174) (parent 
 
 Page d'accueil de l'utilisateur connecté : **ses priorités sous forme d'agenda**, quatre indicateurs simples, la possibilité de **planifier** le traitement d'un dossier (avec récurrence et rappels) et ses **notifications**. L'écran est volontairement épuré : une information principale, le reste à la demande dans des fenêtres.
 
-> **Branché sur l'API pour les dossiers** : indicateurs, urgences, statuts, non affectés et activité viennent du serveur. Les **créneaux** et les **notifications** restent simulés en attendant leur backend : voir « Choix et limites ».
+> **Branché sur l'API pour les dossiers** : indicateurs, urgences, statuts, non affectés et activité viennent du serveur. Les **créneaux** sont enregistrés côté serveur ; les **notifications** restent simulées en attendant leur backend : voir « Choix et limites ».
 
 ## Y accéder
 
@@ -96,9 +96,10 @@ Le premier bouton (rôles autorisés) liste les dossiers **non affectés** et re
 ## Choix et limites
 
 - **Branché sur l'API** : indicateurs, urgences, dossiers par statut, dossiers à prendre en charge et activité récente viennent de `GET /api/dashboard` ([`tableau-de-bord`](../../backend/tableau-de-bord.md)). L'échéance proche ou dépassée suit les **seuils de l'analyse**, calculés par le serveur ([échéance](../echeance-du-dossier/README.md)).
-- **Encore simulés**, faute de backend : les **créneaux** (ils restent en mémoire le temps de la session : ils survivent à la navigation mais **pas au rechargement** de la page) et les **notifications** (dont les rappels).
+- **Créneaux** : enregistrés côté serveur, **privés** et toujours rattachés à un dossier ([`creneaux-de-traitement`](../../backend/creneaux-de-traitement.md)) ; ils survivent au rechargement et se retrouvent d'un poste à l'autre. Le partage de son agenda viendra plus tard. Une erreur d'enregistrement s'affiche au-dessus de l'agenda.
+- **Encore simulées**, faute de backend : les **notifications**. Les **rappels** sont programmés au chargement à partir des créneaux du serveur, mais déclenchés par le navigateur.
 - **Dossiers à prendre en charge** : visibles des seuls administrateurs en attendant les rôles d'instruction ([#178](https://github.com/IA-Generative/dig-dig-doc/issues/178)). Les règles d'accès par groupe ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) ne s'appliquent pas encore.
 - **Où en sont vos dossiers** : les statuts sont propres à chaque analyse ; dès que plusieurs analyses sont concernées, chaque ligne nomme la sienne (« À instruire · Urbanisme »).
 - **Rappels et alertes** : déclenchés par le navigateur, donc **uniquement tant que la page est ouverte**. Prévenir application fermée suppose le Web Push (service worker, clés VAPID, envoi serveur), hors périmètre de la première version.
 - **États de l'interface** : `?mock=empty` (états vides), `?mock=error` (erreur), `?mock=loading` (chargement) et `?mock=nounassigned` (sans le droit « non affectés ») permettent de les voir.
-- Les captures sont prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée, sans backend ni Keycloak (voir en tête du script) ; les créneaux de l'agenda y sont planifiés par l'interface avant la capture.
+- Les captures sont prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée, sans backend ni Keycloak (voir en tête du script) ; les créneaux de l'agenda y sont planifiés par l'interface avant la capture (l'API simulée les garde le temps du scénario).

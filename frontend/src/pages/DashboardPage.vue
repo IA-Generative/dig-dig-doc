@@ -22,7 +22,21 @@ import type { SlotDraft } from "@/types/schedule";
 const { data, loading, error, fetchDashboard, setSchedule } = useDashboard();
 const { unreadCount, setReminders } = useNotifications();
 
-onMounted(fetchDashboard);
+// Les créneaux viennent du serveur : au chargement, leurs rappels sont reprogrammés (le navigateur les déclenche
+// tant que la page est ouverte).
+onMounted(async () => {
+  await fetchDashboard();
+  for (const u of data.value?.urgencies ?? []) {
+    if (u.plannedStart && u.plannedEnd) {
+      setReminders(u.dossierId, u.dossierName, {
+        start: u.plannedStart,
+        end: u.plannedEnd,
+        recurrence: u.recurrence,
+        reminders: u.reminders ?? [],
+      });
+    }
+  }
+});
 
 // La journée est la vue par défaut : c'est l'agenda du jour.
 const view = ref<AgendaView>("day");
@@ -35,9 +49,17 @@ const urgencies = computed(() => data.value?.urgencies ?? []);
 const { search, dueFilter, analyseFilter, sorted, analyseOptions, searched, filtered, hasActiveFilters, reset } =
   useUrgencyFilters(urgencies, computed(() => view.value === "list"));
 
-/** Enregistre le créneau d'un dossier puis (re)programme ses rappels. */
-function onSchedule(dossierId: string, slot: SlotDraft | null) {
-  setSchedule(dossierId, slot);
+const scheduleError = ref("");
+
+/** Enregistre le créneau d'un dossier sur le serveur puis (re)programme ses rappels. */
+async function onSchedule(dossierId: string, slot: SlotDraft | null) {
+  scheduleError.value = "";
+  try {
+    await setSchedule(dossierId, slot);
+  } catch (e) {
+    scheduleError.value = e instanceof Error ? e.message : "Le créneau n'a pas pu être enregistré.";
+    return;
+  }
   const name = urgencies.value.find((u) => u.dossierId === dossierId)?.dossierName ?? "";
   setReminders(dossierId, name, slot);
 }
@@ -67,6 +89,8 @@ function onSchedule(dossierId: string, slot: SlotDraft | null) {
     <template v-else-if="data">
       <!-- Quatre indicateurs simples ; le détail s'ouvre au clic. -->
       <MetricsRow :urgencies="sorted" :stats="data.stats" :status-counts="data.statusCounts" />
+
+      <p v-if="scheduleError" class="fr-error-text" role="alert">{{ scheduleError }}</p>
 
       <div class="dashboard__agenda-head">
         <h2 class="dashboard__agenda-title">Mon agenda</h2>

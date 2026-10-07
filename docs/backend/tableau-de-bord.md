@@ -2,7 +2,7 @@
 
 Issue #174, parent #167. `GET /api/dashboard` donne à chaque personne ce qui l'attend : ses indicateurs, ses urgences, où en sont ses dossiers, les dossiers sans responsable et l'activité récente. Tout se calcule **à la demande** à partir des dossiers, du journal et des seuils d'échéance : aucune table nouvelle, aucune migration.
 
-Le périmètre « mes dossiers » est celui des dossiers **affectés à la personne** ([affectation](affectation-des-dossiers.md)) et rangés dans une analyse. Les créneaux planifiés et les notifications ont leurs propres routes (à venir).
+Le périmètre « mes dossiers » est celui des dossiers **affectés à la personne** ([affectation](affectation-des-dossiers.md)) et rangés dans une analyse. Les [créneaux planifiés](creneaux-de-traitement.md) ont leurs propres routes (chaque urgence porte le sien) ; les notifications viendront ensuite.
 
 ## Contenu
 
@@ -23,5 +23,5 @@ Le périmètre « mes dossiers » est celui des dossiers **affectés à la perso
 
 - **Accès** (#177) : le tableau de bord ne porte que sur des dossiers affectés à la personne, mais la règle d'accès par groupe ne s'y applique pas encore ; elle s'appliquera à la liste des non affectés et aux comptes.
 - **Non affectés** : réservé aux administrateurs en attendant les rôles d'instruction (#178).
-- **À venir** : créneaux de traitement (récurrence, rappels), notifications (génération à partir du journal, tâche planifiée pour les seuils et les rappels).
+- **À venir** : notifications (génération à partir du journal, tâche planifiée pour les seuils et les rappels).
 - Le calcul se fait à chaque appel ; si le volume l'exige, des agrégats précalculés viendront plus tard.

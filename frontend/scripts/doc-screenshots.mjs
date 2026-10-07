@@ -187,6 +187,9 @@ const trackingRow = (d) => ({
   created_at: d.created_at,
   last_activity_at: d.last_activity_at,
 });
+// Créneaux de traitement (#174) : `PUT` / `DELETE /api/dossiers/{id}/slot`, gardés le temps du scénario.
+const SLOTS = new Map();
+
 // Tableau de bord (#174) : `GET /api/dashboard`, bâti sur les mêmes dossiers que le suivi.
 function dashboardPayload(isAdmin) {
   const open = TRACKED.filter((d) => !d.closed);
@@ -195,7 +198,7 @@ function dashboardPayload(isAdmin) {
     .sort((a, b) => a.due_at.localeCompare(b.due_at))
     .map((d) => {
       const due = dueOfTracked(d);
-      return { dossier_id: d.id, dossier_name: d.name, analyse_id: d.analyse.id, analyse_name: d.analyse.name, status_label: d.status.name, due_at: d.due_at, level: due.level, days_left: due.days_left, color: due.color };
+      return { dossier_id: d.id, dossier_name: d.name, analyse_id: d.analyse.id, analyse_name: d.analyse.name, status_label: d.status.name, due_at: d.due_at, level: due.level, days_left: due.days_left, color: due.color, slot: SLOTS.get(d.id) ?? null };
     });
   const counts = new Map();
   for (const d of open) counts.set(d.status.id, { status_id: d.status.id, label: d.status.name, analyse_name: d.analyse.name, count: (counts.get(d.status.id)?.count ?? 0) + 1 });
@@ -321,6 +324,17 @@ function api(role) {
     }
     if (path === "/api/tracking") return json(trackingPage(url.searchParams));
     if (path === "/api/dashboard") return json(dashboardPayload(role === "admin"));
+    const slotMatch = path.match(/^\/api\/dossiers\/(trk-\d+)\/slot$/);
+    if (slotMatch && method === "PUT") {
+      const body = route.request().postDataJSON();
+      const saved = { id: `slot-${slotMatch[1]}`, dossier_id: slotMatch[1], start: body.start, end: body.end, recurrence: body.recurrence ?? null, reminders: body.reminders ?? [], updated_at: new Date().toISOString() };
+      SLOTS.set(slotMatch[1], saved);
+      return json(saved);
+    }
+    if (slotMatch && method === "DELETE") {
+      SLOTS.delete(slotMatch[1]);
+      return route.fulfill({ status: 204 });
+    }
     if (path === "/api/users") return json(USERS);
     if (path === "/api/dossiers/bulk-assignee" && method === "PUT") {
       const body = route.request().postDataJSON();
@@ -437,9 +451,10 @@ async function planSlot(page, start, end) {
 
 async function dashboard(browser) {
   const dir = "tableau-de-bord";
+  SLOTS.clear();
   const page = await newPage(browser, "admin", { width: 1280, height: 2000 });
   await waitDashboard(page);
-  // Quelques créneaux pour montrer l'agenda du jour (ils restent en mémoire le temps de la session).
+  // Quelques créneaux pour montrer l'agenda du jour (enregistrés côté serveur).
   await page.getByRole("button", { name: "Jour", exact: true }).click();
   for (const [start, end] of [["09:00", "10:30"], ["11:00", "12:00"], ["14:00", "16:00"]]) await planSlot(page, start, end);
 
