@@ -30,6 +30,7 @@ def _call_tool_json(result) -> dict:
 
 
 def test_mcp_helper_full_cycle(client: TestClient) -> None:
+    client.get("/api/auth/me")  # le propriétaire du jeton est connu de l'annuaire : l'agent a ses droits (#222)
     token = client.post("/api/app-tokens", json={"name": "mcp-helper-test"}).json()["token"]
 
     async def run() -> None:

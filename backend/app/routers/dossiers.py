@@ -498,7 +498,7 @@ async def launch_dossier_for(
 ) -> Dossier:
     """Lance l'analyse d'un dossier et le journalise (#169) ; partagé avec l'agent assistant."""
     dossier_repository = DossierRepository(db)
-    dossier = await _get_or_404(dossier_repository, dossier_id)
+    dossier = await _get_or_404(dossier_repository, dossier_id, actor if isinstance(actor, RequestContext) else None)
     analyse = await AnalyseRepository(db).get(dossier.analyse_id)
     if analyse is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")

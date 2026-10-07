@@ -619,6 +619,8 @@ class PersonOut(BaseModel):
     """Une personne de l'annuaire local (#173) : identifiant Keycloak et nom affiché. Pas d'e-mail : un dossier
     n'a pas à le diffuser."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     name: str
 
@@ -653,6 +655,8 @@ class DueInfoOut(BaseModel):
     ``level`` : ``ok`` (loin), ``soon`` (proche), ``overdue`` (dépassée), ``closed`` (clos : plus à surveiller).
     ``color`` : couleur du niveau selon les seuils (``null`` pour un dossier clos). ``days_left`` : jours
     restants, négatif si l'échéance est dépassée."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     level: str
     days_left: int
