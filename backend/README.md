@@ -87,6 +87,22 @@ Elle est aussi exposée via [MCP](https://modelcontextprotocol.io/) sous
 `/mcp`, pour qu'un agent puisse l'utiliser directement - voir
 [app/mcp/README.md](app/mcp/README.md).
 
+## Migrations et schéma de la base
+
+Chaque migration Alembic (`backend/migrations/versions/`) s'accompagne de la **mise à jour du schéma de la base** (`docs/backend/data-model.png`), commitée avec elle :
+
+```bash
+cd backend && uv run --group dev python scripts/generate_data_model.py
+```
+
+Le schéma est généré à partir des modèles SQLAlchemy (aucune base nécessaire ; il faut Graphviz, la commande `dot`). Pour tester une migration sans toucher à la base de développement, créer une base à part et la cibler avec `DATABASE_URL` :
+
+```bash
+docker exec dig-dig-doc-postgres-1 psql -U digdigdoc -d postgres -c "CREATE DATABASE digdigdoc_test"
+export DATABASE_URL=postgresql+asyncpg://digdigdoc:digdigdoc@localhost:5432/digdigdoc_test
+uv run alembic upgrade head && uv run pytest
+```
+
 ## Configuration locale
 
 Depuis la racine du repo :

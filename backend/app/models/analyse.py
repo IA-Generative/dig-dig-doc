@@ -2,7 +2,7 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum, ForeignKey, String, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,6 +43,9 @@ class VersionedField(enum.StrEnum):
     AGENT_TOOLS = "agent_tools"
     AGENT_OUTPUT = "agent_output"
     AGENT_MODEL = "agent_model"
+    # Statuts de dossier de l'analyse (issue #168) : liste ordonnée avec identifiants
+    # stables (un dossier y fait référence), restaurée à l'identique.
+    STATUSES = "statuses"
 
 
 class Analyse(UUIDMixin, TimestampMixin, Base):
@@ -63,6 +66,9 @@ class Analyse(UUIDMixin, TimestampMixin, Base):
     )
     entities: Mapped[list["EntityDefinition"]] = relationship(
         back_populates="analyse", cascade="all, delete-orphan", order_by="EntityDefinition.created_at"
+    )
+    statuses: Mapped[list["StatusDefinition"]] = relationship(
+        back_populates="analyse", cascade="all, delete-orphan", order_by="StatusDefinition.position"
     )
     agents: Mapped[list["Agent"]] = relationship(
         back_populates="analyse", cascade="all, delete-orphan", order_by="Agent.created_at"
@@ -98,6 +104,30 @@ class EntityDefinition(UUIDMixin, TimestampMixin, Base):
     type: Mapped[EntityType] = mapped_column(Enum(EntityType, name="entity_type"), nullable=False)
 
     analyse: Mapped["Analyse"] = relationship(back_populates="entities")
+
+
+class StatusDefinition(UUIDMixin, TimestampMixin, Base):
+    """Un statut de dossier défini par l'analyse (issue #168) : chaque analyse
+    a son propre jeu de statuts, ordonné. Un statut est « initial » (celui que
+    reçoit un dossier créé, un seul par analyse) et/ou « final » (le dossier est
+    alors clos : voir Dossier.closed_at).
+
+    À la différence des labels et des entités, un statut garde son identifiant
+    quand on modifie la liste : les dossiers y font référence (Dossier.workflow_status_id)."""
+
+    __tablename__ = "status_definitions"
+
+    analyse_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # Couleur d'affichage, au format #RRGGBB.
+    color: Mapped[str] = mapped_column(String, nullable=False, default="#6a6af4")
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_initial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_final: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    analyse: Mapped["Analyse"] = relationship(back_populates="statuses")
 
 
 class Agent(UUIDMixin, TimestampMixin, Base):

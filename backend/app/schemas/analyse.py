@@ -36,6 +36,39 @@ class EntityDefinitionOut(EntityDefinitionIn):
     id: uuid.UUID
 
 
+# Couleur d'un statut : #RRGGBB.
+HEX_COLOR_PATTERN = r"^#[0-9a-fA-F]{6}$"
+
+
+class StatusDefinitionIn(BaseModel):
+    # Absent pour un nouveau statut ; fourni pour conserver l'identité d'un statut existant
+    # (les dossiers y font référence).
+    id: uuid.UUID | None = None
+    name: str
+    color: str = Field(default="#6a6af4", pattern=HEX_COLOR_PATTERN)
+    is_initial: bool = False
+    is_final: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Le nom d'un statut ne peut pas être vide.")
+        return value
+
+
+class StatusDefinitionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    color: str
+    position: int
+    is_initial: bool
+    is_final: bool
+
+
 class ClassificationOut(BaseModel):
     prompt: str
     prompt_versions: list[Version[str]]
@@ -118,6 +151,9 @@ class AnalyseOut(BaseModel):
     created_at: datetime
     classification: ClassificationOut
     extraction: ExtractionOut
+    # Statuts de dossier de l'analyse (issue #168), dans l'ordre, et leurs versions précédentes.
+    statuses: list[StatusDefinitionOut] = []
+    statuses_versions: list[Version[list[StatusDefinitionOut]]] = []
     agents: list[AgentOut]
 
 
@@ -138,6 +174,16 @@ class LabelsUpdate(BaseModel):
 
 class EntitiesUpdate(BaseModel):
     entities: list[EntityDefinitionIn]
+
+
+class StatusesUpdate(BaseModel):
+    statuses: list[StatusDefinitionIn]
+    # Pour chaque statut supprimé encore utilisé par des dossiers : le statut qui les reprend.
+    replacements: dict[uuid.UUID, uuid.UUID] = {}
+
+
+class StatusesRestore(BaseModel):
+    replacements: dict[uuid.UUID, uuid.UUID] = {}
 
 
 class ToolsUpdate(BaseModel):

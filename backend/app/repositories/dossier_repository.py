@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.connectors import s3_connector
-from app.models.analyse import Analyse
+from app.models.analyse import Analyse, StatusDefinition
 from app.models.chat_event import ChatEvent, ChatEventKind
 from app.models.conversation import (
     Conversation,
@@ -113,11 +113,30 @@ class DossierRepository:
             analyse_id=analyse.id if analyse else None,
             analyse_version=self._analyse_repository.get_version_label(analyse) if analyse else "v1",
             status=DossierStatus.EN_ATTENTE,
+            # Statut initial de l'analyse (issue #168) ; rien pour un dossier « à ranger ».
+            workflow_status_id=self._initial_status_id(analyse),
         )
         self.db.add(dossier)
         await self.db.commit()
         await self.db.refresh(dossier)
         return dossier
+
+    def _initial_status_id(self, analyse: Analyse | None) -> uuid.UUID | None:
+        initial = self._analyse_repository.initial_status(analyse) if analyse else None
+        return initial.id if initial else None
+
+    async def set_workflow_status(self, dossier: Dossier, status: StatusDefinition) -> None:
+        """Change le statut de dossier (issue #168). Le statut doit appartenir à l'analyse du dossier
+        (vérifié par l'appelant). Un statut final pose la date de clôture (conservée d'un statut final à
+        un autre) ; tout autre statut l'efface.
+        Le journal d'événements du dossier (#169) enregistrera ce changement quand il existera."""
+        dossier.workflow_status_id = status.id
+        if status.is_final:
+            if dossier.closed_at is None:
+                dossier.closed_at = datetime.now(UTC)
+        else:
+            dossier.closed_at = None
+        await self.db.commit()
 
     async def add_documents(self, dossier: Dossier, documents: list[dict]) -> list[DossierDocument]:
         created = [
@@ -900,4 +919,7 @@ class DossierRepository:
         Met à jour analyse_id et analyse_version."""
         dossier.analyse_id = analyse.id
         dossier.analyse_version = self._analyse_repository.get_version_label(analyse)
+        # Le dossier reçoit le statut initial de l'analyse qui l'accueille (issue #168).
+        dossier.workflow_status_id = self._initial_status_id(analyse)
+        dossier.closed_at = None
         await self.db.commit()
