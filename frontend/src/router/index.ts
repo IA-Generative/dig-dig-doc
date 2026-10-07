@@ -9,6 +9,7 @@ import AnalyseDetailPage from "@/pages/AnalyseDetailPage.vue";
 import AnalyseDocumentsTab from "@/pages/analyse/AnalyseDocumentsTab.vue";
 import AnalyseExtractionTab from "@/pages/analyse/AnalyseExtractionTab.vue";
 import AnalysesPage from "@/pages/AnalysesPage.vue";
+import DashboardPage from "@/pages/DashboardPage.vue";
 import DocumentReviewPage from "@/pages/DocumentReviewPage.vue";
 import DossierAnalysisPage from "@/pages/DossierAnalysisPage.vue";
 import DossierDocumentsPage from "@/pages/DossierDocumentsPage.vue";
@@ -20,8 +21,9 @@ import WelcomePage from "@/pages/WelcomePage.vue";
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: "/", redirect: "/welcome" },
+    { path: "/", redirect: "/dashboard" },
     { path: "/welcome", name: "welcome", component: WelcomePage, meta: { public: true } },
+    { path: "/dashboard", name: "dashboard", component: DashboardPage },
     { path: "/analyses", name: "analyses", component: AnalysesPage },
     {
       path: "/analyses/:id",
