@@ -3,8 +3,8 @@ import type { Assignee, ColumnId, TrackingFilters, TrackingListRow, TrackingSort
 
 // Tableau de suivi branché sur l'API (issue #173) : `GET /api/tracking` pour la liste (filtres, recherche, tri et
 // pagination côté serveur), `PUT /api/dossiers/bulk-assignee` pour l'affectation, `GET /api/users` pour les
-// personnes proposées. Les colonnes personnalisées et l'accès par groupe n'ont pas encore d'API : ils restent
-// sur les données simulées (useTracking) ou masqués.
+// personnes proposées. Les colonnes personnalisées n'ont pas encore d'API : elles restent sur les données simulées
+// (useTracking) ou masquées.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,7 +20,7 @@ const SORT_KEYS: Partial<Record<ColumnId, string>> = {
   lastActivityAt: "last_activity_at",
 };
 
-/** Paramètres de la requête. Un filtre que le serveur ne connaît pas (accès, champs personnalisés) est ignoré. */
+/** Paramètres de la requête. Un filtre que le serveur ne connaît pas (champs personnalisés) est ignoré. */
 export function toQuery(filters: TrackingFilters, sort: TrackingSort, page: number, pageSize: number): URLSearchParams {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   for (const id of filters.analyseIds) query.append("analyse_id", id);
@@ -30,6 +30,7 @@ export function toQuery(filters: TrackingFilters, sort: TrackingSort, page: numb
   if (filters.assignee) query.set("assignee", filters.assignee);
   if (filters.due) query.set("due", filters.due);
   if (filters.search.trim()) query.set("search", filters.search.trim());
+  if (filters.access) query.set("access", filters.access);
   query.set("sort", SORT_KEYS[sort.key] ?? "created_at");
   query.set("direction", sort.dir);
   return query;
@@ -45,6 +46,7 @@ function mapRow(api: any): TrackingListRow {
       ? { id: api.status.id, name: api.status.name, color: api.status.color, isFinal: api.status.is_final }
       : null,
     assignee: api.assignee ? { id: api.assignee.id, name: api.assignee.name } : null,
+    visibility: api.visibility,
     dueAt: api.due_at ?? null,
     due: api.due ? { level: api.due.level, daysLeft: api.due.days_left, color: api.due.color ?? undefined } : null,
     createdAt: api.created_at,

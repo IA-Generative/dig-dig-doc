@@ -71,6 +71,7 @@ function mapDossier(api: any): Dossier {
           isFinal: api.workflow_status.is_final,
         }
       : undefined,
+    visibility: api.visibility,
     closedAt: api.closed_at ?? undefined,
     dueAt: api.due_at ?? undefined,
     due: api.due ? { level: api.due.level, daysLeft: api.due.days_left, color: api.due.color ?? undefined } : undefined,
@@ -145,9 +146,17 @@ export function useDossiers() {
     return dossier;
   };
 
-  const create = async (name: string, analyseId?: string) => {
-    const body: Record<string, string> = { name };
+  /**
+   * Crée un dossier. `access` (#177) : « restreint » (par défaut côté serveur) avec au moins un des groupes de la
+   * personne, ou « selon l'analyse » ; sans lui, le serveur restreint le dossier à tous les groupes de la personne.
+   */
+  const create = async (name: string, analyseId?: string, access?: { restricted: boolean; groups: string[] }) => {
+    const body: Record<string, unknown> = { name };
     if (analyseId) body.analyse_id = analyseId;
+    if (access) {
+      body.visibility = access.restricted ? "restricted" : "analyse";
+      if (access.restricted) body.group_paths = access.groups;
+    }
     const data = await apiFetch<any>("/api/dossiers", {
       method: "POST",
       body: JSON.stringify(body),

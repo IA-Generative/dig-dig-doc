@@ -1,3 +1,4 @@
+import { groupLabel } from "@/types/access";
 import { formatDueDate } from "@/utils/due";
 import { EVENT_CATEGORIES, type DossierEvent } from "@/types/dossierEvent";
 
@@ -18,6 +19,7 @@ const formatSize = (bytes: number) => (bytes < 1_000_000 ? `${Math.max(1, Math.r
 const REASONS: Record<string, string> = {
   status_removed: "statut supprimé et remplacé",
   default_duration: "durée par défaut de l'analyse",
+  access_lost: "la personne n'a plus accès au dossier",
   status_flag_changed: "le statut est devenu final ou ne l'est plus",
 };
 
@@ -55,6 +57,32 @@ export function describeEvent(event: DossierEvent, lookups: Lookups): EventDescr
         detail: [from && to ? `${from} → ${to}` : to ?? from, reason].filter(Boolean).join(" · "),
       };
     }
+    case "assignee_changed": {
+      const to = p.to?.name as string | undefined;
+      const from = p.from?.name as string | undefined;
+      return {
+        icon: "ri-user-received-line",
+        title: to ? (from ? `Réaffecté à ${to}` : `Affecté à ${to}`) : "Affectation retirée",
+        detail: [from && to ? `${from} → ${to}` : to ? undefined : from ? `Était affecté à ${from}` : undefined, reason]
+          .filter(Boolean)
+          .join(" · "),
+      };
+    }
+    case "access_changed": {
+      const parts: string[] = [];
+      if (p.visibility) {
+        parts.push(p.visibility.to === "restricted" ? "Dossier restreint" : "Dossier ouvert selon l'analyse");
+      }
+      for (const g of (p.groups_added as string[] | undefined) ?? []) parts.push(`Groupe « ${groupLabel(g)} » ajouté`);
+      for (const g of (p.groups_removed as string[] | undefined) ?? []) parts.push(`Groupe « ${groupLabel(g)} » retiré`);
+      return { icon: "ri-lock-line", title: "Accès modifié", detail: parts.join(" · ") };
+    }
+    case "admin_access":
+      return {
+        icon: "ri-shield-user-line",
+        title: p.write ? "Accès administrateur : modification" : "Accès administrateur : consultation",
+        detail: "En tant qu'administrateur, hors des groupes du dossier",
+      };
     case "closed":
       return { icon: "ri-check-double-line", title: "Dossier clôturé", detail: [p.status?.name, reason].filter(Boolean).join(" · ") };
     case "reopened":

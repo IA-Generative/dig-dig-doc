@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { useDossierAccess } from "@/composables/useDossierAccess";
+import type { Visibility } from "@/types/access";
 
-// Pastille « Restreint » (icône + libellé : jamais la couleur seule). Rien
-// n'est affiché pour un dossier « Selon l'analyse ».
-defineProps<{ dossierId: string }>();
-const { accessOf } = useDossierAccess();
+// Pastille « Restreint » (icône + libellé : jamais la couleur seule). Rien n'est affiché pour un dossier
+// « Selon l'analyse ».
+defineProps<{ visibility?: Visibility }>();
 </script>
 
 <template>
-  <span v-if="accessOf(dossierId).visibility === 'restricted'" class="fr-badge fr-badge--sm fr-badge--no-icon access-badge" title="Accès restreint à certains groupes">
+  <span
+    v-if="visibility === 'restricted'"
+    class="fr-badge fr-badge--sm fr-badge--no-icon access-badge"
+    title="Accès restreint à certains groupes"
+  >
     <VIcon name="ri-lock-line" scale="0.7" /> Restreint
   </span>
 </template>

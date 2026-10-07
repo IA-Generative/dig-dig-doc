@@ -67,10 +67,19 @@ class DossierAccessRepository:
             self.db.add(DossierGroupAccess(dossier_id=dossier_id, keycloak_group=path, granted_by=granted_by))
 
     async def update(
-        self, dossier: Dossier, *, visibility: Visibility, group_paths: Collection[str], actor, granted_by: str
+        self,
+        dossier: Dossier,
+        *,
+        visibility: Visibility,
+        group_paths: Collection[str],
+        actor,
+        granted_by: str,
+        commit: bool = True,
     ) -> dict:
         """Remplace la visibilité et les groupes du dossier, trace le changement et **annule l'affectation** d'une
-        personne qui perd ainsi l'accès (tracée aussi). Renvoie le résumé du changement."""
+        personne qui perd ainsi l'accès (tracée aussi). Renvoie le résumé du changement ; si une personne a été
+        désaffectée, ``unassigned_person`` la nomme. ``commit=False`` laisse la transaction à l'appelant (lot,
+        simulation)."""
         current = set(await self.group_paths(dossier.id))
         wanted = set(group_paths)
         added, removed = sorted(wanted - current), sorted(current - wanted)
@@ -95,7 +104,7 @@ class DossierAccessRepository:
             )
         self.add_groups(dossier.id, added, granted_by)
         await self.db.flush()
-        self.events.add(dossier.id, DossierEventType.ACCESS_CHANGED, actor, change)
+        self.events.add(dossier.id, DossierEventType.ACCESS_CHANGED, actor, dict(change))
 
         assignee = dossier.assignee
         if assignee is not None and not await self.person_can_view(assignee, dossier):
@@ -104,5 +113,7 @@ class DossierAccessRepository:
 
             DossierRepository(self.db)._apply_assignee(dossier, None, actor, reason="access_lost")
             change["assignee_unassigned"] = True
-        await self.db.commit()
+            change["unassigned_person"] = {"id": assignee.user_id, "name": assignee.name}
+        if commit:
+            await self.db.commit()
         return change

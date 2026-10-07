@@ -1,5 +1,7 @@
 """Accès aux dossiers par groupe (issue #177, partie 1) : visibilité, création, modification, affectation."""
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -381,3 +383,129 @@ def test_the_directory_remembers_groups_at_login(client: TestClient, analyse: di
         client.get("/api/auth/me")
     with As(world["alice"]):
         assert _assign(client, dossier["id"], moved).status_code == 200
+
+
+# --- Simulation, lot, visibilité exposée (interface « Accès ») ---
+
+
+def test_dry_run_names_who_would_lose_access_without_changing_anything(
+    client: TestClient, analyse: dict, world: dict
+) -> None:
+    only_b = _person("dave", [world["b"]])
+    with As(only_b):
+        client.get("/api/auth/me")
+    with As(world["bob"]):
+        dossier = _create(client, analyse)  # /b
+        _assign(client, dossier["id"], only_b)
+    with As(world["root"]):
+        client.put(
+            f"/api/dossiers/{dossier['id']}/access",
+            json={"visibility": "restricted", "group_paths": [world["b"], world["a"]]},
+        )
+
+        preview = client.put(
+            f"/api/dossiers/{dossier['id']}/access",
+            params={"dry_run": "true"},
+            json={"visibility": "restricted", "group_paths": [world["a"]]},
+        ).json()
+        after = client.get(f"/api/dossiers/{dossier['id']}").json()
+        events = _events(client, dossier["id"], "access_changed")
+
+    assert preview["assignee_unassigned"] is True and preview["unassigned_person"]["id"] == only_b.user_id
+    assert {g["path"] for g in preview["groups"]} == {world["a"], world["b"]}  # rien n'est enregistré
+    assert after["assignee"]["id"] == only_b.user_id
+    assert len(events) == 1  # seul le vrai changement est tracé, pas la simulation
+
+
+def test_the_real_change_reports_the_person_it_unassigned(client: TestClient, analyse: dict, world: dict) -> None:
+    only_b = _person("erin", [world["b"]])
+    with As(only_b):
+        client.get("/api/auth/me")
+    with As(world["bob"]):
+        dossier = _create(client, analyse)
+        _assign(client, dossier["id"], only_b)
+    with As(world["root"]):
+        client.put(
+            f"/api/dossiers/{dossier['id']}/access",
+            json={"visibility": "restricted", "group_paths": [world["b"], world["a"]]},
+        )
+        result = _put_access(client, dossier["id"], "restricted", [world["a"]]).json()
+
+    assert result["unassigned_person"]["id"] == only_b.user_id
+
+
+def _bulk_access(client: TestClient, ids: list[str], visibility: str, groups: list[str]):
+    return client.put(
+        "/api/dossiers/bulk-access", json={"dossier_ids": ids, "visibility": visibility, "group_paths": groups}
+    )
+
+
+def test_bulk_access_replaces_the_groups_of_every_dossier(client: TestClient, analyse: dict, world: dict) -> None:
+    with As(world["alice"]):
+        first, second = _create(client, analyse), _create(client, analyse)
+    with As(world["root"]):
+        result = _bulk_access(client, [first["id"], second["id"], second["id"]], "analyse", [])
+        listed = [client.get(f"/api/dossiers/{d['id']}").json()["visibility"] for d in (first, second)]
+        again = _bulk_access(client, [first["id"], second["id"]], "analyse", [])
+
+    assert result.status_code == 200 and result.json() == {"updated": 2, "unchanged": 0, "unassigned": 0}
+    assert listed == ["analyse", "analyse"]
+    assert again.json() == {"updated": 0, "unchanged": 2, "unassigned": 0}
+
+
+def test_bulk_access_is_reserved_to_administrators_and_all_or_nothing(
+    client: TestClient, analyse: dict, world: dict
+) -> None:
+    with As(world["alice"]):
+        dossier = _create(client, analyse)
+        assert _bulk_access(client, [dossier["id"]], "analyse", []).status_code == 403
+    with As(world["root"]):
+        ghost = str(uuid.uuid4())
+        missing = _bulk_access(client, [dossier["id"], ghost], "analyse", [])
+        foreign = _bulk_access(client, [dossier["id"]], "restricted", [world["b"]])
+        empty = _bulk_access(client, [dossier["id"]], "restricted", [])
+        still = client.get(f"/api/dossiers/{dossier['id']}").json()["visibility"]
+
+    assert missing.status_code == 404 and missing.json()["detail"]["dossier_ids"] == [ghost]
+    assert foreign.status_code == 422 and foreign.json()["detail"]["code"] == "group_not_yours"
+    assert empty.status_code == 422 and empty.json()["detail"]["code"] == "groups_required"
+    assert still == "restricted"  # rien n'a changé
+
+
+def test_bulk_access_unassigns_people_who_lose_access(client: TestClient, analyse: dict, world: dict) -> None:
+    only_b = _person("fred", [world["b"]])
+    with As(only_b):
+        client.get("/api/auth/me")
+    with As(world["bob"]):
+        dossier = _create(client, analyse)
+        _assign(client, dossier["id"], only_b)
+    with As(world["root"]):
+        client.put(
+            f"/api/dossiers/{dossier['id']}/access",
+            json={"visibility": "restricted", "group_paths": [world["b"], world["a"]]},
+        )
+        result = _bulk_access(client, [dossier["id"]], "restricted", [world["a"]]).json()
+
+    assert result == {"updated": 1, "unchanged": 0, "unassigned": 1}
+
+
+def test_the_visibility_is_exposed_by_the_dossier_and_the_tracking(
+    client: TestClient, analyse: dict, world: dict
+) -> None:
+    with As(world["alice"]):
+        restricted = _create(client, analyse)
+        open_one = _create(client, analyse, visibility="analyse")
+        detail = client.get(f"/api/dossiers/{restricted['id']}").json()
+        rows = client.get("/api/tracking", params={"analyse_id": analyse["id"], "page_size": 100}).json()["items"]
+        only_restricted = client.get(
+            "/api/tracking", params={"analyse_id": analyse["id"], "access": "restricted"}
+        ).json()["items"]
+        only_open = client.get("/api/tracking", params={"analyse_id": analyse["id"], "access": "analyse"}).json()[
+            "items"
+        ]
+        bad = client.get("/api/tracking", params={"access": "secret"})
+
+    assert detail["visibility"] == "restricted"
+    assert {r["id"]: r["visibility"] for r in rows} == {restricted["id"]: "restricted", open_one["id"]: "analyse"}
+    assert [r["id"] for r in only_restricted] == [restricted["id"]] and [r["id"] for r in only_open] == [open_one["id"]]
+    assert bad.status_code == 422

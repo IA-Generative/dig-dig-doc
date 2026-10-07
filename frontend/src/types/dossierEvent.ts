@@ -17,7 +17,7 @@ export interface DossierEventActor {
   actorName: string | null;
 }
 
-export type EventCategory = "creation" | "status" | "analyse" | "documents" | "due" | "consultation";
+export type EventCategory = "creation" | "status" | "analyse" | "documents" | "due" | "assignment" | "access" | "consultation";
 
 export const EVENT_CATEGORIES: { value: EventCategory; label: string; icon: string; types: string[] }[] = [
   { value: "creation", label: "Création", icon: "ri-add-circle-line", types: ["created"] },
@@ -34,6 +34,8 @@ export const EVENT_CATEGORIES: { value: EventCategory; label: string; icon: stri
     icon: "ri-file-text-line",
     types: ["document_added", "document_generated", "document_downloaded"],
   },
+  { value: "assignment", label: "Affectation", icon: "ri-user-received-line", types: ["assignee_changed"] },
+  { value: "access", label: "Accès", icon: "ri-lock-line", types: ["access_changed", "admin_access"] },
   { value: "due", label: "Échéance", icon: "ri-calendar-event-line", types: ["due_date_changed"] },
   { value: "consultation", label: "Consultations", icon: "ri-eye-line", types: ["consulted"] },
 ];
