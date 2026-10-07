@@ -456,8 +456,24 @@ class DossierAccessUpdate(BaseModel):
 
 
 class DossierAccessChangeOut(DossierAccessOut):
-    # Vrai si le changement a annulé l'affectation d'une personne qui perdait l'accès.
+    # Vrai si le changement a annulé l'affectation d'une personne qui perdait l'accès (avec ``dry_run`` : si elle
+    # serait annulée), et qui.
     assignee_unassigned: bool = False
+    unassigned_person: "PersonOut | None" = None
+
+
+class BulkAccessUpdate(DossierAccessUpdate):
+    # Plafond : une seule transaction ; une page du tableau de suivi en compte 100 au plus.
+    dossier_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class BulkAccessResult(BaseModel):
+    """``updated`` : dossiers dont l'accès a changé ; ``unchanged`` : déjà tels quels ; ``unassigned`` : dossiers dont
+    la personne affectée a perdu l'accès et a été désaffectée."""
+
+    updated: int
+    unchanged: int
+    unassigned: int
 
 
 # --- Schémas internes (worker agent_execution) ---
@@ -678,6 +694,8 @@ class DossierOut(BaseModel):
     # None pour un dossier « à ranger ». `closed_at` : date de clôture (statut final), ou None.
     workflow_status: StatusDefinitionOut | None = None
     closed_at: datetime | None = None
+    # Qui voit le dossier (#177) : « restricted » (groupes associés) ou « analyse ».
+    visibility: Literal["restricted", "analyse"] = "analyse"
     # Responsable du dossier (#173), ``null`` si non affecté, et depuis quand.
     assignee: PersonOut | None = None
     assigned_at: datetime | None = None

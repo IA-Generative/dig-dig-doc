@@ -1,6 +1,5 @@
 import { ref } from "vue";
 
-import { useDossierAccess } from "@/composables/useDossierAccess";
 import { ASSIGNEES, MOCK_ANALYSES, ME, STATUSES, initialDossiers, initialFieldsByAnalyse } from "@/mocks/dossiers";
 import type { Version } from "@/types/analyse";
 import {
@@ -38,8 +37,6 @@ const assigneeName = (id: string | null) => ASSIGNEES.find((a) => a.id === id)?.
 const analyseName = (id: string) => MOCK_ANALYSES.find((a) => a.id === id)?.name ?? id;
 const allFields = () => Object.values(fieldsByAnalyse.value).flat();
 
-const accessApi = useDossierAccess();
-
 function matchesStatus(row: TrackingRow, statusId: string): boolean {
   if (!statusId) return true;
   if (statusId.startsWith("cat:")) {
@@ -49,9 +46,6 @@ function matchesStatus(row: TrackingRow, statusId: string): boolean {
 }
 
 function matches(row: TrackingRow, f: TrackingFilters): boolean {
-  // Visibilité (#177) : un dossier inaccessible n'apparaît jamais (ni dans les compteurs ni dans l'export).
-  if (!accessApi.canSee(row.id)) return false;
-  if (f.access && accessApi.accessOf(row.id).visibility !== f.access) return false;
   if (f.analyseIds.length && !f.analyseIds.includes(row.analyseId)) return false;
   if (!matchesStatus(row, f.statusId)) return false;
   if (f.assignee === "me" && row.assigneeId !== ME) return false;

@@ -180,7 +180,7 @@ function isUnassigned(dossier: Dossier) {
                     <RouterLink :to="`/dossiers/${dossier.id}`" class="dossiers-page__name-link" @click.stop>
                       {{ dossier.name }}
                     </RouterLink>
-                    <AccessBadge :dossier-id="dossier.id" class="fr-ml-1w" />
+                    <AccessBadge :visibility="dossier.visibility" class="fr-ml-1w" />
                   </td>
                   <td>
                     <div class="dossiers-page__analyse-cell">

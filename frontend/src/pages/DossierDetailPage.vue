@@ -232,7 +232,7 @@ async function onDeleteConversation() {
       <div>
         <div class="dossier-detail__title">
           <h1 class="fr-h2">{{ dossier.name }}</h1>
-          <AccessBadge :dossier-id="dossier.id" />
+          <AccessBadge :visibility="dossier.visibility" />
           <button
             type="button"
             class="dossier-detail__icon-button"

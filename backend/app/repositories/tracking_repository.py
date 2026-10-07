@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from sqlalchemy import Select, String, cast, extract, func, or_, select
+from sqlalchemy import Select, String, case, cast, extract, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.analyse import Analyse, StatusDefinition
@@ -51,7 +51,10 @@ class TrackingRepository:
     def _reference():
         """Même formule que `Dossier.reference`, pour pouvoir chercher et trier dessus."""
         year = cast(extract("year", func.timezone("UTC", Dossier.created_at)), String)
-        return func.concat("DOS-", func.substr(year, 1, 4), "-", func.lpad(cast(Dossier.ref_number, String), 4, "0"))
+        number = cast(Dossier.ref_number, String)
+        # `lpad` tronque ce qui dépasse 4 caractères : au-delà de 9 999 dossiers le numéro doit rester entier.
+        padded = case((Dossier.ref_number < 10000, func.lpad(number, 4, "0")), else_=number)
+        return func.concat("DOS-", func.substr(year, 1, 4), "-", padded)
 
     def _filters(
         self,
@@ -62,6 +65,7 @@ class TrackingRepository:
         assignee: str | None,
         due: str | None,
         search: str | None,
+        access: str | None,
         user: "RequestContext | None",
     ) -> list:
         # Le suivi porte sur les dossiers rangés dans une analyse : un dossier « à ranger » n'a ni statut ni seuils.
@@ -71,6 +75,8 @@ class TrackingRepository:
             filters.append(visible_clause(user.is_admin, user.groups))
         if analyse_ids:
             filters.append(Dossier.analyse_id.in_(analyse_ids))
+        if access:
+            filters.append(Dossier.visibility == access)
         if status_id:
             filters.append(Dossier.workflow_status_id == status_id)
         if category == "initial":
@@ -119,6 +125,7 @@ class TrackingRepository:
         assignee: str | None = None,
         due: str | None = None,
         search: str | None = None,
+        access: str | None = None,
         sort: SortKey = "created_at",
         descending: bool = True,
         user: "RequestContext | None" = None,
@@ -131,6 +138,7 @@ class TrackingRepository:
             assignee=assignee,
             due=due,
             search=search,
+            access=access,
             user=user,
         )
 

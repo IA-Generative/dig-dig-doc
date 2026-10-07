@@ -24,6 +24,8 @@ class TrackingRowOut(BaseModel):
     analyse: TrackingAnalyseOut
     status: StatusDefinitionOut | None
     assignee: PersonOut | None
+    # Qui voit le dossier (#177) : « restricted » (pastille « Restreint ») ou « analyse ».
+    visibility: str
     # Échéance et niveau calculé selon les seuils de l'analyse (#172).
     due_at: date | None
     due: DueInfoOut | None

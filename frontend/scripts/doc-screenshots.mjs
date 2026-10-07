@@ -58,6 +58,7 @@ const dossier = (n, name, extra = {}) => ({
   suggestion_status: "terminé",
   suggested_analyses: [],
   workflow_status: STATUSES[n % 3],
+  visibility: "analyse",
   closed_at: null,
   due_at: null,
   due: null,
@@ -84,6 +85,7 @@ function dueOf(d, thresholds) {
 const dossiers = [
   dossier(3, "Subvention association Les Mouettes n°102", {
     due_at: dayKey(5),
+    visibility: "restricted",
     documents: [
       {
         id: "doc-1",
@@ -160,6 +162,7 @@ const TRACKED = TRACKED_ANALYSES.flatMap((analyse, a) =>
       analyse,
       status,
       assignee: n % 3 === 0 ? null : USERS[n % USERS.length],
+      visibility: n % 4 === 1 ? "restricted" : "analyse",
       due_at: n % 5 === 4 ? null : dayKey((n % 7) * 9 - 12),
       closed,
       created_at: iso(-30 + n),
@@ -182,6 +185,7 @@ const trackingRow = (d) => ({
   analyse: { id: d.analyse.id, name: d.analyse.name },
   status: d.status,
   assignee: d.assignee,
+  visibility: d.visibility,
   due_at: d.due_at,
   due: dueOfTracked(d),
   created_at: d.created_at,
@@ -197,9 +201,22 @@ const notificationsOf = () => {
     make(2, "assigned", open[1], "Ce dossier vous a été affecté par Camille Durand.", 5),
     make(3, "analysis_done", open[2], "L'analyse que vous avez lancée est terminée.", 26),
     make(4, "status_changed", open[3], "Statut passé à « À valider » par Samir Benali.", 50, true),
+    { ...make(5, "assigned", open[0], "Ce dossier vous a été affecté par Camille Durand.", 70, true), dossier_id: null, dossier_name: null, accessible: false },
   ];
 };
 let NOTIFICATIONS = notificationsOf();
+
+// Accès des dossiers (#177), modifiable le temps du scénario.
+const ACCESS = { "dos-3": { visibility: "restricted", groups: ["/service-culture"] } };
+const accessState = (id, canEdit) => {
+  const current = ACCESS[id] ?? { visibility: "analyse", groups: [] };
+  return {
+    visibility: current.visibility,
+    groups: current.groups.map((path) => ({ path, granted_by: "u1", created_at: iso(-3) })),
+    can_edit: canEdit,
+    available_groups: ["/service-culture", "/service-sport"],
+  };
+};
 
 // Créneaux de traitement (#174) : `PUT` / `DELETE /api/dossiers/{id}/slot`, gardés le temps du scénario.
 const SLOTS = new Map();
@@ -243,6 +260,7 @@ function trackingPage(params) {
     if (category === "initial" && !d.status.is_initial) return false;
     if (category === "final" && !d.status.is_final) return false;
     if (category === "progress" && (d.status.is_initial || d.status.is_final)) return false;
+    if (get("access") && d.visibility !== get("access")) return false;
     const assignee = get("assignee");
     if (assignee === "none" && d.assignee) return false;
     if (assignee === "me" && d.assignee?.id !== "u1") return false;
@@ -337,6 +355,21 @@ function api(role) {
       return json(analyseOut());
     }
     if (path === "/api/tracking") return json(trackingPage(url.searchParams));
+    // Accès aux dossiers (#177) : lecture, simulation et enregistrement ; un seul dossier de démonstration (dos-3).
+    const accessMatch = path.match(/^\/api\/dossiers\/(dos-\d+)\/access$/);
+    if (accessMatch && method === "GET") return json(accessState(accessMatch[1], role === "admin"));
+    if (accessMatch && method === "PUT") {
+      const body = route.request().postDataJSON();
+      const dryRun = url.searchParams.get("dry_run") === "true";
+      const losing = !body.group_paths.includes("/service-culture") && body.visibility === "restricted";
+      const person = losing ? { id: "u2", name: "Camille Durand" } : null;
+      if (!dryRun) ACCESS[accessMatch[1]] = { visibility: body.visibility, groups: body.group_paths };
+      return json({ ...accessState(accessMatch[1], true), assignee_unassigned: !!person, unassigned_person: person });
+    }
+    if (path === "/api/dossiers/bulk-access" && method === "PUT") {
+      const body = route.request().postDataJSON();
+      return json({ updated: body.dossier_ids.length, unchanged: 0, unassigned: 1 });
+    }
     if (path === "/api/dashboard") return json(dashboardPayload(role === "admin"));
     if (path === "/api/notifications" && method === "GET") return json(NOTIFICATIONS);
     if (path === "/api/notifications/read-all" && method === "POST") {
@@ -600,11 +633,13 @@ async function access(browser) {
 
   await page.goto(`${baseUrl}/dossiers/dos-3`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Accès au dossier" }).click();
+  await page.getByText("Groupes associés").waitFor();
   await shotModal(page, dir, "03-acces-au-dossier.png");
 
   // Retrait d'un groupe : confirmation des pertes d'accès
   await page.getByLabel("Service culture").uncheck();
   await page.getByLabel("Service sport").check();
+  await page.getByText(/perdra l'accès/).waitFor(); // la simulation du serveur nomme la personne affectée
   await shotModal(page, dir, "04-confirmation-des-pertes-d-acces.png");
   await closeModal(page);
 
@@ -634,6 +669,7 @@ async function access(browser) {
   page = await newPage(browser, "user", { width: 1280, height: 1000 });
   await page.goto(`${baseUrl}/dossiers/dos-3`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Accès au dossier" }).click();
+  await page.getByText("Groupes associés").waitFor();
   await shotModal(page, dir, "08-lecture-seule-pour-un-non-administrateur.png");
   await page.context().close();
 }

@@ -11,10 +11,10 @@ const emit = defineEmits<{ created: [] }>();
 
 const { list: analyses, fetchList: fetchAnalyses } = useAnalyses();
 const { create, addDocuments } = useDossiers();
-const { myGroups, initAccess } = useDossierAccess();
+const { myGroups } = useDossierAccess();
 
-// MOCK (#177) : un nouveau dossier est restreint par défaut ; il faut au moins
-// un des groupes de l'utilisateur, sinon le créateur lui-même ne pourrait plus l'ouvrir.
+// Un nouveau dossier est restreint par défaut (#177) ; il faut au moins un des groupes de l'utilisateur, sinon le
+// créateur lui-même ne pourrait plus l'ouvrir (le serveur le refuse aussi).
 const restricted = ref(true);
 const accessGroups = ref<string[]>([]);
 const accessInvalid = computed(() => restricted.value && accessGroups.value.length === 0);
@@ -58,8 +58,10 @@ async function submit() {
   if (!name.value.trim()) return;
   if (!aRanger.value && !analyseId.value) return;
   if (accessInvalid.value) return;
-  const dossier = await create(name.value.trim(), aRanger.value ? undefined : analyseId.value);
-  initAccess(dossier.id, restricted.value ? { visibility: "restricted", groups: accessGroups.value } : { visibility: "analyse", groups: [] });
+  const dossier = await create(name.value.trim(), aRanger.value ? undefined : analyseId.value, {
+    restricted: restricted.value,
+    groups: accessGroups.value,
+  });
   if (files.value.length > 0) await addDocuments(dossier.id, files.value);
   opened.value = false;
   emit("created");

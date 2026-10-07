@@ -69,6 +69,8 @@ export interface TrackingListRow {
   analyse: { id: string; name: string };
   status: { id: string; name: string; color: string; isFinal: boolean } | null;
   assignee: Assignee | null;
+  /** Qui voit le dossier (#177) : « restricted » affiche la pastille « Restreint ». */
+  visibility: "restricted" | "analyse";
   dueAt: string | null;
   /** Niveau d'échéance calculé par le serveur selon les seuils de l'analyse (#172). */
   due: DueInfo | null;
