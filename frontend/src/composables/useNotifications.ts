@@ -16,7 +16,7 @@ const notifications = ref<AppNotification[]>([
     kind: "overdue",
     dossierId: "mock-1",
     dossierName: "Subvention association Les Mouettes",
-    message: "La péremption du dossier est dépassée.",
+    message: "L'échéance du dossier est dépassée.",
     createdAt: hoursAgo(2),
   },
   {
@@ -104,7 +104,7 @@ function showBrowserNotification(n: AppNotification) {
 // Chaque rappel d'un créneau (y compris récurrent) génère une notification
 // « reminder » à l'heure voulue. Ici le déclenchement est local (minuteur
 // dans le navigateur) ; côté serveur ce sera une tâche planifiée du worker,
-// comme les seuils de péremption.
+// comme les seuils d'échéance.
 interface RegisteredSlot {
   dossierId: string;
   dossierName: string;

@@ -1,6 +1,6 @@
 // Tableau de suivi des dossiers d'une analyse (issue #173, partie UI).
 // Les données viennent pour l'instant de mocks (useTracking), en attendant
-// les statuts (#168), la péremption (#172) et l'API d'affectation.
+// les statuts (#168), l'échéance (#172) et l'API d'affectation.
 
 export type FieldType = "text" | "number" | "amount" | "date" | "boolean" | "choice";
 
@@ -48,14 +48,14 @@ export interface TrackingRow {
   reference: string;
   statusId: string;
   assigneeId: string | null;
-  expiresAt: string | null;
+  dueAt: string | null;
   createdAt: string;
   lastActivityAt: string;
   values: Record<string, CustomValue>;
 }
 
 /** Colonne affichable : une colonne native, ou `field:<id>` pour un champ personnalisé. */
-export type ColumnId = "reference" | "status" | "assignee" | "expiry" | "createdAt" | "lastActivityAt" | `field:${string}`;
+export type ColumnId = "reference" | "status" | "assignee" | "due" | "createdAt" | "lastActivityAt" | `field:${string}`;
 
 export interface ColumnDef {
   id: ColumnId;
@@ -69,7 +69,7 @@ export const NATIVE_COLUMNS: ColumnDef[] = [
   { id: "reference", label: "Référence", definition: "Référence unique du dossier. Cliquez pour l'ouvrir.", sortable: true },
   { id: "status", label: "Statut", definition: "Étape du dossier dans le traitement, selon les statuts définis par l'analyse.", sortable: true },
   { id: "assignee", label: "Affecté à", definition: "Instructeur responsable du dossier. Modifiable directement dans la ligne.", sortable: true },
-  { id: "expiry", label: "Péremption", definition: "Date limite de traitement. La couleur indique le temps restant, selon les seuils de l'analyse.", sortable: true },
+  { id: "due", label: "Échéance", definition: "Date limite de traitement. La couleur indique le temps restant, selon les seuils de l'analyse.", sortable: true },
   { id: "createdAt", label: "Créé le", definition: "Date d'arrivée du dossier dans l'application.", sortable: true },
   { id: "lastActivityAt", label: "Dernière activité", definition: "Dernière action enregistrée sur le dossier (consultation exclue).", sortable: true },
 ];
@@ -82,7 +82,7 @@ export interface TrackingFilters {
   statusId: string;
   /** « me » = moi, « none » = non affecté, sinon identifiant d'utilisateur. */
   assignee: string;
-  /** « expired », « 7 », « 30 » (jours restants au plus), « none » (sans date). */
+  /** « overdue », « 7 », « 30 » (jours restants au plus), « none » (sans date). */
   due: string;
   /** « restricted » ou « analyse » (visibilité du dossier, #177) ; vide = tous. */
   access: string;
