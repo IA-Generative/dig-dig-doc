@@ -1,7 +1,8 @@
 import asyncio
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +39,7 @@ from app.models.dossier import (
     SuggestionStatus,
     TextExtractionStatus,
 )
+from app.models.dossier_access import DossierGroupAccess, Visibility
 from app.models.dossier_analysis import AnalysisElement, AnalysisElementVersion
 from app.models.dossier_event import DossierEventType
 from app.models.execution_log import ExecutionLog, ExecutionLogLevel
@@ -56,6 +58,7 @@ from app.models.summary import (
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_event_repository import DossierEventRepository
+from app.services.dossier_access import visible_clause
 from app.services.due_date import today_in_paris
 from app.services.prediction_validation import record_validation
 
@@ -67,6 +70,10 @@ def _validations_load(parent, *, chained: bool = False):
     déjà le chargement de ses éléments d'analyse."""
     elements = parent if chained else parent.selectinload(DocumentPrediction.analysis_elements)
     return elements.selectinload(AnalysisElement.versions).selectinload(AnalysisElementVersion.bounding_box)
+
+
+if TYPE_CHECKING:
+    from app.core.security.factory import RequestContext
 
 
 class DossierRepository:
@@ -110,6 +117,7 @@ class DossierRepository:
         due: str | None = None,
         assignee: str | None = None,
         sort: str = "created_at",
+        user: "RequestContext | None" = None,
     ) -> tuple[Sequence[Dossier], int]:
         """Liste paginée, du plus récent au plus ancien par défaut.
 
@@ -122,6 +130,8 @@ class DossierRepository:
         - ``sort="due"`` : échéance la plus proche d'abord (sans échéance en dernier).
         """
         filters = [Dossier.workflow_status_id == workflow_status_id] if workflow_status_id else []
+        if user is not None:
+            filters.append(visible_clause(user.is_admin, user.groups))
         filters += self._due_filters(due)
         if assignee == "none":
             filters.append(Dossier.assignee_id.is_(None))
@@ -154,13 +164,29 @@ class DossierRepository:
         days = int(due)  # « 7 » ou « 30 » : valeurs contrôlées par la route
         return [open_dossier, Dossier.due_at >= today, Dossier.due_at <= today + timedelta(days=days)]
 
-    async def get(self, dossier_id: uuid.UUID) -> Dossier | None:
-        result = await self.db.execute(self._base_query().where(Dossier.id == dossier_id))
+    async def get(self, dossier_id: uuid.UUID, user: "RequestContext | None" = None) -> Dossier | None:
+        """Le dossier, ou ``None`` s'il n'existe pas **ou n'est pas visible de ``user``** (issue #177 : même réponse,
+        pour ne pas révéler l'existence d'un dossier restreint). Sans ``user`` : appel interne, pas de filtre."""
+        query = self._base_query().where(Dossier.id == dossier_id)
+        if user is not None:
+            query = query.where(visible_clause(user.is_admin, user.groups))
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def create(self, *, name: str, analyse: Analyse | None = None, actor=None) -> Dossier:
+    async def create(
+        self,
+        *,
+        name: str,
+        analyse: Analyse | None = None,
+        actor=None,
+        visibility: Visibility = Visibility.ANALYSE,
+        group_paths: Collection[str] = (),
+    ) -> Dossier:
+        """Crée le dossier. ``visibility`` « analyse » par défaut (appels programmatiques : MCP, runs éphémères) ;
+        la route des utilisateurs crée des dossiers restreints, avec leurs groupes (issue #177)."""
         dossier = Dossier(
             name=name,
+            visibility=visibility.value,
             analyse_id=analyse.id if analyse else None,
             analyse_version=self._analyse_repository.get_version_label(analyse) if analyse else "v1",
             status=DossierStatus.EN_ATTENTE,
@@ -170,12 +196,20 @@ class DossierRepository:
         )
         self.db.add(dossier)
         await self.db.flush()  # donne son identifiant au dossier, que l'événement référence
+        for path in sorted(set(group_paths)):
+            self.db.add(
+                DossierGroupAccess(
+                    dossier_id=dossier.id, keycloak_group=path, granted_by=getattr(actor, "user_id", None)
+                )
+            )
         self.events.add(
             dossier.id,
             DossierEventType.CREATED,
             actor,
             {
                 "analyse_id": str(analyse.id) if analyse else None,
+                "visibility": visibility.value,
+                **({"groups": sorted(set(group_paths))} if group_paths else {}),
                 **({"due_at": dossier.due_at.isoformat()} if dossier.due_at else {}),
             },
         )
@@ -219,7 +253,7 @@ class DossierRepository:
             await self.db.commit()
         return changed
 
-    def _apply_assignee(self, dossier: Dossier, assignee: AppUser | None, actor) -> bool:
+    def _apply_assignee(self, dossier: Dossier, assignee: AppUser | None, actor, reason: str | None = None) -> bool:
         previous = dossier.assignee
         if (previous.user_id if previous else None) == (assignee.user_id if assignee else None):
             return False
@@ -227,7 +261,11 @@ class DossierRepository:
             dossier.id,
             DossierEventType.ASSIGNEE_CHANGED,
             actor,
-            {"from": self._person_ref(previous), "to": self._person_ref(assignee)},
+            {
+                "from": self._person_ref(previous),
+                "to": self._person_ref(assignee),
+                **({"reason": reason} if reason else {}),
+            },
         )
         dossier.assignee_id = assignee.user_id if assignee else None
         dossier.assignee = assignee
@@ -238,8 +276,11 @@ class DossierRepository:
     def _person_ref(person: AppUser | None) -> dict | None:
         return {"id": person.user_id, "name": person.name} if person else None
 
-    async def get_many(self, dossier_ids: Sequence[uuid.UUID]) -> list[Dossier]:
-        result = await self.db.execute(self._base_query().where(Dossier.id.in_(dossier_ids)))
+    async def get_many(self, dossier_ids: Sequence[uuid.UUID], user: "RequestContext | None" = None) -> list[Dossier]:
+        query = self._base_query().where(Dossier.id.in_(dossier_ids))
+        if user is not None:
+            query = query.where(visible_clause(user.is_admin, user.groups))
+        result = await self.db.execute(query)
         return list(result.scalars().all())
 
     def _initial_status_id(self, analyse: Analyse | None) -> uuid.UUID | None:

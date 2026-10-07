@@ -22,12 +22,24 @@ class UserDirectoryRepository:
         self.db = db
 
     async def touch(self, user: "RequestContext") -> None:
-        """Enregistre ou met à jour la personne connectée (nom, e-mail, dernière connexion)."""
-        statement = insert(AppUser).values(user_id=user.user_id, name=display_name(user), email=user.email or "")
+        """Enregistre ou met à jour la personne connectée (nom, e-mail, groupes, rôle, dernière connexion)."""
+        statement = insert(AppUser).values(
+            user_id=user.user_id,
+            name=display_name(user),
+            email=user.email or "",
+            groups=list(user.groups),
+            is_admin=user.is_admin,
+        )
         await self.db.execute(
             statement.on_conflict_do_update(
                 index_elements=[AppUser.user_id],
-                set_={"name": statement.excluded.name, "email": statement.excluded.email, "last_seen_at": func.now()},
+                set_={
+                    "name": statement.excluded.name,
+                    "email": statement.excluded.email,
+                    "groups": statement.excluded.groups,
+                    "is_admin": statement.excluded.is_admin,
+                    "last_seen_at": func.now(),
+                },
             )
         )
         await self.db.commit()

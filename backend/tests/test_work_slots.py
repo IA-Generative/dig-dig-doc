@@ -19,6 +19,7 @@ def _person(suffix: str) -> RequestContext:
         is_admin=False,
         first_name="Créneau",
         last_name=suffix,
+        groups=["/dev-tests"],
     )
 
 

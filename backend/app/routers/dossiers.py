@@ -34,9 +34,11 @@ from app.models.analyse import Analyse
 from app.models.app_user import AppUser
 from app.models.conversation import Message, MessageRole
 from app.models.dossier import Dossier, DossierStatus, TextExtractionStatus
+from app.models.dossier_access import Visibility
 from app.models.dossier_event import DossierEventType
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.analysis_collaboration_repository import ElementLockedError
+from app.repositories.dossier_access_repository import DossierAccessRepository
 from app.repositories.dossier_event_repository import EventActor
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.user_directory_repository import UserDirectoryRepository
@@ -48,10 +50,14 @@ from app.schemas.dossier import (
     ConversationModelUpdate,
     ConversationOut,
     DocumentPageViewOut,
+    DossierAccessChangeOut,
+    DossierAccessOut,
+    DossierAccessUpdate,
     DossierAssignIn,
     DossierCreate,
     DossierDocumentLabelIn,
     DossierDocumentOut,
+    DossierGroupOut,
     DossierOut,
     DueAtUpdate,
     FeedbackIn,
@@ -68,8 +74,12 @@ from app.services.prediction_validation import AnalysisFrozenError
 router = APIRouter(prefix="/dossiers", tags=["Dossiers"], dependencies=[Depends(get_current_user)])
 
 
-async def _get_or_404(repository: DossierRepository, dossier_id: uuid.UUID) -> Dossier:
-    dossier = await repository.get(dossier_id)
+async def _get_or_404(
+    repository: DossierRepository, dossier_id: uuid.UUID, user: RequestContext | None = None
+) -> Dossier:
+    """Le dossier, ou 404. Avec ``user`` : 404 aussi s'il n'est pas visible de cette personne (issue #177), pour ne
+    pas révéler l'existence d'un dossier restreint. Les routes qui n'ont pas encore ce filtre sont à brancher."""
+    dossier = await repository.get(dossier_id, user)
     if dossier is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dossier introuvable")
     return dossier
@@ -110,15 +120,50 @@ async def list_dossiers(
         due=due,
         assignee=user.user_id if assignee == "me" else assignee,
         sort=sort,
+        user=user,
     )
     return Page.of(list(dossiers), total=total, page=page, page_size=page_size)
 
 
+def _creation_access(body: DossierCreate, user: RequestContext) -> tuple[Visibility, list[str]]:
+    """Accès d'un dossier créé par une personne (issue #177) : **restreint par défaut**, aux groupes qu'elle choisit
+    parmi **les siens** (à défaut, tous les siens). Un dossier restreint a au moins un groupe : le créateur n'a
+    aucun droit propre, il n'y accède que par eux."""
+    visibility = Visibility(body.visibility or Visibility.RESTRICTED.value)
+    mine = list(user.groups)
+    paths = list(dict.fromkeys(body.group_paths if body.group_paths is not None else mine))
+    # Un dossier « selon l'analyse » n'a pas de groupe : ceux qu'on enverrait sont ignorés.
+    foreign = [p for p in paths if p not in mine] if visibility is Visibility.RESTRICTED else []
+    if foreign:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "group_not_yours",
+                "message": "On ne peut associer que ses propres groupes.",
+                "groups": foreign,
+            },
+        )
+    if visibility is Visibility.RESTRICTED and not paths:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "groups_required",
+                "message": "Un dossier restreint a besoin d'au moins un groupe : choisissez-en un parmi les vôtres.",
+            },
+        )
+    return visibility, paths if visibility is Visibility.RESTRICTED else []
+
+
 async def create_dossier_for(
-    body: DossierCreate, db: AsyncSession, actor: "RequestContext | EventActor | None" = None
+    body: DossierCreate,
+    db: AsyncSession,
+    actor: "RequestContext | EventActor | None" = None,
+    visibility: Visibility = Visibility.ANALYSE,
+    group_paths: list[str] | None = None,
 ) -> Dossier:
     """Crée un dossier et le journalise (#169). Partagé avec l'agent assistant (MCP) et la route interne, qui
-    n'ont pas de session utilisateur : ``actor`` vaut alors l'identité du jeton, ou None."""
+    n'ont pas de session utilisateur : ``actor`` vaut alors l'identité du jeton, ou None, et le dossier est
+    « selon l'analyse ». La route des utilisateurs passe l'accès décidé par `_creation_access`."""
     analyse: Analyse | None = None
     if body.analyse_id is not None:
         analyse = await AnalyseRepository(db).get(body.analyse_id)
@@ -126,7 +171,9 @@ async def create_dossier_for(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Analyse introuvable")
 
     dossier_repository = DossierRepository(db)
-    dossier = await dossier_repository.create(name=body.name, analyse=analyse, actor=actor)
+    dossier = await dossier_repository.create(
+        name=body.name, analyse=analyse, actor=actor, visibility=visibility, group_paths=group_paths or ()
+    )
     return await _get_or_404(dossier_repository, dossier.id)
 
 
@@ -136,7 +183,8 @@ async def create_dossier(
     db: Annotated[AsyncSession, Depends(get_db)],
     user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> Dossier:
-    return await create_dossier_for(body, db, user)
+    visibility, group_paths = _creation_access(body, user)
+    return await create_dossier_for(body, db, user, visibility, group_paths)
 
 
 @router.put("/{dossier_id}/workflow-status", response_model=DossierOut)
@@ -178,6 +226,24 @@ async def _known_person(db: AsyncSession, person_id: str | None) -> AppUser | No
     return person
 
 
+async def _require_access_for(db: AsyncSession, person: AppUser | None, dossiers: list[Dossier]) -> None:
+    """On n'affecte qu'une personne qui a **déjà accès** au dossier (issue #177) ; tout ou rien, avec la liste des
+    dossiers qu'elle ne peut pas voir. Son accès est celui de sa dernière connexion (annuaire)."""
+    if person is None:
+        return
+    access = DossierAccessRepository(db)
+    refused = [str(d.id) for d in dossiers if not await access.person_can_view(person, d)]
+    if refused:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "assignee_has_no_access",
+                "message": "Cette personne n'a pas accès à ce dossier.",
+                "dossier_ids": refused,
+            },
+        )
+
+
 # Les routes statiques (`bulk-assignee`) restent avant les routes `/{dossier_id}`.
 @router.put("/bulk-assignee", response_model=BulkAssigneeResult)
 async def assign_dossiers(
@@ -190,13 +256,14 @@ async def assign_dossiers(
     repository = DossierRepository(db)
     person = await _known_person(db, body.assignee_id)
     wanted = list(dict.fromkeys(body.dossier_ids))
-    dossiers = await repository.get_many(wanted)
+    dossiers = await repository.get_many(wanted, user)
     missing = sorted(str(i) for i in set(wanted) - {d.id for d in dossiers})
     if missing:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "dossiers_not_found", "message": "Dossiers introuvables.", "dossier_ids": missing},
         )
+    await _require_access_for(db, person, dossiers)
     updated = await repository.assign_many(dossiers, person, actor=user)
     return BulkAssigneeResult(updated=updated, unchanged=len(dossiers) - updated)
 
@@ -211,9 +278,75 @@ async def update_assignee(
     """Affecte le dossier à une personne de l'annuaire ; ``null`` le désaffecte. Le changement est tracé dans le
     journal (#169)."""
     repository = DossierRepository(db)
-    dossier = await _get_or_404(repository, dossier_id)
-    await repository.set_assignee(dossier, await _known_person(db, body.assignee_id), actor=user)
-    return await _get_or_404(repository, dossier_id)
+    dossier = await _get_or_404(repository, dossier_id, user)
+    person = await _known_person(db, body.assignee_id)
+    await _require_access_for(db, person, [dossier])
+    await repository.set_assignee(dossier, person, actor=user)
+    return await _get_or_404(repository, dossier_id, user)
+
+
+def _access_out(
+    dossier: Dossier, groups: list, user: RequestContext, assignee_unassigned: bool | None = None
+) -> DossierAccessChangeOut:
+    return DossierAccessChangeOut(
+        visibility=dossier.visibility,
+        groups=[DossierGroupOut.model_validate(g) for g in groups],
+        can_edit=user.is_admin,
+        available_groups=sorted(user.groups),
+        assignee_unassigned=bool(assignee_unassigned),
+    )
+
+
+@router.get("/{dossier_id}/access", response_model=DossierAccessOut)
+async def get_dossier_access(
+    dossier_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> DossierAccessChangeOut:
+    """Visibilité et groupes du dossier. Lisible par ceux qui voient le dossier (404 sinon)."""
+    dossier = await _get_or_404(DossierRepository(db), dossier_id, user)
+    return _access_out(dossier, list(await DossierAccessRepository(db).groups_of(dossier_id)), user)
+
+
+@router.put("/{dossier_id}/access", response_model=DossierAccessChangeOut)
+async def update_dossier_access(
+    dossier_id: uuid.UUID,
+    body: DossierAccessUpdate,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> DossierAccessChangeOut:
+    """Change la visibilité et les groupes du dossier. **Réservé aux administrateurs** (le créateur n'a aucun droit
+    propre) ; un groupe ajouté doit faire partie des groupes de la personne qui modifie ; un dossier restreint garde
+    au moins un groupe. Une personne affectée qui perd ainsi l'accès est désaffectée (tracé dans le journal)."""
+    dossier = await _get_or_404(DossierRepository(db), dossier_id, user)
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Seuls les administrateurs modifient l'accès d'un dossier."
+        )
+    access = DossierAccessRepository(db)
+    visibility = Visibility(body.visibility)
+    wanted = list(dict.fromkeys(body.group_paths))
+    current = set(await access.group_paths(dossier_id))
+    foreign = [p for p in wanted if p not in current and p not in user.groups]
+    if foreign:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "group_not_yours",
+                "message": "On ne peut associer que ses propres groupes.",
+                "groups": foreign,
+            },
+        )
+    if visibility is Visibility.RESTRICTED and not wanted:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "groups_required", "message": "Un dossier restreint a besoin d'au moins un groupe."},
+        )
+    change = await access.update(
+        dossier, visibility=visibility, group_paths=wanted, actor=user, granted_by=user.user_id
+    )
+    refreshed = await _get_or_404(DossierRepository(db), dossier_id, user)
+    return _access_out(refreshed, list(await access.groups_of(dossier_id)), user, change.get("assignee_unassigned"))
 
 
 @router.put("/{dossier_id}/due-at", response_model=DossierOut)
@@ -238,7 +371,7 @@ async def get_dossier(
     user: Annotated[RequestContext, Depends(get_current_user)],
 ) -> Dossier:
     repository = DossierRepository(db)
-    dossier = await _get_or_404(repository, dossier_id)
+    dossier = await _get_or_404(repository, dossier_id, user)
     # Consultation tracée dans le journal (#169), une fois par utilisateur dans la fenêtre de dédoublonnage.
     await repository.events.record_consultation(dossier_id, user)
     return dossier

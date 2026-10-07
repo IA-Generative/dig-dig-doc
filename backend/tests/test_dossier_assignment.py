@@ -11,7 +11,13 @@ from app.main import app
 
 def _person(user_id: str, first: str, last: str) -> RequestContext:
     return RequestContext(
-        user_id=user_id, email=f"{user_id}@example.org", roles=[], is_admin=False, first_name=first, last_name=last
+        user_id=user_id,
+        email=f"{user_id}@example.org",
+        roles=[],
+        is_admin=False,
+        first_name=first,
+        last_name=last,
+        groups=["/dev-tests"],
     )
 
 

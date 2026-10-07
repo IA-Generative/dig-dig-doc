@@ -23,6 +23,7 @@ def _person(suffix: str, *, admin: bool = False) -> RequestContext:
         is_admin=admin,
         first_name="Tableau",
         last_name=suffix,
+        groups=["/dev-tests"],
     )
 
 
