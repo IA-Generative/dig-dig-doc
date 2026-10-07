@@ -58,6 +58,7 @@ from app.models.summary import (
 from app.repositories.analyse_repository import AnalyseRepository
 from app.repositories.dossier_analysis_repository import DossierAnalysisRepository
 from app.repositories.dossier_event_repository import DossierEventRepository
+from app.services.custom_fields import default_values
 from app.services.dossier_access import visible_clause
 from app.services.due_date import today_in_paris
 from app.services.prediction_validation import record_validation
@@ -193,6 +194,8 @@ class DossierRepository:
             # Statut initial de l'analyse (issue #168) ; rien pour un dossier « à ranger ».
             workflow_status_id=self._initial_status_id(analyse),
             due_at=self._default_due_at(analyse),
+            # Valeur par défaut de chaque colonne personnalisée de l'analyse (#173).
+            custom_values=default_values(analyse.custom_fields) if analyse else {},
         )
         self.db.add(dossier)
         await self.db.flush()  # donne son identifiant au dossier, que l'événement référence
@@ -223,6 +226,27 @@ class DossierRepository:
         if analyse is None or analyse.default_due_days is None:
             return None
         return today_in_paris() + timedelta(days=analyse.default_due_days)
+
+    async def set_custom_value(self, dossier: Dossier, field: dict, value, actor=None) -> bool:
+        """Pose la valeur d'une colonne personnalisée (``None`` l'efface) et la trace dans le journal (#169) :
+        ancienne et nouvelle valeur, auteur. Sans changement, rien n'est écrit ; renvoie si la valeur a changé."""
+        current = dict(dossier.custom_values or {})
+        previous = current.get(field["id"])
+        if previous == value and type(previous) is type(value):
+            return False
+        if value is None:
+            current.pop(field["id"], None)
+        else:
+            current[field["id"]] = value
+        dossier.custom_values = current
+        self.events.add(
+            dossier.id,
+            DossierEventType.CUSTOM_VALUE_CHANGED,
+            actor,
+            {"field": {"id": field["id"], "name": field["name"]}, "from": previous, "to": value},
+        )
+        await self.db.commit()
+        return True
 
     async def set_due_at(self, dossier: Dossier, due_at: date | None, actor=None, reason: str | None = None) -> None:
         """Change l'échéance du dossier (ou la supprime avec ``None``) et trace le changement dans le journal (#169)."""
@@ -1122,6 +1146,9 @@ class DossierRepository:
         # Le dossier reçoit le statut initial de l'analyse qui l'accueille (issue #168).
         dossier.workflow_status_id = self._initial_status_id(analyse)
         dossier.closed_at = None
+        # Les colonnes personnalisées de l'analyse qui l'accueille prennent leur valeur par défaut (#173), sans écraser
+        # une valeur déjà saisie.
+        dossier.custom_values = {**default_values(analyse.custom_fields), **(dossier.custom_values or {})}
         # Un dossier sans échéance prend celle de l'analyse qui l'accueille, si elle en a une par défaut.
         default_due = self._default_due_at(analyse)
         if dossier.due_at is None and default_due is not None:

@@ -1,10 +1,10 @@
 import { apiFetch } from "@/utils/api";
-import type { Assignee, ColumnId, TrackingFilters, TrackingListRow, TrackingSort } from "@/types/tracking";
+import type { Assignee, ColumnId, CustomValue, TrackingFilters, TrackingListRow, TrackingSort } from "@/types/tracking";
 
 // Tableau de suivi branché sur l'API (issue #173) : `GET /api/tracking` pour la liste (filtres, recherche, tri et
 // pagination côté serveur), `PUT /api/dossiers/bulk-assignee` pour l'affectation, `GET /api/users` pour les
-// personnes proposées. Les colonnes personnalisées n'ont pas encore d'API : elles restent sur les données simulées
-// (useTracking) ou masquées.
+// personnes proposées, `PUT /api/dossiers/{id}/custom-values/{champ}` pour les colonnes personnalisées (valeurs,
+// filtres et tri faits par le serveur).
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,7 +20,7 @@ const SORT_KEYS: Partial<Record<ColumnId, string>> = {
   lastActivityAt: "last_activity_at",
 };
 
-/** Paramètres de la requête. Un filtre que le serveur ne connaît pas (champs personnalisés) est ignoré. */
+/** Paramètres de la requête. */
 export function toQuery(filters: TrackingFilters, sort: TrackingSort, page: number, pageSize: number): URLSearchParams {
   const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
   for (const id of filters.analyseIds) query.append("analyse_id", id);
@@ -31,7 +31,17 @@ export function toQuery(filters: TrackingFilters, sort: TrackingSort, page: numb
   if (filters.due) query.set("due", filters.due);
   if (filters.search.trim()) query.set("search", filters.search.trim());
   if (filters.access) query.set("access", filters.access);
-  query.set("sort", SORT_KEYS[sort.key] ?? "created_at");
+  // Colonnes personnalisées (#173) : le serveur les filtre et les trie pour une seule analyse à la fois.
+  const fieldFilters = Object.fromEntries(
+    Object.entries(filters.fieldFilters).filter(([, f]) => (typeof f === "string" ? f !== "" : f.min !== "" || f.max !== "")),
+  );
+  if (Object.keys(fieldFilters).length) query.set("field_filters", JSON.stringify(fieldFilters));
+  if (sort.key.startsWith("field:")) {
+    query.set("sort", "field");
+    query.set("sort_field", sort.key.slice("field:".length));
+  } else {
+    query.set("sort", SORT_KEYS[sort.key] ?? "created_at");
+  }
   query.set("direction", sort.dir);
   return query;
 }
@@ -51,7 +61,7 @@ function mapRow(api: any): TrackingListRow {
     due: api.due ? { level: api.due.level, daysLeft: api.due.days_left, color: api.due.color ?? undefined } : null,
     createdAt: api.created_at,
     lastActivityAt: api.last_activity_at,
-    values: {},
+    values: api.values ?? {},
   };
 }
 
@@ -91,11 +101,19 @@ export function useTrackingApi() {
     });
   }
 
+  /** Pose la valeur d'une colonne personnalisée ; le serveur la valide selon le type (422 avec le message à afficher). */
+  async function setValue(dossierId: string, fieldId: string, value: CustomValue): Promise<void> {
+    await apiFetch(`/api/dossiers/${dossierId}/custom-values/${fieldId}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
   /** Personnes de l'annuaire proposées à l'affectation. */
   async function fetchAssignees(): Promise<Assignee[]> {
     const data = await apiFetch<{ id: string; name: string }[]>("/api/users?limit=100");
     return data.map((p) => ({ id: p.id, name: p.name }));
   }
 
-  return { query, queryAll, assign, fetchAssignees };
+  return { query, queryAll, assign, setValue, fetchAssignees };
 }

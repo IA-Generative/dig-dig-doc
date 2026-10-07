@@ -104,6 +104,9 @@ class Dossier(UUIDMixin, TimestampMixin, Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Date d'échéance (issue #172) : un jour du calendrier, pas un instant. NULL = pas d'échéance.
     due_at: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    # Valeurs des colonnes personnalisées du suivi (issue #173) : {identifiant du champ: valeur}. Les définitions sont
+    # sur l'analyse ; la valeur d'un champ supprimé reste ici, récupérable si le champ revient.
+    custom_values: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     # Personne responsable du dossier (issue #173) : une seule ; NULL = non affecté. Doit figurer dans
     # l'annuaire local (app_users) ; SET NULL si la ligne disparaît, l'historique garde le nom.
     assignee_id: Mapped[str | None] = mapped_column(

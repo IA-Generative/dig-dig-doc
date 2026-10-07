@@ -1,8 +1,8 @@
 import type { DueInfo } from "@/types/dossier";
 
 // Tableau de suivi des dossiers d'une analyse (issue #173).
-// La liste vient de l'API (useTrackingApi). Les colonnes personnalisées, les vues et l'accès par groupe
-// restent simulés (useTracking) tant que leur backend n'existe pas.
+// La liste, les colonnes personnalisées et l'accès viennent de l'API (useTrackingApi, useAnalyses). Les vues
+// enregistrées et les colonnes choisies restent dans le navigateur.
 
 export type FieldType = "text" | "number" | "amount" | "date" | "boolean" | "choice";
 
@@ -32,16 +32,6 @@ export interface CustomField {
   currency: string;
 }
 
-export interface TrackingStatus {
-  id: string;
-  label: string;
-  /** Variante du badge DSFR. */
-  tone: "new" | "info" | "success" | "warning" | "error";
-  final: boolean;
-  /** Catégorie commune à toutes les analyses : sert au filtre de la vue transversale (statuts propres à chaque analyse). */
-  category: StatusCategory;
-}
-
 export type StatusCategory = "initial" | "progress" | "final";
 
 export const STATUS_CATEGORY_LABELS: Record<StatusCategory, string> = {
@@ -51,11 +41,6 @@ export const STATUS_CATEGORY_LABELS: Record<StatusCategory, string> = {
 };
 
 export interface Assignee {
-  id: string;
-  name: string;
-}
-
-export interface MockAnalyse {
   id: string;
   name: string;
 }
@@ -76,21 +61,7 @@ export interface TrackingListRow {
   due: DueInfo | null;
   createdAt: string;
   lastActivityAt: string;
-  /** Valeurs des colonnes personnalisées : pas encore portées par l'API, toujours vide. */
-  values: Record<string, CustomValue>;
-}
-
-export interface TrackingRow {
-  id: string;
-  reference: string;
-  /** Nom du dossier (le tableau de bord l'affiche aussi). */
-  name: string;
-  analyseId: string;
-  statusId: string;
-  assigneeId: string | null;
-  dueAt: string | null;
-  createdAt: string;
-  lastActivityAt: string;
+  /** Valeurs des colonnes personnalisées de l'analyse : {identifiant du champ: valeur}. */
   values: Record<string, CustomValue>;
 }
 

@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.analyse import AgentTool, EntityType
 from app.models.analyse_share import AnalyseShareKind
+from app.services.custom_fields import MAX_FIELDS_PER_ANALYSE, validate_value
 
 
 class Version[T](BaseModel):
@@ -102,6 +104,75 @@ class DueSettingsOut(DueSettingsIn):
     pass
 
 
+FIELD_ID_PATTERN = r"^f_[a-z0-9]{4,32}$"
+
+
+class CustomFieldIn(BaseModel):
+    """Définition d'une colonne personnalisée du suivi (issue #173). ``id`` absent : un nouveau champ, le serveur
+    lui donne un identifiant stable (les valeurs des dossiers s'y rattachent)."""
+
+    id: str | None = Field(default=None, pattern=FIELD_ID_PATTERN)
+    name: str = Field(min_length=1, max_length=80)
+    # Que représente le champ, comment le remplir : affichée en aide dans l'en-tête de la colonne.
+    definition: str = Field(default="", max_length=500)
+    type: Literal["text", "number", "amount", "date", "boolean", "choice"]
+    required: bool = False
+    default_value: Any = None
+    choices: list[str] = Field(default_factory=list, max_length=50)
+    currency: Literal["EUR", "USD", "GBP"] = "EUR"
+
+    @field_validator("name")
+    @classmethod
+    def _strip_name(cls, name: str) -> str:
+        name = name.strip()
+        if not name:
+            raise ValueError("Chaque champ doit avoir un nom.")
+        return name
+
+    @field_validator("choices")
+    @classmethod
+    def _clean_choices(cls, choices: list[str]) -> list[str]:
+        cleaned = [choice.strip() for choice in choices if choice.strip()]
+        if any(len(choice) > 80 for choice in cleaned):
+            raise ValueError("Un choix est limité à 80 caractères.")
+        if len(set(cleaned)) != len(cleaned):
+            raise ValueError("Deux choix ne peuvent pas être identiques.")
+        return cleaned
+
+    @model_validator(mode="after")
+    def _coherent(self) -> "CustomFieldIn":
+        if self.type == "choice" and not self.choices:
+            raise ValueError(f"« {self.name} » : ajoutez au moins un choix.")
+        if self.type != "choice":
+            self.choices = []
+        # La valeur par défaut doit convenir au type (jamais « obligatoire » ici : le défaut peut être vide).
+        error = validate_value({**self.model_dump(), "required": False}, self.default_value)
+        if error:
+            raise ValueError(f"« {self.name} », valeur par défaut : {error}")
+        return self
+
+
+class CustomFieldOut(CustomFieldIn):
+    id: str
+
+
+class CustomFieldsUpdate(BaseModel):
+    fields: list[CustomFieldIn] = Field(max_length=MAX_FIELDS_PER_ANALYSE)
+    # Les champs supprimés gardent leurs valeurs (récupérables si le champ revient, par restauration) ; `true` les
+    # supprime définitivement de tous les dossiers.
+    purge_removed: bool = False
+
+    @model_validator(mode="after")
+    def _unique(self) -> "CustomFieldsUpdate":
+        names = [field.name.lower() for field in self.fields]
+        if len(set(names)) != len(names):
+            raise ValueError("Deux champs ne peuvent pas porter le même nom.")
+        ids = [field.id for field in self.fields if field.id]
+        if len(set(ids)) != len(ids):
+            raise ValueError("Deux champs ne peuvent pas avoir le même identifiant.")
+        return self
+
+
 class ClassificationOut(BaseModel):
     prompt: str
     prompt_versions: list[Version[str]]
@@ -192,6 +263,9 @@ class AnalyseOut(BaseModel):
     # Échéance des dossiers (issue #172) : durée par défaut et seuils de couleur, avec leur historique.
     due_settings: DueSettingsOut | None = None
     due_settings_versions: list[Version[DueSettingsOut]] = []
+    # Colonnes personnalisées du suivi (issue #173) et leur historique.
+    custom_fields: list[CustomFieldOut] = []
+    custom_fields_versions: list[Version[list[CustomFieldOut]]] = []
     agents: list[AgentOut]
 
 

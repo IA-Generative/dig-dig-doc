@@ -68,6 +68,14 @@ export function describeEvent(event: DossierEvent, lookups: Lookups): EventDescr
           .join(" · "),
       };
     }
+    case "custom_value_changed": {
+      const show = (v: unknown) => (v === null || v === undefined || v === "" ? "(vide)" : v === true ? "Oui" : v === false ? "Non" : String(v));
+      return {
+        icon: "ri-table-line",
+        title: `« ${p.field?.name ?? "Colonne"} » modifiée`,
+        detail: `${show(p.from)} → ${show(p.to)}`,
+      };
+    }
     case "access_changed": {
       const parts: string[] = [];
       if (p.visibility) {

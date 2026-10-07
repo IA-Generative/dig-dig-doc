@@ -49,6 +49,7 @@ class VersionedField(enum.StrEnum):
     STATUSES = "statuses"
     # Échéance des dossiers de l'analyse (issue #172) : durée par défaut et seuils de couleur.
     DUE_SETTINGS = "due_settings"
+    CUSTOM_FIELDS = "custom_fields"
 
 
 class Analyse(UUIDMixin, TimestampMixin, Base):
@@ -65,6 +66,10 @@ class Analyse(UUIDMixin, TimestampMixin, Base):
     # automatique) et seuils de couleur {far_color, steps: [{days, color}], overdue_color}.
     default_due_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     due_thresholds: Mapped[dict] = mapped_column(JSONB, nullable=False, default=lambda: dict(DEFAULT_THRESHOLDS))
+
+    # Colonnes personnalisées du suivi (issue #173) : liste de définitions {id, name, definition, type, required,
+    # default_value, choices, currency}, versionnée (`VersionedField.CUSTOM_FIELDS`). Les valeurs sont sur le dossier.
+    custom_fields: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
 
     classification_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     extraction_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")

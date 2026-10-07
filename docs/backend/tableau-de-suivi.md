@@ -36,5 +36,6 @@ Aucun contenu de dossier (valeurs, textes, noms de fichiers) n'est renvoyé. Les
 ## Choix et limites
 
 - **Accès** : seuls les dossiers **visibles** de la personne sont listés, comptés et exportés ([accès](acces-aux-dossiers.md)).
-- **Pas encore** : recherche dans les colonnes personnalisées, filtres sur ces colonnes, vues enregistrées, préférences de colonnes, export CSV (étapes suivantes de #173).
+- **Colonnes personnalisées** : leurs valeurs, filtres, tri et recherche sont décrits dans [colonnes personnalisées](colonnes-personnalisees.md).
+- **Pas encore** : vues enregistrées et préférences de colonnes côté serveur (elles restent dans le navigateur), export CSV côté serveur.
 - Migration : `20261010_0900_a6b7c8d9e0f1_reference_des_dossiers.py` (testée en montée, descente et remontée sur des données existantes). Schéma : [`data-model.png`](data-model.png).

@@ -53,6 +53,8 @@ from app.schemas.dossier import (
     ChatEventOut,
     ConversationModelUpdate,
     ConversationOut,
+    CustomValueIn,
+    CustomValueOut,
     DocumentPageViewOut,
     DossierAccessChangeOut,
     DossierAccessOut,
@@ -73,6 +75,7 @@ from app.schemas.dossier import (
     WorkflowStatusUpdate,
 )
 from app.schemas.pagination import Page
+from app.services.custom_fields import normalize_value, validate_value
 from app.services.prediction_validation import AnalysisFrozenError
 
 router = APIRouter(
@@ -414,6 +417,33 @@ async def update_dossier_access(
         change.get("assignee_unassigned"),
         change.get("unassigned_person"),
     )
+
+
+@router.put("/{dossier_id}/custom-values/{field_id}", response_model=CustomValueOut)
+async def put_custom_value(
+    dossier_id: uuid.UUID,
+    field_id: str,
+    body: CustomValueIn,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
+) -> CustomValueOut:
+    """Pose la valeur d'une colonne personnalisée du suivi (issue #173). Elle est **validée selon le type** du champ
+    (422 avec le message à afficher dans la cellule) et tracée dans le journal : ancienne et nouvelle valeur, auteur.
+    ``null`` ou une chaîne vide l'efface, sauf si le champ est obligatoire."""
+    repository = DossierRepository(db)
+    dossier = await _get_or_404(repository, dossier_id, user)
+    analyse = await AnalyseRepository(db).get(dossier.analyse_id) if dossier.analyse_id else None
+    field = next((f for f in (analyse.custom_fields if analyse else []) if f["id"] == field_id), None)
+    if field is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Colonne introuvable pour ce dossier")
+    error = validate_value(field, body.value)
+    if error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail={"code": "invalid_value", "message": error}
+        )
+    value = normalize_value(body.value)
+    await repository.set_custom_value(dossier, field, value, actor=user)
+    return CustomValueOut(field_id=field_id, value=value)
 
 
 @router.put("/{dossier_id}/due-at", response_model=DossierOut)
