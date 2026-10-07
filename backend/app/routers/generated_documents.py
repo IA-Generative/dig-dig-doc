@@ -20,11 +20,13 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_db
 from app.models.document_draft import DraftStatus
 from app.models.dossier_analysis import AnalysisRevision
+from app.models.dossier_event import DossierEventType
 from app.repositories.document_draft_repository import (
     DocumentDraftRepository,
     generation_in_progress,
     template_definitions,
 )
+from app.repositories.dossier_event_repository import DossierEventRepository
 from app.repositories.dossier_repository import DossierRepository
 from app.repositories.generated_document_repository import GeneratedDocumentRepository, document_out
 from app.schemas.generated_document import GeneratedDocumentOut, GenerateDocumentIn
@@ -149,6 +151,20 @@ async def generate_document(
         await db.rollback()
         await _discard(keys.get("odt_key"), keys.get("pdf_key"))
         raise
+    # Journal du dossier (#169) : ni valeurs de champs ni nom de fichier, seulement des identifiants.
+    events = DossierEventRepository(db)
+    events.add(
+        dossier_id,
+        DossierEventType.DOCUMENT_GENERATED,
+        user,
+        {
+            "document_id": str(document.id),
+            "version_number": number,
+            "template_name": template_version.name,
+            "incomplete": bool(incomplete),
+        },
+    )
+    await db.commit()
     return document_out(document)
 
 
@@ -183,6 +199,7 @@ async def download_generated_document(
     dossier_id: uuid.UUID,
     document_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[RequestContext, Depends(get_current_user)],
     format: Annotated[Literal["odt", "pdf"], Query()] = "odt",
     inline: Annotated[
         bool, Query(description="Afficher dans le navigateur (aperçu PDF) au lieu de télécharger")
@@ -195,6 +212,15 @@ async def download_generated_document(
     if key is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ce format n'est pas disponible")
     data, _ = await asyncio.to_thread(s3_connector.download, key)
+    if not inline:
+        # Un aperçu dans le navigateur n'est pas un téléchargement : seul l'export est tracé (#169).
+        DossierEventRepository(db).add(
+            dossier_id,
+            DossierEventType.DOCUMENT_DOWNLOADED,
+            user,
+            {"document_id": str(document.id), "format": format},
+        )
+        await db.commit()
     name = f"{document.file_name}.{format}"
     disposition = "inline" if inline and format == "pdf" else "attachment"
     ascii_name = name.encode("ascii", "ignore").decode() or "document"

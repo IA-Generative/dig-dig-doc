@@ -39,9 +39,8 @@ from app.routers.analyses import create_analyse as _create_analyse
 from app.routers.analyses import get_analyse as _get_analyse
 from app.routers.analyses import list_analyses as _list_analyses
 from app.routers.dossiers import _get_or_404 as _get_dossier_or_404
-from app.routers.dossiers import create_dossier as _create_dossier
-from app.routers.dossiers import get_dossier as _get_dossier
-from app.routers.dossiers import launch_dossier as _launch_dossier
+from app.routers.dossiers import create_dossier_for as _create_dossier
+from app.routers.dossiers import launch_dossier_for as _launch_dossier
 from app.routers.dossiers import list_dossiers as _list_dossiers
 from app.schemas.agent_conversation import (
     AgentChatEventIn,
@@ -152,7 +151,7 @@ async def list_agent_dossiers(
 
 @router.get("/dossiers/{dossier_id}", response_model=DossierOut)
 async def get_agent_dossier(dossier_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]) -> DossierOut:
-    return await _get_dossier(dossier_id, db)
+    return await _get_dossier_or_404(DossierRepository(db), dossier_id)
 
 
 @router.post("/dossiers", response_model=DossierOut, status_code=status.HTTP_201_CREATED)

@@ -384,3 +384,27 @@ def test_the_analysis_revision_is_written_at_draft_creation_and_assembly_values_
     assert fields["date"]["value"] is None and fields["version"]["value"] is None
     assert "date" not in setup["draft"]["completeness"]["missing"]
     assert "version" not in setup["draft"]["completeness"]["missing"]
+
+
+# --- Journal du dossier (issue #169) ---
+
+
+def _events_of(client: TestClient, dossier_id: str, type: str) -> list[dict]:
+    return client.get(f"/api/dossiers/{dossier_id}/events", params={"type": type, "page_size": 100}).json()["items"]
+
+
+def test_generation_and_download_are_recorded_in_the_dossier_journal(client: TestClient, setup: dict) -> None:
+    validate_all(client, setup)
+    document = generate(client, setup).json()
+
+    (generated,) = _events_of(client, setup["dossier_id"], "document_generated")
+    assert generated["payload"]["document_id"] == document["id"]
+    assert generated["payload"]["version_number"] == 1 and generated["payload"]["incomplete"] is False
+    assert "Dupont" not in str(generated)  # aucune valeur de champ dans le journal
+
+    # Un aperçu dans le navigateur n'est pas un téléchargement ; un export l'est.
+    client.get(f"{setup['docs']}/{document['id']}/file", params={"format": "pdf", "inline": True})
+    assert _events_of(client, setup["dossier_id"], "document_downloaded") == []
+    client.get(f"{setup['docs']}/{document['id']}/file", params={"format": "pdf"})
+    (downloaded,) = _events_of(client, setup["dossier_id"], "document_downloaded")
+    assert downloaded["payload"] == {"document_id": document["id"], "format": "pdf"}

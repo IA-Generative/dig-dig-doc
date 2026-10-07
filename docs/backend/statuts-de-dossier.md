@@ -65,5 +65,5 @@ La migration `c2d3e4f5a6b7` crée la table, ajoute les deux colonnes, donne **le
 
 - Les transitions entre statuts sont **libres** (n'importe quel statut de l'analyse) : « transitions autorisées » reste une question ouverte de #167.
 - Comme les autres routes de configuration d'une analyse, celles-ci sont ouvertes à tout utilisateur connecté ; les restrictions de droits arriveront avec l'accès par groupe (#177) et les rôles (#178).
-- Le **journal d'événements** (#169) enregistrera les changements de statut quand il existera ; `DossierRepository.set_workflow_status` est le point d'accroche.
+- Les changements de statut, clôtures et réouvertures sont tracés dans le [journal du dossier](journal-du-dossier.md) (#169).
 - L'interface (configuration des statuts, pastille, filtre et tri dans la liste, changement de statut) est décrite dans [`statuts-de-dossier`](../frontend/statuts-de-dossier/README.md) (#170).

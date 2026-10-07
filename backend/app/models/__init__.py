@@ -67,6 +67,7 @@ from .dossier_analysis import (
     ElementVersionOrigin,
 )
 from .dossier_ephemere import DossierEphemere
+from .dossier_event import DossierEvent, DossierEventType
 from .dossier_note import DossierNote, DossierNoteVersion
 from .ephemeral_result import EphemeralResult
 from .execution_log import ExecutionLog, ExecutionLogLevel
@@ -91,6 +92,8 @@ __all__ = [
     "FieldOrigin",
     "FieldStatus",
     "DocumentTemplateVersion",
+    "DossierEvent",
+    "DossierEventType",
     "DossierNote",
     "DossierNoteVersion",
     "AnalysisProposal",
