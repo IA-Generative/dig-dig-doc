@@ -262,7 +262,7 @@ jobs:
       enabled: true
       types:
       - "post-install"
-      - "pre-upgrade"
+      - "post-upgrade"
       weight: 0
       deletePolicy: "before-hook-creation,hook-succeeded"
     image:
@@ -285,10 +285,15 @@ jobs:
     activeDeadlineSeconds: 900
     initContainers:
     - name: wait-for-postgres
-      # Same image as the cluster (already on the nodes). `pg_isready` checks that PostgreSQL
-      # accepts connections, not only that the port is open, and is polled every second.
-      image: ghcr.io/cloudnative-pg/postgresql:17.7
-      command: ["sh", "-c", "until pg_isready -h digdigdoc-pg-cluster-rw -p 5432 -t 2; do echo \"Waiting for PostgreSQL...\"; sleep 1; done"]
+      # Same image as the migration itself (Harbor, already pulled): no dependency on ghcr.io, which
+      # is unreachable from restricted environments and left the pod stuck in `PodInitializing`.
+      # Polls the TCP port every second; alembic then fails fast if PostgreSQL is not really ready.
+      image: "harbor.sdid.cpin.numerique-interieur.com/exploration/dig-dig-doc-backend:{{ .Chart.AppVersion }}"
+      imagePullPolicy: "IfNotPresent"
+      command:
+      - "python"
+      - "-c"
+      - "import socket,time\nwhile True:\n    try:\n        socket.create_connection(('digdigdoc-pg-cluster-rw', 5432), 2).close()\n        break\n    except OSError:\n        print('Waiting for PostgreSQL...', flush=True)\n        time.sleep(1)"
       securityContext:
         runAsUser: 10001
         allowPrivilegeEscalation: false
