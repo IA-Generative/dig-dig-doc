@@ -253,10 +253,24 @@ worker_async_api:
 
 jobs:
   migration:
+    # `pre-install` would run before the CNPG cluster exists, so the wait-for-postgres init
+    # container below could never succeed on a fresh install (deadlock until the Helm timeout).
+    # On install the migration therefore runs after the resources are created (`post-install`);
+    # on upgrade the cluster already exists, so it still runs first (`pre-upgrade`) and the new
+    # code never starts on an old schema.
+    hook:
+      enabled: true
+      types:
+      - "post-install"
+      - "pre-upgrade"
+      weight: 0
+      deletePolicy: "before-hook-creation,hook-succeeded"
     image:
       registry: "harbor.sdid.cpin.numerique-interieur.com"
       repository: "exploration/dig-dig-doc-backend"
-      pullPolicy: "Always"
+      # The tag defaults to the chart's appVersion (a fixed release), so the image does not need
+      # to be pulled again on every run.
+      pullPolicy: "IfNotPresent"
     command: ["alembic"]
     args: ["upgrade", "head"]
     envFrom:
@@ -265,10 +279,16 @@ jobs:
     serviceAccount:
       enabled: true
       create: true
+    # A failed migration is retried at most twice, and a stuck one is stopped after 15 minutes
+    # instead of blocking the release until the Helm timeout.
+    backoffLimit: 2
+    activeDeadlineSeconds: 900
     initContainers:
     - name: wait-for-postgres
-      image: busybox:1.35
-      command: ["sh", "-c", "until nc -z digdigdoc-pg-cluster-rw 5432; do echo \"Waiting for PostgreSQL...\"; sleep 5; done;"]
+      # Same image as the cluster (already on the nodes). `pg_isready` checks that PostgreSQL
+      # accepts connections, not only that the port is open, and is polled every second.
+      image: ghcr.io/cloudnative-pg/postgresql:17.7
+      command: ["sh", "-c", "until pg_isready -h digdigdoc-pg-cluster-rw -p 5432 -t 2; do echo \"Waiting for PostgreSQL...\"; sleep 1; done"]
       securityContext:
         runAsUser: 10001
         allowPrivilegeEscalation: false
