@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.10.0...v0.11.0) (2026-10-08)
+
+
+### Features
+
+* **frontend:** planification rapide et déplacement des créneaux dans l'agenda ([f8cf3ea](https://github.com/IA-Generative/dig-dig-doc/commit/f8cf3ea4481d09254563d00b139d8958a3e42d4d))
+
 ## [0.11.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.10.0...v0.11.0-rc) (2026-10-08)
 
 
