@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.0...v0.11.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **chart:** migration lancée après l'installation, plus rapide et bornée ([b458cf9](https://github.com/IA-Generative/dig-dig-doc/commit/b458cf90f396b30e09f0f91621c39d2ae932f70a))
+
 ## [0.11.1-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.0...v0.11.1-rc) (2026-10-08)
 
 
