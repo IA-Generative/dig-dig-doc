@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.1...v0.11.2-rc) (2026-10-08)
+
+
+### Bug Fixes
+
+* **chart:** init container de la migration sans ghcr.io, hooks post-install/post-upgrade ([0b35a52](https://github.com/IA-Generative/dig-dig-doc/commit/0b35a52c97f25f05be8371a9996fcc91a6e16ecd))
+
 ## [0.11.1](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.0...v0.11.1) (2026-10-08)
 
 
