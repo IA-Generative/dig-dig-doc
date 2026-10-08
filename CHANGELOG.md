@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.2...v0.11.3) (2026-10-08)
+
+
+### Bug Fixes
+
+* **chart:** l'attente de la migration vise l'hôte réel de DATABASE_URL ([103b169](https://github.com/IA-Generative/dig-dig-doc/commit/103b16984151b39e1590e7accf59ef8dc66a8fc0))
+
 ## [0.11.3-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.2...v0.11.3-rc) (2026-10-08)
 
 
