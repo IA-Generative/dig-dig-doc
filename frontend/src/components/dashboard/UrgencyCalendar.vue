@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { RouterLink } from "vue-router";
 import UrgencyRow from "@/components/dashboard/UrgencyRow.vue";
 import type { DashboardUrgency } from "@/types/dashboard";
 import SlotEditorModal from "@/components/dashboard/SlotEditorModal.vue";
+import SlotQuickPicker from "@/components/dashboard/SlotQuickPicker.vue";
 import type { SlotDraft } from "@/types/schedule";
 import { occurrenceStarts, slotOfUrgency } from "@/utils/recurrence";
 
@@ -34,6 +36,25 @@ function onSave(slot: SlotDraft) {
 function onRemove() {
   if (editing.value) emit("schedule", editing.value.u.dossierId, null);
   editing.value = null;
+}
+
+/** Heure touchée dans la journée : ouvre le choix rapide d'un dossier à y placer. */
+const pickerHour = ref<number | null>(null);
+
+/** La fenêtre s'ouvre juste sous l'heure touchée, qui reste visible et surlignée. */
+const pickerTop = computed(() =>
+  pickerHour.value === null ? "0" : `${(pickerHour.value - HOUR_START + 1) * HOUR_REM}rem`,
+);
+const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
+
+/** Crée tout de suite un créneau d'une heure à l'heure choisie ; un clic sur le bloc permet de l'affiner. */
+function onPick(dossierId: string) {
+  if (pickerHour.value === null) return;
+  const h = pickerHour.value;
+  const start = new Date(`${selectedKey.value}T${String(h).padStart(2, "0")}:00`);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  emit("schedule", dossierId, { start: start.toISOString(), end: end.toISOString(), reminders: [15] });
+  pickerHour.value = null;
 }
 
 function openDay(key: string) {
@@ -167,6 +188,13 @@ const overdueToReplan = computed(() =>
     : [],
 );
 
+/** Dossiers proposés au choix rapide : sans créneau, les plus urgents d'abord. */
+const unplannedCandidates = computed(() =>
+  props.urgencies
+    .filter((u) => !u.plannedStart)
+    .sort((a, b) => Number(b.level === "overdue") - Number(a.level === "overdue")),
+);
+
 /** À planifier : dossiers sans créneau ce jour-là, plus ceux en retard (aujourd'hui). */
 const toPlan = computed(() => [...overdueToReplan.value, ...unplannedItems.value.map((e) => e.u)]);
 const toPlanOverdue = computed(() => toPlan.value.filter((u) => u.level === "overdue").length);
@@ -187,6 +215,8 @@ const blocks = computed(() => {
   });
   return placed.map(({ u, startH, endH, lane }) => ({
     e: u,
+    /** Bloc court (≤ 1 h) : heure et titre sur une seule ligne pour que rien ne soit coupé. */
+    compact: (endH - startH) * HOUR_REM < 3.2,
     style: {
       top: `${(startH - HOUR_START) * HOUR_REM}rem`,
       height: `${Math.max(endH - startH, 0.5) * HOUR_REM}rem`,
@@ -195,6 +225,149 @@ const blocks = computed(() => {
     },
   }));
 });
+
+// ---------------------------------------------------------------------------
+// Déplacer un créneau : glisser un bloc (pas de 15 min) ou Alt + ↑ / ↓ au clavier
+// ---------------------------------------------------------------------------
+
+const SNAP_MIN = 15;
+const MIN_MS = 60_000;
+
+/** Déplacement en cours : minutes de décalage proposées pour le bloc `key`. */
+const drag = ref<{ key: string; minutes: number } | null>(null);
+let dragOrigin: { y: number; moved: boolean; entry: Entry } | null = null;
+let justDragged = false;
+
+/** Décalage autorisé : le bloc reste entre HOUR_START et HOUR_END. */
+function clampShift(e: Entry, minutes: number) {
+  const startMin = e.start!.getHours() * 60 + e.start!.getMinutes();
+  const endMin = e.end!.getHours() * 60 + e.end!.getMinutes();
+  return Math.max(HOUR_START * 60 - startMin, Math.min(HOUR_END * 60 - endMin, minutes));
+}
+
+/** Décale tout le créneau (et sa série s'il se répète) de `minutes`. */
+function moveEntry(e: Entry, minutes: number) {
+  if (!minutes) return;
+  const slot = slotOfUrgency(e.u);
+  if (!slot) return;
+  const shift = (iso: string) => new Date(new Date(iso).getTime() + minutes * MIN_MS).toISOString();
+  emit("schedule", e.u.dossierId, { ...slot, start: shift(slot.start), end: shift(slot.end) });
+}
+
+function onBlockDown(ev: PointerEvent, e: Entry) {
+  if (ev.button !== 0) return;
+  (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+  dragOrigin = { y: ev.clientY, moved: false, entry: e };
+}
+
+function onBlockMove(ev: PointerEvent) {
+  if (!dragOrigin) return;
+  const dy = ev.clientY - dragOrigin.y;
+  if (!dragOrigin.moved && Math.abs(dy) < 4) return;
+  dragOrigin.moved = true;
+  const remPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const raw = (dy / (HOUR_REM * remPx)) * 60;
+  const minutes = clampShift(dragOrigin.entry, Math.round(raw / SNAP_MIN) * SNAP_MIN);
+  drag.value = { key: dragOrigin.entry.key, minutes };
+}
+
+function onBlockUp() {
+  if (dragOrigin?.moved && drag.value) {
+    moveEntry(dragOrigin.entry, drag.value.minutes);
+    // Le « click » qui suit le relâchement ne doit pas ouvrir l'éditeur.
+    justDragged = true;
+    setTimeout(() => (justDragged = false), 0);
+  }
+  dragOrigin = null;
+  drag.value = null;
+}
+
+function onBlockClick(e: Entry) {
+  if (!justDragged) editing.value = e;
+}
+
+function onBlockKey(ev: KeyboardEvent, e: Entry) {
+  if (!ev.altKey) return;
+  if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+    ev.preventDefault();
+    moveEntryDays(e, ev.key === "ArrowLeft" ? -1 : 1);
+  } else if (ev.key === "ArrowUp" || ev.key === "ArrowDown") {
+    ev.preventDefault();
+    moveEntry(e, clampShift(e, ev.key === "ArrowUp" ? -SNAP_MIN : SNAP_MIN));
+  }
+}
+
+const shiftOf = (e: Entry) => (drag.value?.key === e.key ? drag.value.minutes : 0);
+const shownStart = (e: Entry) => new Date(e.start!.getTime() + shiftOf(e) * MIN_MS);
+const shownEnd = (e: Entry) => new Date(e.end!.getTime() + shiftOf(e) * MIN_MS);
+
+/** Décale le créneau (et sa série) de `days` jours en gardant l'heure ; les jours de répétition suivent. */
+function moveEntryDays(e: Entry, days: number) {
+  if (!days) return;
+  const slot = slotOfUrgency(e.u);
+  if (!slot) return;
+  const shift = (iso: string) => {
+    const d = new Date(iso);
+    d.setDate(d.getDate() + days);
+    return d.toISOString();
+  };
+  const weekdays = slot.recurrence?.weekdays?.map((w) => (((w + days) % 7) + 7) % 7).sort((a, b) => a - b);
+  emit("schedule", e.u.dossierId, {
+    ...slot,
+    start: shift(slot.start),
+    end: shift(slot.end),
+    recurrence: slot.recurrence ? { ...slot.recurrence, weekdays } : undefined,
+  });
+}
+
+const parseKey = (key: string) => {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+const daysBetween = (from: string, to: string) =>
+  Math.round((parseKey(to).getTime() - parseKey(from).getTime()) / 86_400_000);
+
+/** Glisser une pastille du mois vers un autre jour. */
+const chipDrag = ref<{ key: string; name: string; x: number; y: number; overKey: string | null } | null>(null);
+let chipOrigin: { x: number; y: number; moved: boolean; entry: Entry } | null = null;
+
+function cellKeyAt(x: number, y: number) {
+  return (document.elementFromPoint(x, y)?.closest("[data-day]") as HTMLElement | null)?.dataset.day ?? null;
+}
+
+function onChipDown(ev: PointerEvent, e: Entry) {
+  if (ev.button !== 0 || !e.start) return;
+  (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+  chipOrigin = { x: ev.clientX, y: ev.clientY, moved: false, entry: e };
+}
+
+function onChipMove(ev: PointerEvent) {
+  if (!chipOrigin) return;
+  if (!chipOrigin.moved && Math.hypot(ev.clientX - chipOrigin.x, ev.clientY - chipOrigin.y) < 5) return;
+  chipOrigin.moved = true;
+  chipDrag.value = {
+    key: chipOrigin.entry.key,
+    name: chipOrigin.entry.u.dossierName,
+    x: ev.clientX,
+    y: ev.clientY,
+    overKey: cellKeyAt(ev.clientX, ev.clientY),
+  };
+}
+
+function onChipUp(ev: PointerEvent) {
+  if (chipOrigin?.moved) {
+    const target = cellKeyAt(ev.clientX, ev.clientY);
+    if (target) moveEntryDays(chipOrigin.entry, daysBetween(dayKey(chipOrigin.entry.start!), target));
+    justDragged = true;
+    setTimeout(() => (justDragged = false), 0);
+  }
+  chipOrigin = null;
+  chipDrag.value = null;
+}
+
+function onCellClick(key: string) {
+  if (!justDragged) openDay(key);
+}
 
 function cellLabel(c: (typeof cells.value)[number]) {
   const n = c.items.length;
@@ -232,28 +405,70 @@ function cellLabel(c: (typeof cells.value)[number]) {
 
     <!-- Vue Jour : la journée heure par heure -->
     <div v-if="mode === 'day'" class="cal__day-view">
+      <p class="cal__hint">
+        <VIcon name="ri-cursor-line" /> Touchez une heure pour y placer un dossier. Cliquez sur un bloc pour le modifier, glissez-le pour le déplacer.
+      </p>
       <div class="cal__timeline" :style="{ height: `${HOURS.length * HOUR_REM}rem` }">
-        <div v-for="h in HOURS" :key="h" class="cal__hour" :style="{ height: `${HOUR_REM}rem` }">
-          <span class="cal__hour-label">{{ String(h).padStart(2, "0") }}:00</span>
-        </div>
+        <button
+          v-for="h in HOURS"
+          :key="h"
+          type="button"
+          class="cal__hour"
+          :class="{ 'cal__hour--active': pickerHour === h }"
+          :style="{ height: `${HOUR_REM}rem` }"
+          :aria-label="`Planifier un dossier à ${hourLabel(h)}`"
+          @click="pickerHour = h"
+        >
+          <span class="cal__hour-label">{{ hourLabel(h) }}</span>
+          <span class="cal__add" aria-hidden="true"><VIcon name="ri-add-line" /> Planifier un dossier</span>
+        </button>
         <div v-if="nowTop" class="cal__now" :style="{ top: nowTop }" aria-hidden="true" />
         <div class="cal__blocks">
-          <button
+          <div
             v-for="b in blocks"
             :key="b.e.key"
-            type="button"
             class="cal__block"
-            :class="b.e.u.level === 'overdue' ? 'cal__block--overdue' : 'cal__block--soon'"
-            :style="b.style"
-            @click="editing = b.e"
+            :class="[
+              b.e.u.level === 'overdue' ? 'cal__block--overdue' : 'cal__block--soon',
+              { 'cal__block--drag': drag?.key === b.e.key, 'cal__block--compact': b.compact },
+            ]"
+            :style="{ ...b.style, transform: `translateY(${(shiftOf(b.e) / 60) * HOUR_REM}rem)` }"
+            title="Cliquer pour modifier · glisser pour déplacer (Alt + flèches au clavier)"
+            @pointerdown="onBlockDown($event, b.e)"
+            @pointermove="onBlockMove"
+            @pointerup="onBlockUp"
+            @pointercancel="onBlockUp"
+            @keydown="onBlockKey($event, b.e)"
+            @click="onBlockClick(b.e)"
           >
-            <span class="cal__block-title">{{ b.e.u.dossierName }}</span>
-            <span class="cal__block-time">
-              {{ timeOf(b.e.start!) }}–{{ timeOf(b.e.end!) }}
-              <VIcon v-if="b.e.u.recurrence" name="ri-repeat-line" aria-label="Se répète" />
-            </span>
-          </button>
+            <button type="button" class="cal__block-main">
+              <span class="cal__block-time">
+                {{ timeOf(shownStart(b.e)) }}–{{ timeOf(shownEnd(b.e)) }}
+                <VIcon v-if="b.e.u.recurrence" name="ri-repeat-line" aria-label="Se répète" />
+              </span>
+              <span class="cal__block-title">{{ b.e.u.dossierName }}</span>
+            </button>
+            <RouterLink
+              :to="`/dossiers/${b.e.u.dossierId}`"
+              class="cal__block-open"
+              title="Ouvrir le dossier"
+              @pointerdown.stop
+              @click.stop
+            >
+              <VIcon name="ri-folder-open-line" />
+              <span class="fr-sr-only">Ouvrir le dossier {{ b.e.u.dossierName }}</span>
+            </RouterLink>
+          </div>
         </div>
+        <SlotQuickPicker
+          v-if="pickerHour !== null"
+          class="cal__picker"
+          :style="{ top: pickerTop }"
+          :candidates="unplannedCandidates"
+          :time-label="hourLabel(pickerHour)"
+          @pick="onPick"
+          @close="pickerHour = null"
+        />
       </div>
 
       <details v-if="toPlan.length" class="cal__toplan">
@@ -283,10 +498,12 @@ function cellLabel(c: (typeof cells.value)[number]) {
           'cal__cell--out': !c.inMonth,
           'cal__cell--today': c.isToday,
           'cal__cell--selected': c.key === selectedKey,
+          'cal__cell--drop': chipDrag?.overKey === c.key,
         }"
+        :data-day="c.key"
         :aria-label="cellLabel(c)"
         :aria-selected="c.key === selectedKey"
-        @click="openDay(c.key)"
+        @click="onCellClick(c.key)"
       >
         <span class="cal__day">{{ c.day }}</span>
         <span v-if="c.items.length" class="cal__chips" aria-hidden="true">
@@ -294,13 +511,20 @@ function cellLabel(c: (typeof cells.value)[number]) {
             v-for="e in c.items.slice(0, MAX_CHIPS)"
             :key="e.key"
             class="cal__chip"
-            :class="e.u.level === 'overdue' ? 'cal__chip--overdue' : 'cal__chip--soon'"
+            :class="[e.u.level === 'overdue' ? 'cal__chip--overdue' : 'cal__chip--soon', { 'cal__chip--movable': e.start }]"
+            @pointerdown="onChipDown($event, e)"
+            @pointermove="onChipMove"
+            @pointerup="onChipUp"
+            @pointercancel="onChipUp"
           ><span v-if="e.start" class="cal__chip-time">{{ timeOf(e.start) }}</span>{{ e.u.dossierName }}</span>
           <span v-if="c.items.length > MAX_CHIPS" class="cal__more">+{{ c.items.length - MAX_CHIPS }} autre{{ c.items.length - MAX_CHIPS > 1 ? "s" : "" }}</span>
         </span>
         <span v-if="c.items.length" class="cal__dot" aria-hidden="true">{{ c.items.length }}</span>
       </button>
     </div>
+    <p v-if="chipDrag" class="cal__ghost" :style="{ left: `${chipDrag.x + 12}px`, top: `${chipDrag.y + 12}px` }" aria-hidden="true">
+      {{ chipDrag.name }}
+    </p>
 
     </template>
 
@@ -332,8 +556,67 @@ function cellLabel(c: (typeof cells.value)[number]) {
 }
 
 .cal__hour {
+  display: block;
+  width: 100%;
   box-sizing: border-box;
+  padding: 0;
+  border: none;
   border-bottom: 1px solid var(--border-default-grey);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cal__hour:hover,
+.cal__hour:focus-visible {
+  background: var(--background-alt-blue-france);
+}
+
+.cal__hint {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-mention-grey);
+}
+
+.cal__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 1rem;
+  background: var(--background-contrast-info);
+  color: var(--text-action-high-blue-france);
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.cal__hour:hover .cal__add,
+.cal__hour:focus-visible .cal__add,
+.cal__hour--active .cal__add {
+  opacity: 1;
+}
+
+/* Écrans tactiles : pas de survol, l'invitation reste visible mais discrète. */
+@media (hover: none) {
+  .cal__add {
+    opacity: 0.7;
+  }
+}
+
+.cal__hour--active {
+  background: var(--background-alt-blue-france);
+}
+
+.cal__picker {
+  position: absolute;
+  left: 3.5rem;
+  right: 0.5rem;
+  z-index: 3;
+  max-width: 26rem;
 }
 
 .cal__hour-label {
@@ -347,23 +630,69 @@ function cellLabel(c: (typeof cells.value)[number]) {
 .cal__blocks {
   position: absolute;
   inset: 0 0 0 3.5rem;
+  /* Les clics passent à l'heure en dessous, sauf sur les blocs. */
+  pointer-events: none;
 }
 
 .cal__block {
   position: absolute;
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
   box-sizing: border-box;
-  padding: 0.25rem 0.5rem;
-  border: none;
   border-left: 4px solid;
   border-radius: 0.375rem;
   color: var(--text-default-grey);
-  font: inherit;
   font-size: 0.8125rem;
+  line-height: 1.25;
+  cursor: grab;
+}
+
+.cal__block-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  height: 100%;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
   text-align: left;
-  cursor: pointer;
+  cursor: inherit;
+}
+
+/* Bloc court : « 09:00–10:00  Titre » sur une ligne. */
+.cal__block--compact .cal__block-main {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  padding-block: 0.125rem;
+}
+
+.cal__block-open {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0.125rem 0.125rem 0 0;
+  border-radius: 0.375rem;
+  background: rgb(255 255 255 / 70%);
+  background-image: none;
+  color: var(--text-action-high-blue-france);
+}
+
+.cal__block-open:hover,
+.cal__block-open:focus-visible {
+  background: var(--background-default-grey);
 }
 
 .cal__now {
@@ -406,6 +735,12 @@ function cellLabel(c: (typeof cells.value)[number]) {
   margin-top: 0.5rem;
 }
 
+.cal__block--drag {
+  z-index: 4;
+  cursor: grabbing;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+}
+
 .cal__block--overdue {
   border-color: var(--background-flat-error);
   background: var(--background-contrast-error);
@@ -417,12 +752,17 @@ function cellLabel(c: (typeof cells.value)[number]) {
 }
 
 .cal__block-time {
+  flex-shrink: 0;
   font-size: 0.75rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .cal__block-title {
+  min-width: 0;
   overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -539,6 +879,34 @@ function cellLabel(c: (typeof cells.value)[number]) {
 .cal__chip--soon {
   border-color: var(--background-flat-warning);
   background: var(--background-contrast-warning);
+}
+
+.cal__chip--movable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.cal__cell--drop {
+  background: var(--background-alt-blue-france);
+  outline: 2px dashed var(--border-active-blue-france);
+  outline-offset: -2px;
+}
+
+.cal__ghost {
+  position: fixed;
+  z-index: 10;
+  max-width: 14rem;
+  margin: 0;
+  padding: 0.25rem 0.625rem;
+  overflow: hidden;
+  border-radius: 0.375rem;
+  background: var(--background-action-high-blue-france);
+  color: var(--text-inverted-blue-france);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+  pointer-events: none;
 }
 
 .cal__chip-time {
