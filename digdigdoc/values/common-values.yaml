@@ -293,7 +293,11 @@ jobs:
       command:
       - "python"
       - "-c"
-      - "import socket,time\nwhile True:\n    try:\n        socket.create_connection(('digdigdoc-pg-cluster-rw', 5432), 2).close()\n        break\n    except OSError:\n        print('Waiting for PostgreSQL...', flush=True)\n        time.sleep(1)"
+      - "import os,socket,time\nfrom urllib.parse import urlsplit\nu = urlsplit(os.environ['DATABASE_URL'])\nprint(f'Waiting for PostgreSQL at {u.hostname}:{u.port or 5432}', flush=True)\nwhile True:\n    try:\n        socket.create_connection((u.hostname, u.port or 5432), 2).close()\n        break\n    except OSError:\n        time.sleep(1)\nprint('PostgreSQL reachable', flush=True)"
+      # Same secret as the migration: waits on the host alembic will really use (and logs it - no credentials).
+      envFrom:
+      - secretRef:
+          name: "digdigdoc-db-infos"
       securityContext:
         runAsUser: 10001
         allowPrivilegeEscalation: false
