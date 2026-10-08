@@ -1,6 +1,6 @@
 [project]
 name = "dig-dig-doc-worker-document-render"
-version = "0.11.1"
+version = "0.11.2-rc"
 description = "Worker Celery : remplissage de modèles ODT et conversion PDF avec LibreOffice"
 requires-python = ">=3.12"
 dependencies = [
