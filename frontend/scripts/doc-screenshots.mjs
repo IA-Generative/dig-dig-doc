@@ -596,6 +596,51 @@ async function dashboard(browser) {
 
   await page.getByRole("button", { name: "Activité récente" }).click();
   await shotModal(page, dir, "10-activite-recente.png");
+  await closeModal(page);
+
+  // Planification rapide : une heure libre de l'agenda, puis le dossier (deux clics).
+  await page.getByRole("button", { name: "Jour", exact: true }).click();
+  await settle(page);
+  await page.getByRole("button", { name: "Planifier un dossier à 17:00" }).hover();
+  await shot(page, dir, "11-invitation-a-planifier.png");
+  await page.getByRole("button", { name: "Planifier un dossier à 17:00" }).click();
+  await shot(page, dir, "12-planification-rapide.png");
+  await page.locator(".qp__item").first().click();
+  await shot(page, dir, "13-creneau-cree.png");
+
+  // Déplacer le créneau en le glissant d'une heure et demie vers le bas.
+  const moved = page.locator(".cal__block", { hasText: "17:00–18:00" });
+  const box = await moved.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 10 + 66, { steps: 6 });
+  await shot(page, dir, "14-deplacer-un-creneau.png");
+  await page.mouse.up();
+  await settle(page, 400);
+  await page.locator(".cal__block", { hasText: "18:30–19:30" }).waitFor({ timeout: 3000 });
+  console.log("✓ créneau déplacé en 18:30–19:30");
+
+  // Le bouton du bloc ouvre le dossier sans passer par la replanification.
+  await page.locator(".cal__block-open").first().click();
+  await page.waitForURL(/\/dossiers\/[\w-]+$/, { timeout: 3000 });
+  console.log("✓ le bouton du bloc ouvre le dossier");
+  await page.goBack();
+  await waitDashboard(page);
+  await page.getByRole("button", { name: "Mois", exact: true }).click();
+
+  // Changer de jour : glisser une pastille du mois vers le lendemain.
+  await settle(page, 400);
+  const chip = page.locator(".cal__cell--today .cal__chip--movable").first();
+  const from = await chip.boundingBox();
+  const tomorrow = await page.locator(".cal__cell--today + .cal__cell").boundingBox();
+  await page.mouse.move(from.x + 10, from.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(tomorrow.x + tomorrow.width / 2, tomorrow.y + tomorrow.height / 2, { steps: 8 });
+  await shot(page, dir, "15-deplacer-vers-un-autre-jour.png");
+  await page.mouse.up();
+  await settle(page, 400);
+  await page.locator(".cal__cell--today + .cal__cell .cal__chip").first().waitFor({ timeout: 3000 });
+  console.log("✓ créneau déplacé au lendemain");
 
   await page.context().close();
 }
