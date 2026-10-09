@@ -1106,9 +1106,7 @@ jobs:
       - "upgrade"
       - "head"
     envFrom: []
-    env:
-      DATABASE_URL:
-        value: "postgresql+asyncpg://millefeuille:millefeuille@millefeuille-postgres:5432/millefeuille"
+    env: {}
     envCm: {}
     envSecret: {}
     resources:
