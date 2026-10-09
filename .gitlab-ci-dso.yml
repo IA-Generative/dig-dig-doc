@@ -86,13 +86,13 @@ unit-tests-backend:
   stage: test
   image: python:3.12-slim
   variables:
-    DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+    DATABASE_URL: postgresql+asyncpg://millefeuille:millefeuille@postgres:5432/millefeuille
     REDIS_URL: redis://redis:6379/0
     VERIFY_TOKEN_MODEL: full-access
     AWS_ENDPOINT_URL: http://rustfs:9000
     AWS_ACCESS_KEY_ID: rustfsadmin
     AWS_SECRET_ACCESS_KEY: rustfsadmin
-    AWS_S3_BUCKET_NAME: dig-dig-doc
+    AWS_S3_BUCKET_NAME: mille-feuille
     RUSTFS_VOLUMES: /data/rustfs0
     RUSTFS_ADDRESS: 0.0.0.0:9000
     RUSTFS_ACCESS_KEY: rustfsadmin
@@ -101,9 +101,9 @@ unit-tests-backend:
     - name: postgres:16-alpine
       alias: postgres
       variables:
-        POSTGRES_USER: digdigdoc
-        POSTGRES_PASSWORD: digdigdoc
-        POSTGRES_DB: digdigdoc
+        POSTGRES_USER: millefeuille
+        POSTGRES_PASSWORD: millefeuille
+        POSTGRES_DB: millefeuille
     - name: redis:7-alpine
       alias: redis
     - name: rustfs/rustfs:latest
@@ -183,11 +183,11 @@ docker-build-backend:
         echo "Error: Could not extract version from backend/pyproject.toml"
         exit 1
       fi
-      TAGS="dig-dig-doc-backend:$SHORT_SHA"
-      TAGS="$TAGS dig-dig-doc-backend:$CI_COMMIT_REF_SLUG"
-      TAGS="$TAGS dig-dig-doc-backend:$APP_VERSION"
+      TAGS="mille-feuille/backend:$SHORT_SHA"
+      TAGS="$TAGS mille-feuille/backend:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS mille-feuille/backend:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        TAGS="$TAGS dig-dig-doc-backend:latest"
+        TAGS="$TAGS mille-feuille/backend:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"
@@ -206,11 +206,11 @@ docker-build-frontend:
         echo "Error: Could not extract version from backend/pyproject.toml"
         exit 1
       fi
-      TAGS="dig-dig-doc-frontend:$SHORT_SHA"
-      TAGS="$TAGS dig-dig-doc-frontend:$CI_COMMIT_REF_SLUG"
-      TAGS="$TAGS dig-dig-doc-frontend:$APP_VERSION"
+      TAGS="mille-feuille/frontend:$SHORT_SHA"
+      TAGS="$TAGS mille-feuille/frontend:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS mille-feuille/frontend:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        TAGS="$TAGS dig-dig-doc-frontend:latest"
+        TAGS="$TAGS mille-feuille/frontend:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"
@@ -229,11 +229,11 @@ docker-build-worker-document-process:
         echo "Error: Could not extract version from backend/pyproject.toml"
         exit 1
       fi
-      TAGS="dig-dig-doc-worker-document-process:$SHORT_SHA"
-      TAGS="$TAGS dig-dig-doc-worker-document-process:$CI_COMMIT_REF_SLUG"
-      TAGS="$TAGS dig-dig-doc-worker-document-process:$APP_VERSION"
+      TAGS="mille-feuille/worker-document-process:$SHORT_SHA"
+      TAGS="$TAGS mille-feuille/worker-document-process:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS mille-feuille/worker-document-process:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        TAGS="$TAGS dig-dig-doc-worker-document-process:latest"
+        TAGS="$TAGS mille-feuille/worker-document-process:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"
@@ -252,11 +252,11 @@ docker-build-worker-agent-execution:
         echo "Error: Could not extract version from backend/pyproject.toml"
         exit 1
       fi
-      TAGS="dig-dig-doc-worker-agent-execution:$SHORT_SHA"
-      TAGS="$TAGS dig-dig-doc-worker-agent-execution:$CI_COMMIT_REF_SLUG"
-      TAGS="$TAGS dig-dig-doc-worker-agent-execution:$APP_VERSION"
+      TAGS="mille-feuille/worker-agent-execution:$SHORT_SHA"
+      TAGS="$TAGS mille-feuille/worker-agent-execution:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS mille-feuille/worker-agent-execution:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        TAGS="$TAGS dig-dig-doc-worker-agent-execution:latest"
+        TAGS="$TAGS mille-feuille/worker-agent-execution:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"
@@ -275,11 +275,11 @@ docker-build-worker-document-render:
         echo "Error: Could not extract version from backend/pyproject.toml"
         exit 1
       fi
-      TAGS="dig-dig-doc-worker-document-render:$SHORT_SHA"
-      TAGS="$TAGS dig-dig-doc-worker-document-render:$CI_COMMIT_REF_SLUG"
-      TAGS="$TAGS dig-dig-doc-worker-document-render:$APP_VERSION"
+      TAGS="mille-feuille/worker-document-render:$SHORT_SHA"
+      TAGS="$TAGS mille-feuille/worker-document-render:$CI_COMMIT_REF_SLUG"
+      TAGS="$TAGS mille-feuille/worker-document-render:$APP_VERSION"
       if echo "$APP_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-        TAGS="$TAGS dig-dig-doc-worker-document-render:latest"
+        TAGS="$TAGS mille-feuille/worker-document-render:latest"
       fi
       export IMAGE_NAMES="$TAGS"
       echo "Building with tags: $IMAGE_NAMES"

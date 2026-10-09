@@ -21,9 +21,9 @@ Une seule règle, partagée (`app/services/dossier_access.py`) : aucune route ne
 
 ## Modèle
 
-- `dossiers.visibility` : `restricted` ou `analyse`. Les dossiers **existants** sont migrés en `analyse` : personne ne perd d'accès à la mise en production ; ils restent visibles comme avant, sans limite de temps ([#180](https://github.com/IA-Generative/dig-dig-doc/issues/180)). Seuls les dossiers créés ensuite par un utilisateur sont restreints par défaut.
+- `dossiers.visibility` : `restricted` ou `analyse`. Les dossiers **existants** sont migrés en `analyse` : personne ne perd d'accès à la mise en production ; ils restent visibles comme avant, sans limite de temps ([#180](https://github.com/IA-Generative/mille-feuille/issues/180)). Seuls les dossiers créés ensuite par un utilisateur sont restreints par défaut.
 - `dossier_group_access` (`dossier_id`, `keycloak_group`, `granted_by`, `created_at`) : les groupes associés, supprimés avec le dossier.
-- `app_users.groups` et `app_users.is_admin` : les groupes et le rôle **vus à la dernière connexion** (annuaire, [affectation](affectation-des-dossiers.md)). Ils servent à savoir si une personne a accès à un dossier sans interroger Keycloak : copie d'un instant, mise à jour à la prochaine connexion ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)).
+- `app_users.groups` et `app_users.is_admin` : les groupes et le rôle **vus à la dernière connexion** (annuaire, [affectation](affectation-des-dossiers.md)). Ils servent à savoir si une personne a accès à un dossier sans interroger Keycloak : copie d'un instant, mise à jour à la prochaine connexion ([#179](https://github.com/IA-Generative/mille-feuille/issues/179)).
 
 Schéma : [`data-model.png`](data-model.png). Migration : `20261013_0900_d9e0f1a2b3c4_acces_aux_dossiers.py`.
 
@@ -62,17 +62,17 @@ Un changement d'accès est tracé dans le [journal](journal-du-dossier.md) (`acc
 - **Créneaux** et **conversations** : un créneau ou une conversation sur un dossier qu'on ne voit plus n'est plus listé (il n'est pas supprimé).
 - **Annuaire** : `GET /api/users?dossier_id=…` ne propose que les personnes qui ont accès à ce dossier (même règle, évaluée sur leurs groupes et leur rôle vus à la dernière connexion).
 
-### Accès administrateur tracé ([#182](https://github.com/IA-Generative/dig-dig-doc/issues/182))
+### Accès administrateur tracé ([#182](https://github.com/IA-Generative/mille-feuille/issues/182))
 
 Un administrateur qui entre dans un dossier **restreint dont il n'est pas membre d'un groupe** est tracé dans le journal (`admin_access` : `method`, `write`). Un administrateur membre d'un groupe associé, ou qui entre dans un dossier « selon l'analyse », n'est pas tracé : il y a accès comme tout le monde.
 
 - Une **lecture** est tracée une fois par fenêtre (15 minutes, comme les consultations) ; **chaque modification** l'est. Les battements de présence et les verrous ne comptent pas comme des modifications.
 - Ces traces ne sont **lisibles que des administrateurs** : les autres ne les voient ni dans l'historique, ni dans le filtre « Auteur ». Pour la même raison, l'entrée d'un administrateur « en passant par les droits d'administration » n'ajoute pas de consultation ordinaire.
-- Durée de conservation et lecteurs définitifs : [#182](https://github.com/IA-Generative/dig-dig-doc/issues/182).
+- Durée de conservation et lecteurs définitifs : [#182](https://github.com/IA-Generative/mille-feuille/issues/182).
 
 ## Reste à faire
 
 - *(fait, #222)* **Agent assistant** : il agit désormais avec les droits de la personne pour qui il travaille : [accès de l'agent assistant](acces-de-l-agent-assistant.md).
 - Un lien de partage par e-mail ne doit jamais donner plus de droits que ceux du destinataire.
-- Prise en compte des changements de groupes Keycloak en cours de session ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)) ; dossier restreint sans groupe actif ([#181](https://github.com/IA-Generative/dig-dig-doc/issues/181)).
-- Rôles (lecture, instructeur…) : [#178](https://github.com/IA-Generative/dig-dig-doc/issues/178).
+- Prise en compte des changements de groupes Keycloak en cours de session ([#179](https://github.com/IA-Generative/mille-feuille/issues/179)) ; dossier restreint sans groupe actif ([#181](https://github.com/IA-Generative/mille-feuille/issues/181)).
+- Rôles (lecture, instructeur…) : [#178](https://github.com/IA-Generative/mille-feuille/issues/178).

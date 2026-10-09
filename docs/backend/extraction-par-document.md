@@ -1,6 +1,6 @@
 # Extraction par document, groupes de définitions et empreintes
 
-Issue : [#126](https://github.com/IA-Generative/dig-dig-doc/issues/126) (parent [#113](https://github.com/IA-Generative/dig-dig-doc/issues/113)). Prépare la relance incrémentale ([#119](https://github.com/IA-Generative/dig-dig-doc/issues/119)).
+Issue : [#126](https://github.com/IA-Generative/mille-feuille/issues/126) (parent [#113](https://github.com/IA-Generative/mille-feuille/issues/113)). Prépare la relance incrémentale ([#119](https://github.com/IA-Generative/mille-feuille/issues/119)).
 
 ## Pourquoi
 

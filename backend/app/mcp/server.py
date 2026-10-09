@@ -29,7 +29,7 @@ from app.schemas.ephemeral import EphemeralAnalyseCreate, EphemeralRunCreated
 # et une `identity` déjà résolus. Voir mcp/README.md pour la doc client,
 # docs/ephemeral-api.md pour le design REST équivalent.
 mcp_server = MCPServer(
-    name="dig-dig-doc-ephemeral",
+    name="mille-feuille-ephemeral",
     instructions=(
         "Analyse à la demande de documents (classification, extraction d'entités, agents), temporaire "
         "par défaut (TTL). Cycle typique : create_ephemeral_analysis (ou un analyse_id déjà connu) -> "

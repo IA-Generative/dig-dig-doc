@@ -4,8 +4,8 @@ import time
 import uuid
 from typing import Any, Protocol
 
-from digdigdoc.models import DossierStatus, ExecutionStepStatus
-from digdigdoc_ephemeral import DigDigDocError, EphemeralClient, EphemeralRun
+from millefeuille.models import DossierStatus, ExecutionStepStatus
+from millefeuille_ephemeral import MilleFeuilleError, EphemeralClient, EphemeralRun
 from loguru import logger
 from mic_worker import S3Client
 from mic_worker.typed import AsyncProgressProtocol, AsyncTaskInterface, IncomingMessage
@@ -25,13 +25,13 @@ class _Clock(Protocol):
 
 
 class AnalyzeTask(AsyncTaskInterface):
-    """Exécute une analyse dig-dig-doc pour une tâche AsyncTaskAPI, via l'API éphémère.
+    """Exécute une analyse mille-feuille pour une tâche AsyncTaskAPI, via l'API éphémère.
 
     1. valide le message et borne la taille des fichiers (HEAD S3, avant tout téléchargement) ;
     2. télécharge les fichiers depuis S3 ;
     3. crée l'analyse éphémère si besoin, lance le run et attend sa fin en publiant la progression
        (étapes d'exécution terminées / total) ;
-    4. renvoie le résultat du run, puis supprime le résultat conservé côté dig-dig-doc.
+    4. renvoie le résultat du run, puis supprime le résultat conservé côté mille-feuille.
 
     Le SDK est synchrone : ses appels tournent dans un thread pour ne pas bloquer la boucle asyncio.
     """
@@ -92,11 +92,11 @@ class AnalyzeTask(AsyncTaskInterface):
             if self.delete_run_after_result and not request.persist:
                 await self._delete_run_quietly(task_id, run_id)
             return response
-        except DigDigDocError as error:
+        except MilleFeuilleError as error:
             # Le message vient du backend (ex. 404 analyse introuvable) : c'est l'information utile.
-            logger.error(f"Task {task_id}: dig-dig-doc error — {error.status_code} {error.message}")
+            logger.error(f"Task {task_id}: mille-feuille error — {error.status_code} {error.message}")
             self._abandon(task_id, run_id, created_analyse_id)
-            raise RuntimeError(f"Erreur dig-dig-doc ({error.status_code}) : {error.message}") from error
+            raise RuntimeError(f"Erreur mille-feuille ({error.status_code}) : {error.message}") from error
         except BaseException:
             # Échec, délai dépassé ou arrêt du worker (CancelledError) : ne pas laisser un run orphelin.
             self._abandon(task_id, run_id, created_analyse_id)
@@ -164,23 +164,23 @@ class AnalyzeTask(AsyncTaskInterface):
 
     @staticmethod
     def _to_response(run: EphemeralRun) -> dict[str, Any]:
-        """Résultat complet du run ; les clés S3 internes de dig-dig-doc n'ont pas d'intérêt pour le consommateur."""
+        """Résultat complet du run ; les clés S3 internes de mille-feuille n'ont pas d'intérêt pour le consommateur."""
         return run.model_dump(mode="json", exclude={"documents": {"__all__": {"s3_key"}}})
 
     async def _delete_run_quietly(self, task_id: str, run_id: uuid.UUID) -> None:
         try:
             await asyncio.to_thread(self.client.runs.delete, run_id)
-        except DigDigDocError as error:
+        except MilleFeuilleError as error:
             # Le résultat est déjà dans la réponse : au pire, il expire tout seul au TTL.
             logger.warning(f"Task {task_id}: could not delete run {run_id} — {error.message}")
 
     def _abandon(self, task_id: str, run_id: uuid.UUID | None, created_analyse_id: uuid.UUID | None) -> None:
         """Nettoyage au mieux, synchrone à dessein : il doit aussi s'exécuter quand la tâche est annulée."""
-        with contextlib.suppress(DigDigDocError):
+        with contextlib.suppress(MilleFeuilleError):
             if run_id is not None:
                 self.client.runs.stop(run_id)
                 self.client.runs.delete(run_id)
-        with contextlib.suppress(DigDigDocError):
+        with contextlib.suppress(MilleFeuilleError):
             if created_analyse_id is not None:
                 self.client.analyses.delete(created_analyse_id)
         logger.info(f"Task {task_id}: cleanup done (run={run_id}, analyse={created_analyse_id})")

@@ -88,7 +88,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="dig-dig-doc BFF",
+    title="mille-feuille BFF",
     docs_url="/api/docs",
     redoc_url="/api/redocs",
     openapi_url="/api/openapi.json",

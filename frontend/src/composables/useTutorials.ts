@@ -56,7 +56,7 @@ const TUTORIALS: Tutorial[] = [
   },
 ];
 
-const STORAGE_KEY = "digdigdoc-tutorials-seen";
+const STORAGE_KEY = "millefeuille-tutorials-seen";
 
 // État partagé entre toutes les instances du composable.
 const tutorials = ref<Tutorial[]>(TUTORIALS);

@@ -8,7 +8,7 @@ import type { Theme, UserPreferences } from "@/types/profile";
 // user_preferences) ET en localStorage (pour application immédiate au
 // chargement, avant que l'API ne réponde - évite le flash de thème).
 
-const STORAGE_KEY = "dig-dig-doc-theme";
+const STORAGE_KEY = "mille-feuille-theme";
 const theme = ref<Theme>("system");
 let initialized = false;
 

@@ -3,19 +3,19 @@
 ## 1. Objet
 
 Les présentes conditions d'utilisation (les « CGU ») régissent l'utilisation de
-**dig-dig-doc**, une plateforme d'instruction assistée des dossiers usagers.
+**mille-feuille**, une plateforme d'instruction assistée des dossiers usagers.
 
 En accédant à l'application, vous acceptez sans réserve les présentes CGU.
 
 ## 2. Accès au service
 
-L'accès à dig-dig-doc est réservé aux agents habilités. L'authentification est
+L'accès à mille-feuille est réservé aux agents habilités. L'authentification est
 réalisée via Keycloak. Chaque utilisateur est responsable de l'usage de son
 compte et s'engage à ne pas partager ses identifiants.
 
 ## 3. Utilisation
 
-dig-dig-doc est un outil d'aide à l'instruction. Les analyses et propositions
+mille-feuille est un outil d'aide à l'instruction. Les analyses et propositions
 générées par l'IA **ne constituent pas une décision** et doivent être
 **vérifiées et validées** par un agent avant toute action.
 
@@ -30,12 +30,12 @@ manière sécurisée et ne sont accessibles qu'aux agents habilités.
 
 ## 5. Propriété intellectuelle
 
-L'application dig-dig-doc est diffusée sous licence open source. Les contenus
+L'application mille-feuille est diffusée sous licence open source. Les contenus
 produits via l'application restent la propriété de l'entité utilisatrice.
 
 ## 6. Responsabilité
 
-L'éditeur de dig-dig-doc ne saurait être tenu responsable des erreurs
+L'éditeur de mille-feuille ne saurait être tenu responsable des erreurs
 d'interprétation, des omissions ou des conséquences liées à l'utilisation de
 l'application. L'outil est fourni « tel quel », sans garantie d'exactitude
 exhaustive.

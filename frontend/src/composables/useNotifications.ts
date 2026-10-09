@@ -68,7 +68,7 @@ function stopPolling() {
 // API Notification : l'alerte système s'affiche tant que l'application est
 // ouverte dans un onglet (même en arrière-plan). Pour être notifié application
 // fermée, il faudra Web Push (service worker + clés VAPID côté serveur).
-const BROWSER_KEY = "digdigdoc-browser-notifications";
+const BROWSER_KEY = "millefeuille-browser-notifications";
 const supported = typeof window !== "undefined" && "Notification" in window;
 
 const browserPermission = ref<NotificationPermission | "unsupported">(supported ? Notification.permission : "unsupported");

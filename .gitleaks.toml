@@ -1,4 +1,4 @@
-title = "dig-dig-doc gitleaks config"
+title = "mille-feuille gitleaks config"
 
 # `targetRules` on a global allowlist needs v8.25.0; CI pins a newer version.
 minVersion = "v8.25.0"
@@ -9,4 +9,4 @@ useDefault = true
 [[allowlists]]
 description = "Helm chart test fixtures: fake Secret manifests used by `ct lint`/`helm template`, never real credentials."
 targetRules = ["kubernetes-secret-yaml"]
-paths = ['''digdigdoc/test-values\.yaml''']
+paths = ['''millefeuille/test-values\.yaml''']

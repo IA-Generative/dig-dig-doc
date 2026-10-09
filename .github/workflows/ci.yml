@@ -66,7 +66,7 @@ jobs:
             ci:
               - '.github/workflows/**'
             helm:
-              - 'digdigdoc/**'
+              - 'millefeuille/**'
               - 'ct.yaml'
 
       - name: Select images to build
@@ -268,7 +268,7 @@ jobs:
       contents: read
     with:
       CT_CONF_PATH: ct.yaml
-      CHARTS_DIR: digdigdoc
+      CHARTS_DIR: millefeuille
 
   # Workaround for required status check in protection branches (see. https://github.com/orgs/community/discussions/13690)
   all-jobs-passed:

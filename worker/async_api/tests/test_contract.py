@@ -10,7 +10,7 @@ CONTRAT = Path(__file__).resolve().parents[1] / "contrat.json"
 
 def test_manifest_is_valid_for_mic_worker() -> None:
     manifeste = charger(CONTRAT)
-    assert manifeste.nom == "dig-dig-doc"
+    assert manifeste.nom == "mille-feuille"
     assert str(manifeste.classe) in ("long", "ClasseDeService.LONG") or manifeste.classe.value == "long"
 
 
@@ -24,7 +24,7 @@ def test_input_schema_matches_the_request_model() -> None:
 
 
 def test_analysis_schema_matches_the_sdk_config() -> None:
-    from digdigdoc_ephemeral import EphemeralAnalysisConfig
+    from millefeuille_ephemeral import EphemeralAnalysisConfig
 
     schema = json.loads(CONTRAT.read_text())["entree"]["properties"]["analysis"]
     assert set(schema["properties"]) == set(EphemeralAnalysisConfig.model_fields)

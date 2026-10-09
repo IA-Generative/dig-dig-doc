@@ -522,77 +522,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dig-dig-doc-backend"
-version = "0.8.0rc0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "asyncpg" },
-    { name = "boto3" },
-    { name = "celery" },
-    { name = "fastapi" },
-    { name = "mcp" },
-    { name = "openai" },
-    { name = "pydantic-settings" },
-    { name = "python-keycloak" },
-    { name = "python-multipart" },
-    { name = "redis" },
-    { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "eralchemy2" },
-    { name = "fakeredis" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-dotenv" },
-    { name = "ruff" },
-]
-test = [
-    { name = "fakeredis" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-dotenv" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.16.0" },
-    { name = "asyncpg", specifier = ">=0.31.0" },
-    { name = "boto3", specifier = ">=1.43.100" },
-    { name = "celery", specifier = ">=5.6.3" },
-    { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "mcp", specifier = ">=2.2.0" },
-    { name = "openai", specifier = ">=3.19.0" },
-    { name = "pydantic-settings", specifier = ">=2.15.0" },
-    { name = "python-keycloak", specifier = ">=7.1.1" },
-    { name = "python-multipart", specifier = ">=0.0.32" },
-    { name = "redis", specifier = ">=8.1.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.53.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "eralchemy2", specifier = ">=1.4.1" },
-    { name = "fakeredis", specifier = ">=2.38.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-dotenv", specifier = ">=0.5.2" },
-    { name = "ruff", specifier = ">=0.15.0" },
-]
-test = [
-    { name = "fakeredis", specifier = ">=2.38.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-dotenv", specifier = ">=0.5.2" },
-    { name = "ruff", specifier = ">=0.15.0" },
-]
-
-[[package]]
 name = "eralchemy2"
 version = "1.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1101,6 +1030,77 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ae/91/762d7755d971aff8a28d75f7961656148edf27875c8026e6385aaab08ae7/mcp_types-2.2.0.tar.gz", hash = "sha256:d3ed53703ddd10d9c6399f29d322bb66f3f67ab41348ac8556ba23e07fedefad", size = 65892, upload-time = "2026-09-07T16:06:25.187Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8f/d7/6ffba5d8cd5dd9b8a19478875c50e04945314ba5074e84d749283f27f62d/mcp_types-2.2.0-py3-none-any.whl", hash = "sha256:ea476b73ee86709ab5abc9452385ed36cc05907e582355622e294595c9a04f13", size = 69106, upload-time = "2026-09-07T16:06:21.461Z" },
+]
+
+[[package]]
+name = "mille-feuille-backend"
+version = "0.11.3"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "boto3" },
+    { name = "celery" },
+    { name = "fastapi" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "pydantic-settings" },
+    { name = "python-keycloak" },
+    { name = "python-multipart" },
+    { name = "redis" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "eralchemy2" },
+    { name = "fakeredis" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-dotenv" },
+    { name = "ruff" },
+]
+test = [
+    { name = "fakeredis" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-dotenv" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.16.0" },
+    { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "boto3", specifier = ">=1.43.100" },
+    { name = "celery", specifier = ">=5.6.3" },
+    { name = "fastapi", specifier = ">=0.141.1" },
+    { name = "mcp", specifier = ">=2.2.0" },
+    { name = "openai", specifier = ">=3.19.0" },
+    { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "python-keycloak", specifier = ">=7.1.1" },
+    { name = "python-multipart", specifier = ">=0.0.32" },
+    { name = "redis", specifier = ">=8.1.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.53.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "eralchemy2", specifier = ">=1.4.1" },
+    { name = "fakeredis", specifier = ">=2.38.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-dotenv", specifier = ">=0.5.2" },
+    { name = "ruff", specifier = ">=0.15.0" },
+]
+test = [
+    { name = "fakeredis", specifier = ">=2.38.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-dotenv", specifier = ">=0.5.2" },
+    { name = "ruff", specifier = ">=0.15.0" },
 ]
 
 [[package]]

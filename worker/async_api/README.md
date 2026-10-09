@@ -1,13 +1,13 @@
-# worker/async_api : dig-dig-doc pour AsyncTaskAPI
+# worker/async_api : mille-feuille pour AsyncTaskAPI
 
-Worker **séparé, sans Celery**, qui rend dig-dig-doc consommable par
+Worker **séparé, sans Celery**, qui rend mille-feuille consommable par
 [AsyncTaskAPI](https://github.com/IA-Generative/async-api). Il est écrit avec la bibliothèque
 [`mic-worker`](https://github.com/IA-Generative/async-api/tree/main/workers/python/mic-worker) : il consomme
 une file RabbitMQ, exécute la tâche et publie sa progression puis son résultat sur la file de sortie.
 
-Il **ne réimplémente pas le pipeline** : chaque tâche passe par l'API éphémère de dig-dig-doc
+Il **ne réimplémente pas le pipeline** : chaque tâche passe par l'API éphémère de mille-feuille
 (`/api/ephemeral/*`, voir [docs/ephemeral-api.md](../../docs/ephemeral-api.md)) grâce au SDK
-[`digdigdoc-ephemeral`](../../sdks/python/digdigdoc-ephemeral/README.md). Les workers Celery
+[`millefeuille-ephemeral`](../../sdks/python/millefeuille-ephemeral/README.md). Les workers Celery
 (`document_process`, `agent_execution`) et le backend ne sont pas modifiés.
 
 ## Déroulement d'une tâche
@@ -16,7 +16,7 @@ Il **ne réimplémente pas le pipeline** : chaque tâche passe par l'API éphém
 2. Téléchargement des fichiers depuis le stockage d'AsyncTaskAPI.
 3. Création de l'analyse éphémère (si `analysis` est fourni) puis lancement du run.
 4. Attente de la fin du run ; progression = étapes d'exécution terminées / total, entre 0.25 et 0.95.
-5. Message `success` avec le résultat complet du run, puis suppression du résultat conservé côté dig-dig-doc
+5. Message `success` avec le résultat complet du run, puis suppression du résultat conservé côté mille-feuille
    (sauf `persist: true`).
 
 En cas d'échec, de délai dépassé ou d'arrêt du worker, le run et l'analyse créés par la tâche sont arrêtés et supprimés.
@@ -54,12 +54,12 @@ Variables d'environnement (voir [`.env.example`](.env.example)) :
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `BROKER_URL` | (obligatoire) | RabbitMQ |
-| `IN_QUEUE_NAME` / `OUT_QUEUE_NAME` | `dig_dig_doc_queue_in` / `_out` | files du service |
+| `IN_QUEUE_NAME` / `OUT_QUEUE_NAME` | `mille_feuille_queue_in` / `_out` | files du service |
 | `WORKER_CONCURRENCY` | `2` | tâches simultanées |
 | `SERVICE_CLASS` | (aucune) | classe de service d'async-api ; `long` pour émettre la progression |
 | `AWS_*` | (obligatoires) | stockage objet d'AsyncTaskAPI (fichiers déposés avant la tâche) |
-| `DIGDIGDOC_BASE_URL` | (obligatoire) | backend dig-dig-doc |
-| `DIGDIGDOC_API_TOKEN` | (obligatoire) | token API (`X-App-Token`), créé via `POST /api/app-tokens` |
+| `MILLEFEUILLE_BASE_URL` | (obligatoire) | backend mille-feuille |
+| `MILLEFEUILLE_API_TOKEN` | (obligatoire) | token API (`X-App-Token`), créé via `POST /api/app-tokens` |
 | `MAX_FILE_SIZE_BYTES` / `MAX_TOTAL_SIZE_BYTES` / `MAX_FILES` | 50 Mo / 100 Mo / 20 | bornes mémoire |
 | `RUN_TIMEOUT_SECONDS` / `POLL_INTERVAL_SECONDS` | `900` / `3` | attente du run |
 | `DELETE_RUN_AFTER_RESULT` | `true` | supprime le résultat conservé une fois renvoyé |
@@ -77,11 +77,11 @@ Trois endroits, selon l'usage. Le détail (Vault, création des jetons, rotation
 
 | Où | Secret | Contenu |
 |---|---|---|
-| Kubernetes (Vault, via le chart) | `digdigdoc-async-api-worker` | `BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DIGDIGDOC_API_TOKEN` (identifiants uniquement) |
+| Kubernetes (Vault, via le chart) | `millefeuille-async-api-worker` | `BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `MILLEFEUILLE_API_TOKEN` (identifiants uniquement) |
 | GitHub Actions | `ASYNC_API_TOKEN` | Jeton en lecture sur le dépôt privé `async-api` (installation de `mic-worker` : lint, tests, build d'image) |
-| Local / docker compose | `.env` | `ASYNC_API_WORKER_TOKEN` (token API dig-dig-doc), `GH_TOKEN` (build), `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (facultatifs, valeurs de dev par défaut) |
+| Local / docker compose | `.env` | `ASYNC_API_WORKER_TOKEN` (token API mille-feuille), `GH_TOKEN` (build), `RABBITMQ_USER` / `RABBITMQ_PASSWORD` (facultatifs, valeurs de dev par défaut) |
 
-Le `DIGDIGDOC_API_TOKEN` se crée avec `POST /api/app-tokens` (session ou jeton Keycloak) et n'est affiché qu'une fois.
+Le `MILLEFEUILLE_API_TOKEN` se crée avec `POST /api/app-tokens` (session ou jeton Keycloak) et n'est affiché qu'une fois.
 Les autres réglages (files, endpoint et bucket S3, `SERVICE_CLASS`, `WORKER_CONCURRENCY`, limites, délais...) ne sont pas des secrets : ils sont dans `env` de `common-values.yaml`, avec leur valeur par défaut.
 
 ## Développement
@@ -103,7 +103,7 @@ Le contexte de build est la **racine du dépôt** (l'image embarque les SDK). Le
 
 ```bash
 export GH_TOKEN=$(gh auth token)
-docker build -f worker/async_api/Dockerfile --secret id=github_token,env=GH_TOKEN -t dig-dig-doc-async-api-worker .
+docker build -f worker/async_api/Dockerfile --secret id=github_token,env=GH_TOKEN -t mille-feuille-async-api-worker .
 
 # ou, avec RabbitMQ local (profil `async-api`, hors `docker compose up` par défaut) :
 ASYNC_API_WORKER_TOKEN=<token API> docker compose --profile async-api up --build worker-async-api
@@ -111,16 +111,16 @@ ASYNC_API_WORKER_TOKEN=<token API> docker compose --profile async-api up --build
 
 ## Déploiement Helm
 
-Le chart [`digdigdoc`](../../digdigdoc/README.md) porte le composant `worker_async_api` (Deployment, sans Service :
+Le chart [`millefeuille`](../../millefeuille/README.md) porte le composant `worker_async_api` (Deployment, sans Service :
 le worker ne reçoit aucun trafic). Il est **désactivé par défaut** : il faut un RabbitMQ et le stockage objet
 d'AsyncTaskAPI, que le chart ne fournit pas.
 
 ```bash
-helm template digdigdoc ./digdigdoc -f digdigdoc/values/common-values.yaml --set worker_async_api.enabled=true
+helm template millefeuille ./millefeuille -f millefeuille/values/common-values.yaml --set worker_async_api.enabled=true
 ```
 
-Les identifiants (`BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `DIGDIGDOC_API_TOKEN`) viennent du secret
-`digdigdoc-async-api-worker` (Vault) ; tout le reste est dans `env`, avec des valeurs par défaut (`common-values.yaml`). Sondes : `/health`
+Les identifiants (`BROKER_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `MILLEFEUILLE_API_TOKEN`) viennent du secret
+`millefeuille-async-api-worker` (Vault) ; tout le reste est dans `env`, avec des valeurs par défaut (`common-values.yaml`). Sondes : `/health`
 (vivacité) et `/ready` (stockage objet), sur le port `8084`. Pas de mise à l'échelle KEDA : le worker consomme
 RabbitMQ, pas les files Celery ; régler `WORKER_CONCURRENCY` et `replicaCount` selon la mémoire.
 

@@ -20,9 +20,9 @@ def test_without_any_variable_the_worker_targets_local_services(monkeypatch: pyt
 
 
 def test_the_redis_secret_of_kubernetes_serves_as_broker_and_results(monkeypatch: pytest.MonkeyPatch) -> None:
-    config = settings(monkeypatch, REDIS_URL="redis://:motdepasse@digdigdoc-redis:6379/0")
-    assert config.celery_broker_url == "redis://:motdepasse@digdigdoc-redis:6379/0"
-    assert config.celery_result_backend == "redis://:motdepasse@digdigdoc-redis:6379/0"
+    config = settings(monkeypatch, REDIS_URL="redis://:motdepasse@millefeuille-redis:6379/0")
+    assert config.celery_broker_url == "redis://:motdepasse@millefeuille-redis:6379/0"
+    assert config.celery_result_backend == "redis://:motdepasse@millefeuille-redis:6379/0"
 
 
 def test_explicit_celery_urls_win_over_the_redis_url(monkeypatch: pytest.MonkeyPatch) -> None:

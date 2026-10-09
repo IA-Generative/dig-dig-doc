@@ -1,4 +1,4 @@
-# dig-dig-doc
+# mille-feuille
 
 ## Configuration
 

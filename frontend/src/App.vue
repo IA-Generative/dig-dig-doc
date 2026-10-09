@@ -50,7 +50,7 @@ function formatRelativeTime(iso: string) {
 const showShell = computed(() => !route.meta.public);
 
 // État réduit/étendu de la sidebar, persisté en localStorage comme Muffin.
-const COLLAPSE_STORAGE_KEY = "digdigdoc-sidebar-collapsed";
+const COLLAPSE_STORAGE_KEY = "millefeuille-sidebar-collapsed";
 const isSidebarCollapsed = ref(false);
 try {
   isSidebarCollapsed.value = localStorage.getItem(COLLAPSE_STORAGE_KEY) === "true";
@@ -89,7 +89,7 @@ const navItems = [
         title="Creuser dans vos dossiers pour trouver de la valeur"
       >
         <div class="app-sidebar__logo">
-          <DsfrLogo v-if="!isSidebarCollapsed" small logo-text="dig-dig-doc" />
+          <DsfrLogo v-if="!isSidebarCollapsed" small logo-text="mille-feuille" />
           <img v-else class="app-sidebar__logo-marianne" src="/marianne-icone.png" alt="Logo Marianne" />
         </div>
         <button

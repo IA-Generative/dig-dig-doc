@@ -3,8 +3,8 @@
 import uuid
 from typing import Self
 
-from digdigdoc_ephemeral import EphemeralAnalysisConfig
-from digdigdoc_ephemeral.models import TTL_DEFAULT_HOURS, TTL_MAX_HOURS
+from millefeuille_ephemeral import EphemeralAnalysisConfig
+from millefeuille_ephemeral.models import TTL_DEFAULT_HOURS, TTL_MAX_HOURS
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -13,7 +13,7 @@ class FileRef(BaseModel):
 
     # Clé S3 du fichier, déposé au préalable dans le stockage d'AsyncTaskAPI.
     file_id: str = Field(min_length=1, max_length=1024)
-    # Nom d'affichage côté dig-dig-doc ; par défaut, le dernier segment de `file_id`.
+    # Nom d'affichage côté mille-feuille ; par défaut, le dernier segment de `file_id`.
     name: str | None = Field(default=None, min_length=1)
 
     @property

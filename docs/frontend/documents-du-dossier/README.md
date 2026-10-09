@@ -1,6 +1,6 @@
 # Documents d'un dossier : brouillon, revue et génération
 
-Issue : [#142](https://github.com/IA-Generative/dig-dig-doc/issues/142) (parent [#107](https://github.com/IA-Generative/dig-dig-doc/issues/107)). API : [`brouillons-de-document`](../../backend/brouillons-de-document.md), [`generation-des-champs`](../../backend/generation-des-champs.md), [`assemblage-des-documents`](../../backend/assemblage-des-documents.md). Les modèles se gèrent dans l'onglet « Documents » de l'analyse ([`modeles-de-document`](../modeles-de-document/README.md)).
+Issue : [#142](https://github.com/IA-Generative/mille-feuille/issues/142) (parent [#107](https://github.com/IA-Generative/mille-feuille/issues/107)). API : [`brouillons-de-document`](../../backend/brouillons-de-document.md), [`generation-des-champs`](../../backend/generation-des-champs.md), [`assemblage-des-documents`](../../backend/assemblage-des-documents.md). Les modèles se gèrent dans l'onglet « Documents » de l'analyse ([`modeles-de-document`](../modeles-de-document/README.md)).
 
 Un **document de fin d'instruction** se prépare en trois temps : un **brouillon** (un modèle de l'analyse du dossier), la **revue** de ses champs (valeur, statut, sources, aperçu fidèle), puis la **génération** du fichier (ODT et PDF). Tout est **interne** : rien n'est envoyé à l'usager.
 

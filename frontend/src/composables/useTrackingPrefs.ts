@@ -35,7 +35,7 @@ interface Stored {
  * Chaque portée a ses propres vues enregistrées et ses propres colonnes.
  */
 export function useTrackingPrefs(scopeKey: Ref<string> | string, fields: Ref<CustomField[]>) {
-  const key = computed(() => `digdigdoc-tracking-${typeof scopeKey === "string" ? scopeKey : scopeKey.value}`);
+  const key = computed(() => `millefeuille-tracking-${typeof scopeKey === "string" ? scopeKey : scopeKey.value}`);
   const transversal = computed(() => (typeof scopeKey === "string" ? scopeKey : scopeKey.value) === "all");
 
   const stored = ref<Stored>({ views: [], columns: { order: [], hidden: [] } });

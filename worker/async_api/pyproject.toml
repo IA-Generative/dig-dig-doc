@@ -1,11 +1,11 @@
 [project]
-name = "dig-dig-doc-async-api-worker"
+name = "mille-feuille-async-api-worker"
 version = "0.1.0"
-description = "Worker AsyncTaskAPI (RabbitMQ, sans Celery) qui exécute des analyses dig-dig-doc via l'API éphémère"
+description = "Worker AsyncTaskAPI (RabbitMQ, sans Celery) qui exécute des analyses mille-feuille via l'API éphémère"
 requires-python = ">=3.13"
 dependencies = [
-    "digdigdoc",
-    "digdigdoc-ephemeral",
+    "millefeuille",
+    "millefeuille-ephemeral",
     # Bibliothèque de worker d'async-api : non publiée sur PyPI, donc épinglée sur un commit.
     "mic-worker @ git+https://github.com/IA-Generative/async-api@8c109970c528cc622c04e6a3488d0e73be9bcd0a#subdirectory=workers/python/mic-worker",
     "loguru>=0.7.3",
@@ -23,9 +23,9 @@ dev = [
 
 # Les SDK du monorepo (même chemin relatif en local et dans l'image : voir Dockerfile).
 [tool.uv.sources]
-digdigdoc-ephemeral = { path = "../../sdks/python/digdigdoc-ephemeral", editable = true }
-# editable : le SDK éphémère déclare lui-même digdigdoc en editable, uv refuse deux déclarations divergentes.
-digdigdoc = { path = "../../sdks/python/digdigdoc", editable = true }
+millefeuille-ephemeral = { path = "../../sdks/python/millefeuille-ephemeral", editable = true }
+# editable : le SDK éphémère déclare lui-même millefeuille en editable, uv refuse deux déclarations divergentes.
+millefeuille = { path = "../../sdks/python/millefeuille", editable = true }
 
 [tool.uv]
 package = false

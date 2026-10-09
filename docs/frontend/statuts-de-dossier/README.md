@@ -1,6 +1,6 @@
 # Statuts de dossier : configuration, liste et changement de statut
 
-Issue : [#170](https://github.com/IA-Generative/dig-dig-doc/issues/170) (parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167)). API : [`statuts-de-dossier`](../../backend/statuts-de-dossier.md).
+Issue : [#170](https://github.com/IA-Generative/mille-feuille/issues/170) (parent [#167](https://github.com/IA-Generative/mille-feuille/issues/167)). API : [`statuts-de-dossier`](../../backend/statuts-de-dossier.md).
 
 Chaque **analyse** définit les **statuts** que peuvent prendre ses dossiers (« À instruire », « En instruction », « Clos »…). Le **statut de dossier** dit où en est le traitement ; il est **distinct** de l'état d'**exécution** de l'analyse automatique (« En attente », « En cours », « Terminé »), qui garde sa propre colonne.
 

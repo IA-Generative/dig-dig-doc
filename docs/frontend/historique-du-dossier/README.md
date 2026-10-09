@@ -1,6 +1,6 @@
 # Historique du dossier
 
-Issue : [#171](https://github.com/IA-Generative/dig-dig-doc/issues/171) (parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167)). API : [`journal-du-dossier`](../../backend/journal-du-dossier.md).
+Issue : [#171](https://github.com/IA-Generative/mille-feuille/issues/171) (parent [#167](https://github.com/IA-Generative/mille-feuille/issues/167)). API : [`journal-du-dossier`](../../backend/journal-du-dossier.md).
 
 L'**historique** d'un dossier est la **chronologie de son journal d'événements** : qui a fait quoi, et quand. Il se lit du plus récent au plus ancien, se filtre par type et par auteur, et se pagine.
 
@@ -51,7 +51,7 @@ Un type d'événement **inconnu** (ajouté plus tard côté serveur) est affich�
 
 ## Choix et limites
 
-- **Droits** : l'historique est visible de tout utilisateur connecté qui ouvre le dossier. Le masquer pour les personnes sans droit de lecture suivra l'accès par groupe ([#177](https://github.com/IA-Generative/dig-dig-doc/issues/177)) et les rôles ([#178](https://github.com/IA-Generative/dig-dig-doc/issues/178)).
+- **Droits** : l'historique est visible de tout utilisateur connecté qui ouvre le dossier. Le masquer pour les personnes sans droit de lecture suivra l'accès par groupe ([#177](https://github.com/IA-Generative/mille-feuille/issues/177)) et les rôles ([#178](https://github.com/IA-Generative/mille-feuille/issues/178)).
 - **Pas de contenu du dossier** : le journal ne garde ni les valeurs de champs ni le **nom des fichiers déposés**. Le nom d'un document ajouté est retrouvé dans la liste des documents du dossier ; si le document n'y est plus, l'événement dit simplement « Document ajouté ».
 - Les catégories sélectionnées pour masquer les consultations demandent au serveur les types un par un : un type d'événement ajouté plus tard n'apparaît qu'avec **toutes** les catégories actives, jusqu'à ce que l'interface le connaisse.
 - Il n'y a pas de test automatisé côté interface (le projet n'a pas encore de cadre de test frontend) : la page est vérifiée par la documentation et ses captures, générées par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée.

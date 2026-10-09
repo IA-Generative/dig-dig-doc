@@ -1,4 +1,4 @@
-# Serveur MCP - dig-dig-doc éphémère
+# Serveur MCP - mille-feuille éphémère
 
 Ce dossier expose l'[API éphémère](../../../docs/ephemeral-api.md)
 (`/api/ephemeral/*`) via [MCP](https://modelcontextprotocol.io/), pour
@@ -58,7 +58,7 @@ réponse) - à conserver précieusement, il ne sera plus jamais réaffiché.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http dig-dig-doc-ephemeral http://localhost:8000/mcp \
+claude mcp add --transport http mille-feuille-ephemeral http://localhost:8000/mcp \
   --header "Authorization: Bearer <votre-jeton-api>"
 ```
 
@@ -69,7 +69,7 @@ Dans la configuration du client (`claude_desktop_config.json`) :
 ```json
 {
   "mcpServers": {
-    "dig-dig-doc-ephemeral": {
+    "mille-feuille-ephemeral": {
       "url": "http://localhost:8000/mcp",
       "headers": {
         "Authorization": "Bearer <votre-jeton-api>"
@@ -205,7 +205,7 @@ complet dans `docs/mcp-helper-agent-plan.md`.
 #### Claude Code
 
 ```bash
-claude mcp add --transport http dig-dig-doc-helper http://localhost:8000/mcp/helper \
+claude mcp add --transport http mille-feuille-helper http://localhost:8000/mcp/helper \
   --header "Authorization: Bearer <votre-jeton-api>"
 ```
 
@@ -214,7 +214,7 @@ claude mcp add --transport http dig-dig-doc-helper http://localhost:8000/mcp/hel
 ```json
 {
   "mcpServers": {
-    "dig-dig-doc-helper": {
+    "mille-feuille-helper": {
       "url": "http://localhost:8000/mcp/helper",
       "headers": {
         "Authorization": "Bearer <votre-jeton-api>"

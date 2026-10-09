@@ -69,8 +69,8 @@ Les valeurs d'un dossier qu'on ne voit pas ne sont ni listées, ni filtrables, n
 
 ## Choix et limites
 
-- **Qui définit les colonnes** : les administrateurs. Il n'existe pas encore de notion d'« administrateur d'une analyse » ; les rôles ([#178](https://github.com/IA-Generative/dig-dig-doc/issues/178)) pourront préciser. **Qui saisit une valeur** : toute personne qui voit le dossier.
-- **Valeurs internes** : elles ne sont pas visibles de l'usager (hors périmètre, [#105](https://github.com/IA-Generative/dig-dig-doc/issues/105)). Le journal contient pourtant l'ancienne et la nouvelle valeur d'une colonne, comme le demande #173 ; à garder en tête pour la durée de conservation du journal ([#182](https://github.com/IA-Generative/dig-dig-doc/issues/182)).
+- **Qui définit les colonnes** : les administrateurs. Il n'existe pas encore de notion d'« administrateur d'une analyse » ; les rôles ([#178](https://github.com/IA-Generative/mille-feuille/issues/178)) pourront préciser. **Qui saisit une valeur** : toute personne qui voit le dossier.
+- **Valeurs internes** : elles ne sont pas visibles de l'usager (hors périmètre, [#105](https://github.com/IA-Generative/mille-feuille/issues/105)). Le journal contient pourtant l'ancienne et la nouvelle valeur d'une colonne, comme le demande #173 ; à garder en tête pour la durée de conservation du journal ([#182](https://github.com/IA-Generative/mille-feuille/issues/182)).
 - **Version de l'analyse** : comme les statuts et l'échéance, un changement de colonnes compte dans le numéro de version de l'analyse.
 - **Pré-remplissage par l'IA** : hors périmètre ; la définition de chaque champ est prête à le guider (suite possible).
 - **Pas de contrainte d'unicité ni de formule** : un champ est une valeur saisie, rien de calculé.

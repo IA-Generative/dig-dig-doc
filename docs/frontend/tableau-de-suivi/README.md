@@ -1,6 +1,6 @@
 # Tableau de suivi des dossiers
 
-Issues : [#173](https://github.com/IA-Generative/dig-dig-doc/issues/173) (tableau, par analyse) et [#186](https://github.com/IA-Generative/dig-dig-doc/issues/186) (vue transversale), parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167). Le [tableau de bord](../tableau-de-bord/README.md) y renvoie par des liens filtrés ; les règles d'accès sont dans [accès aux dossiers par groupe](../acces-aux-dossiers/README.md).
+Issues : [#173](https://github.com/IA-Generative/mille-feuille/issues/173) (tableau, par analyse) et [#186](https://github.com/IA-Generative/mille-feuille/issues/186) (vue transversale), parent [#167](https://github.com/IA-Generative/mille-feuille/issues/167). Le [tableau de bord](../tableau-de-bord/README.md) y renvoie par des liens filtrés ; les règles d'accès sont dans [accès aux dossiers par groupe](../acces-aux-dossiers/README.md).
 
 Un **tableau de pilotage des dossiers** : qui s'en occupe, où ils en sont, quelle est leur échéance, plus des **colonnes personnalisées** définies par l'administrateur de l'analyse. Il existe **à deux niveaux** avec le même composant : dans chaque analyse, et en **vue transversale** sur toutes les analyses accessibles.
 
@@ -127,6 +127,6 @@ Les filtres se lisent dans l'URL, ce qui permet au tableau de bord et aux notifi
 - **Branché sur l'API** : liste, filtres, recherche, tri, pagination, échéance, affectation, colonnes personnalisées (définitions, valeurs, filtres, tri), accès par groupe. Le **tableau de bord** utilise la même route de lecture pour ses liens.
 - **Vues enregistrées et colonnes choisies** : gardées dans le navigateur, propres à l'utilisateur et à la portée (une analyse, ou la vue transversale). Leur persistance côté serveur reste à faire.
 - **Valeurs personnalisées** : internes, non visibles de l'usager. Leur modification est tracée dans le journal du dossier avec l'ancienne et la nouvelle valeur.
-- **Export CSV** : il reprend la vue courante, colonnes personnalisées comprises, jusqu'à 2 000 lignes. Les droits de lecture des valeurs et l'export des données d'usagers restent à confirmer ([#144](https://github.com/IA-Generative/dig-dig-doc/issues/144)).
+- **Export CSV** : il reprend la vue courante, colonnes personnalisées comprises, jusqu'à 2 000 lignes. Les droits de lecture des valeurs et l'export des données d'usagers restent à confirmer ([#144](https://github.com/IA-Generative/mille-feuille/issues/144)).
 - **Pas encore** : le pré-remplissage des valeurs par l'IA à partir de l'analyse du dossier (suite possible).
-- Pas de test automatisé côté interface ([#213](https://github.com/IA-Generative/dig-dig-doc/issues/213)) : l'écran est vérifié par ces captures, prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée (`node scripts/doc-screenshots.mjs <url> tracking`).
+- Pas de test automatisé côté interface ([#213](https://github.com/IA-Generative/mille-feuille/issues/213)) : l'écran est vérifié par ces captures, prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée (`node scripts/doc-screenshots.mjs <url> tracking`).

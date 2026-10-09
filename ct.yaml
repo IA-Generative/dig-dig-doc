@@ -1,7 +1,7 @@
-# chart-testing configuration for the digdigdoc monorepo chart.
-# The chart lives at the repo root in digdigdoc/, not in charts/.
+# chart-testing configuration for the millefeuille monorepo chart.
+# The chart lives at the repo root in millefeuille/, not in charts/.
 chart-dirs:
-  - digdigdoc
+  - millefeuille
 check-version-increment: false
 validate-maintainers: false
 validate-chart-schema: true

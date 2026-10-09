@@ -8,8 +8,8 @@ class KeycloakSettings(BaseSettings):
     KEYCLOAK_URL: str = "http://localhost:8080"
     # Browser-facing URL, if different (e.g. reverse-proxied). Falls back to KEYCLOAK_URL.
     KEYCLOAK_PUBLIC_URL: str | None = None
-    KEYCLOAK_REALM: str = "dig-dig-doc"
-    KEYCLOAK_CLIENT_ID: str = "dig-dig-doc-backend"
+    KEYCLOAK_REALM: str = "mille-feuille"
+    KEYCLOAK_CLIENT_ID: str = "mille-feuille-backend"
     KEYCLOAK_CLIENT_SECRET: str | None = None
 
     # Used to build the fixed OAuth2 redirect_uri registered in the Keycloak client.
@@ -17,7 +17,7 @@ class KeycloakSettings(BaseSettings):
     # Where the browser lands after login/logout.
     FRONTEND_URL: str = "http://localhost:5173"
 
-    SESSION_COOKIE_NAME: str = "digdigdoc_session"
+    SESSION_COOKIE_NAME: str = "millefeuille_session"
     SESSION_COOKIE_SECURE: bool = True
     SESSION_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
     SESSION_TTL_SECONDS: int = 7 * 24 * 60 * 60

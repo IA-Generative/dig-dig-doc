@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 EventCallback = Callable[[str, dict], None]
 
-_SYSTEM_PROMPT = """Tu es l'agent helper de dig-dig-doc. Tu aides l'utilisateur à retrouver ou \
+_SYSTEM_PROMPT = """Tu es l'agent helper de mille-feuille. Tu aides l'utilisateur à retrouver ou \
 créer des analyses et des dossiers, à y ajouter des fichiers et à lancer le pipeline \
 d'instruction (classification, extraction, agents), en langage naturel.
 

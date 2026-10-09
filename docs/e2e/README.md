@@ -44,7 +44,7 @@ Noter dans le rapport **le modèle et sa fenêtre de contexte** : les réglages 
 
 ### Comptes de test
 
-Realm de dev (`docker/keycloak/dig-dig-doc-realm.json`) : `agent` / `agent` (instructeur) et `admin` / `admin`. Les routes internes du worker se testent avec l'en-tête `X-App-Token: dev-only-worker-token-not-for-prod`.
+Realm de dev (`docker/keycloak/mille-feuille-realm.json`) : `agent` / `agent` (instructeur) et `admin` / `admin`. Les routes internes du worker se testent avec l'en-tête `X-App-Token: dev-only-worker-token-not-for-prod`.
 
 ### Points d'attention de l'environnement
 
@@ -79,7 +79,7 @@ docker compose exec worker-agent-execution celery -A app.celery_app inspect ping
 ### Base de données
 
 ```bash
-docker compose exec postgres psql -U digdigdoc -d digdigdoc
+docker compose exec postgres psql -U millefeuille -d millefeuille
 ```
 
 ```sql

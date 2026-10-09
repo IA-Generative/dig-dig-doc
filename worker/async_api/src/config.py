@@ -6,8 +6,8 @@ class Settings(BaseSettings):
 
     # RabbitMQ (AsyncTaskAPI)
     BROKER_URL: str
-    IN_QUEUE_NAME: str = "dig_dig_doc_queue_in"
-    OUT_QUEUE_NAME: str = "dig_dig_doc_queue_out"
+    IN_QUEUE_NAME: str = "mille_feuille_queue_in"
+    OUT_QUEUE_NAME: str = "mille_feuille_queue_out"
     WORKER_CONCURRENCY: int = 2
     HEALTH_CHECK_HOST: str = "0.0.0.0"  # noqa: S104
     HEALTH_CHECK_PORT: int = 8084
@@ -24,10 +24,10 @@ class Settings(BaseSettings):
     AWS_S3_BUCKET_NAME: str
     AWS_S3_VERIFY: bool = True
 
-    # API dig-dig-doc (l'API éphémère est appelée avec un token API : X-App-Token).
-    DIGDIGDOC_BASE_URL: str
-    DIGDIGDOC_API_TOKEN: str
-    DIGDIGDOC_REQUEST_TIMEOUT: float = 30.0
+    # API mille-feuille (l'API éphémère est appelée avec un token API : X-App-Token).
+    MILLEFEUILLE_BASE_URL: str
+    MILLEFEUILLE_API_TOKEN: str
+    MILLEFEUILLE_REQUEST_TIMEOUT: float = 30.0
 
     # Garde-fous : le worker charge les fichiers en mémoire avant de les envoyer au backend
     # (contrat de service d'async-api, §5 : borner ses consommations).
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # Durée maximale d'attente de la fin d'un run, et fréquence d'interrogation.
     RUN_TIMEOUT_SECONDS: float = 900.0
     POLL_INTERVAL_SECONDS: float = 3.0
-    # Supprime le résultat conservé côté dig-dig-doc une fois renvoyé dans le message `success`.
+    # Supprime le résultat conservé côté mille-feuille une fois renvoyé dans le message `success`.
     DELETE_RUN_AFTER_RESULT: bool = True
 
 

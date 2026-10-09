@@ -1,6 +1,6 @@
 # Relance incrémentale de l'analyse de dossier
 
-Issue : [#119](https://github.com/IA-Generative/dig-dig-doc/issues/119) (parent [#106](https://github.com/IA-Generative/dig-dig-doc/issues/106)). S'appuie sur les empreintes d'unités de [#126](https://github.com/IA-Generative/dig-dig-doc/issues/126).
+Issue : [#119](https://github.com/IA-Generative/mille-feuille/issues/119) (parent [#106](https://github.com/IA-Generative/mille-feuille/issues/106)). S'appuie sur les empreintes d'unités de [#126](https://github.com/IA-Generative/mille-feuille/issues/126).
 
 ## Principe
 
@@ -54,7 +54,7 @@ Les éléments repris portent un badge **Reprise** ; une valeur d'instructeur co
 
 ## Ce qui n'est pas vérifié
 
-- **Aucune relance réelle n'a été jouée** : les tests couvrent le backend (API interne réelle, base réelle) et le worker (backend simulé), mais pas un vrai dossier de bout en bout avec un vrai LLM (voir [#132](https://github.com/IA-Generative/dig-dig-doc/issues/132), scénarios C4 à C7).
+- **Aucune relance réelle n'a été jouée** : les tests couvrent le backend (API interne réelle, base réelle) et le worker (backend simulé), mais pas un vrai dossier de bout en bout avec un vrai LLM (voir [#132](https://github.com/IA-Generative/mille-feuille/issues/132), scénarios C4 à C7).
 - La capture ci-dessus utilise des **données simulées**.
 - **Qualité de la reprise** : dépend de la stabilité des empreintes. Une empreinte instable (par exemple un texte de page légèrement différent à chaque extraction) empêcherait toute reprise ; à mesurer.
 

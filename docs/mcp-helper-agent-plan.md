@@ -1,6 +1,6 @@
 # Plan d'implémentation : agent helper (MCP + chat interne)
 
-Suivi d'implémentation de l'issue [#50](https://github.com/IA-Generative/dig-dig-doc/issues/50).
+Suivi d'implémentation de l'issue [#50](https://github.com/IA-Generative/mille-feuille/issues/50).
 Branche : `feat/mcp-helper-agent` (créée depuis `main`, à jour au 2026-09-25).
 
 Pas de TTL sur `agent_conversations`/`agent_messages` (conservées indéfiniment, comme les
@@ -175,7 +175,7 @@ Convention de suivi : cocher au fur et à mesure de l'implémentation, dans cett
 
 ## Phase 6 — Serveur MCP helper (`backend/app/mcp/helper_server.py`) ✅ fait le 2026-09-25
 
-- [x] Nouveau `MCPServer` (nom `dig-dig-doc-helper`), monté sous `/mcp/helper` dans `app/main.py`
+- [x] Nouveau `MCPServer` (nom `mille-feuille-helper`), monté sous `/mcp/helper` dans `app/main.py`
   (même `BearerTokenAuthMiddleware` que `/mcp`). **Piège d'ordre de montage** : Starlette résout
   les `Mount` par préfixe dans l'ordre d'enregistrement, et `/mcp/helper/...` commence aussi par
   `/mcp` - `app.mount("/mcp/helper", ...)` doit être enregistré **avant**
