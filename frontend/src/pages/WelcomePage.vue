@@ -222,7 +222,7 @@ const useCases = [
       <div class="fr-container">
         <h2 class="welcome__section-title">Cas d'usage</h2>
         <p class="welcome__section-subtitle">
-          mille-feuille s'adapte à tout flux d'instruction documentaire nécessitant
+          Mille-feuille s'adapte à tout flux d'instruction documentaire nécessitant
           fiabilité et traçabilité.
         </p>
         <div class="welcome__usecase-grid">

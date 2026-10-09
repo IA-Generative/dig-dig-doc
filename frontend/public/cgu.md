@@ -15,7 +15,7 @@ compte et s'engage à ne pas partager ses identifiants.
 
 ## 3. Utilisation
 
-mille-feuille est un outil d'aide à l'instruction. Les analyses et propositions
+Mille-feuille est un outil d'aide à l'instruction. Les analyses et propositions
 générées par l'IA **ne constituent pas une décision** et doivent être
 **vérifiées et validées** par un agent avant toute action.
 
