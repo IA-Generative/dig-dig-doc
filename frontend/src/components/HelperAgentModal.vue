@@ -286,7 +286,7 @@ function formatRelativeTime(iso: string): string {
           :stream-events="chatEvents"
           :is-running="isChatRunning"
           :prefill="dossierContext?.question ?? ''"
-          intro-title="Assistant mille-feuille"
+          intro-title="Assistant MilleFeuille"
           intro-text="Posez une question, demandez la création d'un dossier, la recherche d'analyses, et plus encore."
           placeholder="Écrivez votre message à l'assistant..."
           @submit="onChatSubmit"
