@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1-rc](https://github.com/IA-Generative/mille-feuille/compare/v0.12.0...v0.12.1-rc) (2026-10-09)
+
+
+### Bug Fixes
+
+* **chart:** images Harbor en exploration/mille-feuille-&lt;service&gt; ([5b5bf61](https://github.com/IA-Generative/mille-feuille/commit/5b5bf619024fccbf2dc9f97a56e699dfef44f71f))
+
 ## [0.12.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.3...v0.12.0) (2026-10-09)
 
 
