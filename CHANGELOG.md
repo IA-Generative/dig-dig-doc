@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2-rc](https://github.com/IA-Generative/mille-feuille/compare/v0.12.1...v0.12.2-rc) (2026-10-09)
+
+
+### Bug Fixes
+
+* **chart:** retirer la DATABASE_URL par défaut du job de migration ([53bc6f4](https://github.com/IA-Generative/mille-feuille/commit/53bc6f43a9aadfbab26193517a6601a1f6291ad9))
+
 ## [0.12.1](https://github.com/IA-Generative/mille-feuille/compare/v0.12.0...v0.12.1) (2026-10-09)
 
 
