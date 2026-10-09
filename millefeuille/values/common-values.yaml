@@ -13,7 +13,7 @@ global:
 backend:
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/backend"
+    repository: "exploration/mille-feuille-backend"
     pullPolicy: "Always"
   replicaCount: 2
   # FastAPI/uvicorn listens on 8000, not the chart default 8080. Without this override the
@@ -92,7 +92,7 @@ backend:
 worker_document:
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/worker-document-process"
+    repository: "exploration/mille-feuille-worker-document-process"
     pullPolicy: "Always"
   serviceAccount:
     enabled: true
@@ -129,7 +129,7 @@ worker_document:
 worker_render:
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/worker-document-render"
+    repository: "exploration/mille-feuille-worker-document-render"
     pullPolicy: "Always"
   serviceAccount:
     enabled: true
@@ -167,7 +167,7 @@ worker_render:
 worker_agent:
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/worker-agent-execution"
+    repository: "exploration/mille-feuille-worker-agent-execution"
     pullPolicy: "Always"
   serviceAccount:
     enabled: true
@@ -205,7 +205,7 @@ worker_async_api:
   enabled: false
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/worker-async-api"
+    repository: "exploration/mille-feuille-worker-async-api"
     pullPolicy: "Always"
   serviceAccount:
     enabled: true
@@ -267,7 +267,7 @@ jobs:
       deletePolicy: "before-hook-creation,hook-succeeded"
     image:
       registry: "harbor.sdid.cpin.numerique-interieur.com"
-      repository: "exploration/mille-feuille/backend"
+      repository: "exploration/mille-feuille-backend"
       # The tag defaults to the chart's appVersion (a fixed release), so the image does not need
       # to be pulled again on every run.
       pullPolicy: "IfNotPresent"
@@ -288,7 +288,7 @@ jobs:
       # Same image as the migration itself (Harbor, already pulled): no dependency on ghcr.io, which
       # is unreachable from restricted environments and left the pod stuck in `PodInitializing`.
       # Polls the TCP port every second; alembic then fails fast if PostgreSQL is not really ready.
-      image: "harbor.sdid.cpin.numerique-interieur.com/exploration/mille-feuille/backend:{{ .Chart.AppVersion }}"
+      image: "harbor.sdid.cpin.numerique-interieur.com/exploration/mille-feuille-backend:{{ .Chart.AppVersion }}"
       imagePullPolicy: "IfNotPresent"
       command:
       - "python"
@@ -325,7 +325,7 @@ jobs:
 frontend:
   image:
     registry: "harbor.sdid.cpin.numerique-interieur.com"
-    repository: "exploration/mille-feuille/frontend"
+    repository: "exploration/mille-feuille-frontend"
     pullPolicy: "Always"
   replicaCount: 2
   service:
