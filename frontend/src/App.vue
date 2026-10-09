@@ -89,7 +89,7 @@ const navItems = [
         title="Creuser dans vos dossiers pour trouver de la valeur"
       >
         <div class="app-sidebar__logo">
-          <DsfrLogo v-if="!isSidebarCollapsed" small logo-text="mille-feuille" />
+          <DsfrLogo v-if="!isSidebarCollapsed" small logo-text="MilleFeuille" />
           <img v-else class="app-sidebar__logo-marianne" src="/marianne-icone.png" alt="Logo Marianne" />
         </div>
         <button
