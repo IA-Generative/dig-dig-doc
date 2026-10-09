@@ -1,6 +1,6 @@
 # Accès à l'assistant depuis le chat d'un dossier
 
-Issue : [#104](https://github.com/IA-Generative/dig-dig-doc/issues/104)
+Issue : [#104](https://github.com/IA-Generative/mille-feuille/issues/104)
 
 Le chat d'un dossier sert à **analyser le contenu du dossier**. Pour **créer ou piloter** des analyses et des dossiers, l'utilisateur passe par l'**assistant** (agent helper), qui garde sa propre conversation. Les deux restent séparés : on ajoute seulement un accès direct de l'un vers l'autre.
 

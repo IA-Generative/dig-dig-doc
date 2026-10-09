@@ -53,6 +53,6 @@ Chaque élément : `id`, `type`, `actor_id`, `actor_name`, `created_at`, `payloa
 ## Choix et limites
 
 - **Droits** : le journal n'est lisible que par ceux qui voient le dossier ([accès](acces-aux-dossiers.md)) ; les accès administrateur n'y sont montrés qu'aux administrateurs.
-- **Conservation** : le journal est conservé tant que le dossier existe ; la durée de conservation, en particulier des accès administrateur, reste à décider ([#182](https://github.com/IA-Generative/dig-dig-doc/issues/182)).
+- **Conservation** : le journal est conservé tant que le dossier existe ; la durée de conservation, en particulier des accès administrateur, reste à décider ([#182](https://github.com/IA-Generative/mille-feuille/issues/182)).
 - **Historique existant** : la migration donne à chaque dossier existant un événement `created` daté de sa création, sans auteur (`"imported": true`) ; rien d'autre n'est reconstitué.
 - Pas de garantie de base de données contre un `UPDATE` ou un `DELETE` direct en SQL : l'immuabilité est celle de l'application.

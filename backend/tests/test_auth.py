@@ -6,7 +6,7 @@ def test_login_redirects_to_keycloak(client: TestClient) -> None:
     assert response.status_code == 307
     location = response.headers["location"]
     assert "/protocol/openid-connect/auth" in location
-    assert "client_id=dig-dig-doc-backend" in location
+    assert "client_id=mille-feuille-backend" in location
     assert "code_challenge=" in location
 
 

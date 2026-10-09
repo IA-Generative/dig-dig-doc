@@ -44,7 +44,7 @@ def test_mcp_full_cycle(client: TestClient) -> None:
         async with _mcp_session(token) as (read, write):
             async with ClientSession(read, write) as session:
                 init = await session.initialize()
-                assert init.server_info.name == "dig-dig-doc-ephemeral"
+                assert init.server_info.name == "mille-feuille-ephemeral"
 
                 tools = await session.list_tools()
                 assert {t.name for t in tools.tools} == {

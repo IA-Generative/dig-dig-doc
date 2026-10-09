@@ -1,6 +1,6 @@
 # Échéance du dossier
 
-Issue : [#172](https://github.com/IA-Generative/dig-dig-doc/issues/172) (parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167)). API : [`echeance-du-dossier`](../../backend/echeance-du-dossier.md).
+Issue : [#172](https://github.com/IA-Generative/mille-feuille/issues/172) (parent [#167](https://github.com/IA-Generative/mille-feuille/issues/167)). API : [`echeance-du-dossier`](../../backend/echeance-du-dossier.md).
 
 Un dossier peut avoir une **date d'échéance**, affichée avec une **couleur** qui dépend du temps restant. Les seuils de couleur se règlent **par analyse**. Le libellé (« Échéance dans 5 j », « Échéance dépassée depuis 4 j ») est **toujours écrit** : la couleur n'est jamais le seul signal.
 

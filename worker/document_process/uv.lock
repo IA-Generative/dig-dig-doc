@@ -159,7 +159,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dig-dig-doc-worker-document-process"
+name = "mille-feuille-worker-document-process"
 version = "0.4.1"
 source = { editable = "." }
 dependencies = [

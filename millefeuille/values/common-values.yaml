@@ -1,0 +1,683 @@
+fullnameOverride: millefeuille
+
+global:
+  ingress:
+    enabled: true
+    annotations:
+      monitor: enabled
+      nginx.ingress.kubernetes.io/whitelist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+      k8s.apisix.apache.org/allowlist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+  imagePullSecrets:
+  - name: "registry-pull-secret"
+
+backend:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/backend"
+    pullPolicy: "Always"
+  replicaCount: 2
+  # FastAPI/uvicorn listens on 8000, not the chart default 8080. Without this override the
+  # probes hit 8080 (connection refused) and the Service targetPort is wrong too.
+  containerPort: 8000
+  # The chart defines probes with `port: *backendContainerPort` (a YAML anchor resolved to 8080
+  # at parse time). Overriding containerPort above does NOT change the anchor, so the probes
+  # still hit 8080. We must re-declare the probes with the correct port. Paths and timings are
+  # copied verbatim from the chart defaults (values.yaml).
+  probes:
+    # All probes use /api/health (checks redis, meilisearch, db).
+    startupProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 0
+      successThreshold: 1
+      failureThreshold: 10
+      periodSeconds: 10
+      timeoutSeconds: 5
+    # readinessProbe/livenessProbe use /api/health - traffic is only routed to the backend
+    # once all dependencies are healthy, and the pod is restarted if it becomes unhealthy.
+    readinessProbe:
+      httpGet:
+        path: "/api/health/ready"
+        port: 8000
+      initialDelaySeconds: 10
+      successThreshold: 2
+      failureThreshold: 2
+      periodSeconds: 10
+      timeoutSeconds: 5
+    livenessProbe:
+      httpGet:
+        path: "/api/health"
+        port: 8000
+      initialDelaySeconds: 30
+      successThreshold: 1
+      failureThreshold: 3
+      periodSeconds: 30
+      timeoutSeconds: 5
+  service:
+    port: 8000
+  serviceAccount:
+    enabled: true
+    create: true
+  envFrom:
+  - secretRef:
+      name: "millefeuille-s3"
+  - secretRef:
+      name: "millefeuille-keycloak"
+  - secretRef:
+      name: "millefeuille-openai"
+  - secretRef:
+      name: "millefeuille-worker"
+  - secretRef:
+      name: "millefeuille-redis"
+  # Listed last: envFrom's later-source-wins rule guarantees this computed DATABASE_URL is what
+  # actually lands in the container even if another secret above ever grows a stray field of the
+  # same name.
+  - secretRef:
+      name: "millefeuille-db-infos"
+  # Plain (non-secret) app config - see backend/app/config/*.py for the full settings contract.
+  env:
+    KEYCLOAK_REALM: "mirai"
+    KEYCLOAK_CLIENT_ID: "millefeuille"
+    SESSION_COOKIE_SECURE: "true"
+    # Same S3 endpoint already used for cnpg backups below - no need to self-host rustfs when a
+    # known S3 exists. Only the access/secret key are Vault-backed (`millefeuille-s3`); bucket differs
+    # per env (see values-<env>.yaml).
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    # Same OpenAI-compatible LLM hub used by ocr's worker.
+    # OPENAI_API_BASE_URL: ""
+    LOG_LEVEL: "INFO"
+
+# Celery worker - document ingestion/OCR pipeline (worker/document_process).
+worker_document:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/worker-document-process"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue replaces the chart-native HPA - the millefeuille
+  # chart has no KEDA support, so ScaledObjects + TriggerAuthentications are declared in
+  # `extraObjects` below. Scales on actual queue length instead of CPU.
+  #
+  # Probes disabled: the chart default uses `celery inspect ping` exec probes, but these
+  # can cause false-positive restarts under load (the inspect call itself can timeout when
+  # the worker is busy processing a long task). KEDA on queue length is the real liveness
+  # signal here - if the queue drains, the worker is healthy by definition.
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  envFrom:
+  - secretRef:
+      name: "millefeuille-s3"
+  - secretRef:
+      name: "millefeuille-worker"
+  - secretRef:
+      name: "millefeuille-redis"
+  env:
+    CELERY_QUEUE_NAME: "document_processing"
+    BACKEND_INTERNAL_URL: "http://millefeuille-backend:8000"
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    OCR_LANGUAGE: "fra"
+
+# Celery worker - fills ODT document templates and converts them to PDF with LibreOffice
+# (worker/document_render). The image is large (~800 MB: LibreOffice Writer + fonts) and LibreOffice
+# is memory-hungry - see `resources` below. Fonts installed in the image decide the fidelity of the
+# PDF: a font missing from the image is silently replaced (see worker/document_render/README.md).
+worker_render:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/worker-document-render"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue (`document_render`) - see document_process above.
+  # Probes disabled - see document_process above for rationale (a conversion can keep the worker busy).
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  # Two concurrent LibreOffice conversions (`--concurrency=2` in the image CMD), one profile each.
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "250m"
+    limits:
+      memory: "3Gi"
+      cpu: "2"
+  # Only what this worker needs: the Redis URL (Celery broker and results, `REDIS_URL` from `millefeuille-redis`) and
+  # the S3 credentials, bucket and region (`millefeuille-s3`). NOT `millefeuille-worker`: it holds the internal
+  # token and the LLM key, and this worker calls neither the backend nor the LLM. See docs/secrets.md.
+  envFrom:
+  - secretRef:
+      name: "millefeuille-s3"
+  - secretRef:
+      name: "millefeuille-redis"
+  env:
+    CELERY_QUEUE_NAME: "document_render"
+    # Full endpoint (with scheme), same as the other workers.
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+
+# Celery worker - agentic research/chat execution (worker/agent_execution).
+# NOTE: this worker's LangGraph checkpointer needs RediSearch (redis-stack), which is why
+# `redis.image` below is overridden away from the chart's plain redis default - see comment there.
+worker_agent:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/worker-agent-execution"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # KEDA ScaledObject on the Celery Redis queue - see document_process above.
+  # Probes disabled - see document_process above for rationale.
+  probes:
+    startupProbe: null
+    readinessProbe: null
+    livenessProbe: null
+  envFrom:
+  - secretRef:
+      name: "millefeuille-s3"
+  - secretRef:
+      name: "millefeuille-worker"
+  - secretRef:
+      name: "millefeuille-redis"
+  env:
+    CELERY_QUEUE_NAME: "agent_execution"
+    BACKEND_INTERNAL_URL: "http://millefeuille-backend:8000"
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    # Internal ClusterIP service (sub-chart `searxng`). Web search is opt-in per run (off by
+    # default - see worker/agent_execution/app/config.py SEARXNG_URL).
+    # Named `millefeuille-searxng` (not `searxng`) to avoid ArgoCD conflict: open-webui also deploys
+    # a `searxng` Deployment, and ArgoCD tracks resources by name across apps.
+    SEARXNG_URL: "http://millefeuille-searxng:8080"
+
+# AsyncTaskAPI worker - RabbitMQ consumer, no Celery (worker/async_api). Lets mille-feuille be consumed
+# by the async-api platform (https://github.com/IA-Generative/async-api): it runs analyses through
+# the backend's ephemeral API (/api/ephemeral/*).
+# Opt-in: flip `enabled` once the `millefeuille-async-api-worker` secret exists (see below). Not scaled
+# by KEDA: it consumes RabbitMQ, not the Celery Redis queues, and its concurrency is
+# WORKER_CONCURRENCY (bounded by memory, since files are loaded in RAM - see worker/async_api/README.md).
+worker_async_api:
+  enabled: false
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/worker-async-api"
+    pullPolicy: "Always"
+  serviceAccount:
+    enabled: true
+    create: true
+  # Chart defaults apply: liveness `/health`, readiness `/ready` (checks the async-api object
+  # storage), on port 8084 - both served by the worker itself, no Celery inspect involved.
+  #
+  # Secret `millefeuille-async-api-worker` (Vault, see docs/secrets.md section 12) holds credentials ONLY:
+  #   BROKER_URL             amqp://<user>:<password>@<rabbitmq host>:5672
+  #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY   async-api object storage credentials
+  #   MILLEFEUILLE_API_TOKEN    API token (X-App-Token) created via POST /api/app-tokens
+  envFrom:
+  - secretRef:
+      name: "millefeuille-async-api-worker"
+  # Everything that is not a secret, with its default (see worker/async_api/src/config.py).
+  # Env values must be strings.
+  env:
+    # RabbitMQ queues of the mille-feuille service on the async-api platform.
+    IN_QUEUE_NAME: "mille_feuille_queue_in"
+    OUT_QUEUE_NAME: "mille_feuille_queue_out"
+    # Service class declared in async-api's config/services.yaml: `long` lets the worker emit progress.
+    SERVICE_CLASS: "long"
+    # Concurrent tasks per pod. Files are loaded in RAM: peak ~ WORKER_CONCURRENCY x file sizes.
+    WORKER_CONCURRENCY: "2"
+    HEALTH_CHECK_HOST: "0.0.0.0"
+    HEALTH_CHECK_PORT: "8084"
+    LOG_LEVEL: "INFO"
+    # async-api object storage (where files are uploaded before a task). Adapt to your environment.
+    AWS_ENDPOINT_URL: "https://s3.fr-par.scw.cloud"
+    AWS_S3_BUCKET_NAME: "brio-prod-api-data"
+    AWS_DEFAULT_REGION: "fr-par"
+    AWS_S3_VERIFY: "true"
+    # mille-feuille backend, reached through its ephemeral API.
+    MILLEFEUILLE_BASE_URL: "http://millefeuille-backend:8000"
+    MILLEFEUILLE_REQUEST_TIMEOUT: "30"
+    # Memory guards, checked with a HEAD on S3 BEFORE any download (50 MiB / 100 MiB / 20 files).
+    MAX_FILE_SIZE_BYTES: "52428800"
+    MAX_TOTAL_SIZE_BYTES: "104857600"
+    MAX_FILES: "20"
+    # Wait for a run to finish (seconds), and polling interval.
+    RUN_TIMEOUT_SECONDS: "900"
+    POLL_INTERVAL_SECONDS: "3"
+    # Delete the result kept by mille-feuille once it has been returned in the `success` message.
+    DELETE_RUN_AFTER_RESULT: "true"
+
+jobs:
+  migration:
+    # `pre-install` would run before the CNPG cluster exists, so the wait-for-postgres init
+    # container below could never succeed on a fresh install (deadlock until the Helm timeout).
+    # On install the migration therefore runs after the resources are created (`post-install`);
+    # on upgrade the cluster already exists, so it still runs first (`pre-upgrade`) and the new
+    # code never starts on an old schema.
+    hook:
+      enabled: true
+      types:
+      - "post-install"
+      - "post-upgrade"
+      weight: 0
+      deletePolicy: "before-hook-creation,hook-succeeded"
+    image:
+      registry: "harbor.sdid.cpin.numerique-interieur.com"
+      repository: "exploration/mille-feuille/backend"
+      # The tag defaults to the chart's appVersion (a fixed release), so the image does not need
+      # to be pulled again on every run.
+      pullPolicy: "IfNotPresent"
+    command: ["alembic"]
+    args: ["upgrade", "head"]
+    envFrom:
+    - secretRef:
+        name: "millefeuille-db-infos"
+    serviceAccount:
+      enabled: true
+      create: true
+    # A failed migration is retried at most twice, and a stuck one is stopped after 15 minutes
+    # instead of blocking the release until the Helm timeout.
+    backoffLimit: 2
+    activeDeadlineSeconds: 900
+    initContainers:
+    - name: wait-for-postgres
+      # Same image as the migration itself (Harbor, already pulled): no dependency on ghcr.io, which
+      # is unreachable from restricted environments and left the pod stuck in `PodInitializing`.
+      # Polls the TCP port every second; alembic then fails fast if PostgreSQL is not really ready.
+      image: "harbor.sdid.cpin.numerique-interieur.com/exploration/mille-feuille/backend:{{ .Chart.AppVersion }}"
+      imagePullPolicy: "IfNotPresent"
+      command:
+      - "python"
+      - "-c"
+      - "import os,socket,time\nfrom urllib.parse import urlsplit\nu = urlsplit(os.environ['DATABASE_URL'])\nprint(f'Waiting for PostgreSQL at {u.hostname}:{u.port or 5432}', flush=True)\nwhile True:\n    try:\n        socket.create_connection((u.hostname, u.port or 5432), 2).close()\n        break\n    except OSError:\n        time.sleep(1)\nprint('PostgreSQL reachable', flush=True)"
+      # Same secret as the migration: waits on the host alembic will really use (and logs it - no credentials).
+      envFrom:
+      - secretRef:
+          name: "millefeuille-db-infos"
+      securityContext:
+        runAsUser: 10001
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: "RuntimeDefault"
+      resources:
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+      requests:
+        cpu: "250m"
+        memory: "128Mi"
+
+frontend:
+  image:
+    registry: "harbor.sdid.cpin.numerique-interieur.com"
+    repository: "exploration/mille-feuille/frontend"
+    pullPolicy: "Always"
+  replicaCount: 2
+  service:
+    port: 8080
+  serviceAccount:
+    enabled: true
+    create: true
+  # No VITE_API_BASE_URL build arg needed here: in K8s the ingress routes /api/ to the
+  # backend on the same host, so the frontend uses relative URLs (empty API_BASE_URL).
+  # The Dockerfile defaults VITE_API_BASE_URL to "" (relative), which is correct for prod.
+
+redis:
+  # RediSearch is required by the agent_execution worker's Redis-backed LangGraph checkpointer
+  # (see worker/agent_execution - a HITL pause must survive being resumed by a different Celery
+  # prefork child). Swap the plain redis image for redis-stack-server, which is a superset.
+  fullnameOverride: millefeuille-redis
+  image:
+    registry: "docker.io"
+    repository: "redis/redis-stack-server"
+    tag: "7.4.0-v6"
+  architecture: standalone
+  auth:
+    # The parent chart's values.yaml defaults auth.enabled to false. Must be set explicitly
+    # to true here, otherwise Redis starts without requirepass and rejects non-loopback
+    # connections (protected mode).
+    enabled: true
+    existingSecret: "millefeuille-redis"
+    existingSecretPasswordKey: "REDIS_PASSWORD"
+  # The chart's generated redis.conf has no `dir` directive, so redis defaults to CWD (/).
+  # With readOnlyRootFilesystem: true (chart default), RDB snapshots fail with
+  # "MISCONF Redis is configured to save RDB snapshots, but it's currently unable to persist
+  # to disk." Point `dir` at the persistent volume mount (/data) so dump.rdb lands on the PVC.
+  config:
+    content: |
+      # Redis configuration
+      bind * -::*
+      dir /data
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+
+extraObjects:
+  millefeuille-s3:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-s3
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-s3
+        create: true
+  millefeuille-openai:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-openai
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-openai
+        create: true
+  millefeuille-keycloak:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-keycloak
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-keycloak
+        create: true
+  millefeuille-worker:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-worker
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-worker
+        create: true
+  # Credentials of the AsyncTaskAPI worker (`worker_async_api`). Keys expected in Vault: see
+  # docs/secrets.md, section 12. Not conditioned on `worker_async_api.enabled`, like the other secrets:
+  # create the Vault path `millefeuille-async-api-worker` before syncing.
+  millefeuille-async-api-worker:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-async-api-worker
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-async-api-worker
+        create: true
+  millefeuille-redis:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-redis
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-redis
+        create: true
+        # Keeps the raw REDIS_PASSWORD (used by the redis chart's own `auth.existingSecret`
+        # above) and adds a computed REDIS_URL for the app's envFrom - single Vault path serves
+        # both. Assumes the Vault-stored password has no URL-reserved characters.
+        transformation:
+          templates:
+            REDIS_URL:
+              text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@millefeuille-redis:6379/0'
+  millefeuille-db-superuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-db-superuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-db-superuser
+        create: true
+        # CNPG requires a kubernetes.io/basic-auth secret (username + password keys)
+        # for superuserSecret - an Opaque secret (VSO default) makes the Cluster
+        # loop forever waiting for a usable secret.
+        type: kubernetes.io/basic-auth
+  millefeuille-db-appuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-db-appuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-db-appuser
+        create: true
+        # CNPG requires a kubernetes.io/basic-auth secret (username + password keys)
+        # for initdb.secret - an Opaque secret (VSO default) makes the Cluster
+        # loop forever waiting for a usable secret.
+        type: kubernetes.io/basic-auth
+  millefeuille-db-infos:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-db-infos
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-db-infos
+        create: true
+        transformation:
+          excludes:
+          - ".*"
+          templates:
+            # Host must match `cnpg.fullnameOverride`-rw; port/dbname match `cnpg.cluster.initdb`
+            # below. Driver is `postgresql+asyncpg` (backend/app/config/database.py), not plain
+            # `postgresql` like ocr. Assumes the Vault-stored password has no URL-reserved
+            # characters - if it does, this needs URL-encoding, which VSO templates don't provide.
+            DATABASE_URL:
+              text: 'postgresql+asyncpg://{{ "{{" }} get .Secrets "username" {{ "}}" }}:{{ "{{" }} get .Secrets "password" {{ "}}" }}@millefeuille-pg-cluster-rw:5432/millefeuille'
+  millefeuille-db-backups:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: millefeuille-db-backups
+    spec:
+      vaultAuthRef: vault-auth
+      mount: exploration
+      type: kv-v2
+      destination:
+        name: millefeuille-db-backups
+        create: true
+  # --- KEDA ScaledObjects (Redis queue length autoscaling for Celery workers) ---
+  # The millefeuille chart has no native KEDA support, so ScaledObjects + TriggerAuthentications are
+  # declared here as extraObjects. Each worker has its own Celery queue (listName) and scales
+  # independently based on the number of pending messages in its Redis list.
+  # KEDA polls the Redis Service directly (not Sentinel-aware, same pattern as ocr). The
+  # address MUST be a FQDN (`millefeuille-redis.<namespace>.svc.cluster.local`), not the short
+  # name `millefeuille-redis`: KEDA runs in its own namespace (`keda-system`) and can't resolve
+  # short names from millefeuille's namespace. Same pattern as ocr's chart, which builds the
+  # address as `<fullname>-master.<Release.Namespace>:6379`.
+  # The TriggerAuthentication references `millefeuille-redis` (same Vault-managed secret as the
+  # app's envFrom) for the REDIS_PASSWORD - KEDA resolves the Secret by name across
+  # namespaces only if the Secret is in the same namespace as the ScaledObject, which is
+  # why the ScaledObjects are deployed in millefeuille's namespace (not keda-system).
+  #
+  # Per-env overrides (minReplicaCount, maxReplicaCount, pollingInterval, listLength) live
+  # in `values-<env>.yaml` under `extraObjects.<name>.spec`.
+
+  # TriggerAuthentication: shared by all the worker ScaledObjects.
+  millefeuille-keda-triggerauth:
+    apiVersion: keda.sh/v1alpha1
+    kind: TriggerAuthentication
+    metadata:
+      name: millefeuille-keda-triggerauth
+    spec:
+      secretTargetRef:
+      - parameter: "password"
+        name: "millefeuille-redis"
+        key: "REDIS_PASSWORD"
+
+  # ScaledObject for document_process (queue: document_processing)
+  millefeuille-keda-document-process:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: millefeuille-worker-document
+    spec:
+      scaleTargetRef:
+        name: millefeuille-worker-document
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 1
+      maxReplicaCount: 4
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "millefeuille-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "document_processing"
+          listLength: "5"
+        authenticationRef:
+          name: millefeuille-keda-triggerauth
+
+  # ScaledObject for agent_execution (queue: agent_execution)
+  millefeuille-keda-agent-execution:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: millefeuille-worker-agent
+    spec:
+      scaleTargetRef:
+        name: millefeuille-worker-agent
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 1
+      maxReplicaCount: 4
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "millefeuille-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "agent_execution"
+          listLength: "5"
+        authenticationRef:
+          name: millefeuille-keda-triggerauth
+
+  # ScaledObject for document_render (queue: document_render). A conversion takes about a second, so a
+  # short queue is fine: scale up when more than 5 documents wait.
+  millefeuille-keda-document-render:
+    apiVersion: keda.sh/v1alpha1
+    kind: ScaledObject
+    metadata:
+      name: millefeuille-worker-render
+    spec:
+      scaleTargetRef:
+        name: millefeuille-worker-render
+        kind: Deployment
+        apiVersion: apps/v1
+      minReplicaCount: 1
+      maxReplicaCount: 3
+      pollingInterval: 30
+      triggers:
+      - type: redis
+        metricType: AverageValue
+        metadata:
+          address: "millefeuille-redis.{{ .Release.Namespace }}.svc.cluster.local:6379"
+          listName: "document_render"
+          listLength: "5"
+        authenticationRef:
+          name: millefeuille-keda-triggerauth
+
+# A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
+# no need to self-host object storage.
+rustfs:
+  enabled: false
+
+cnpg:
+  enabled: true
+  fullnameOverride: "millefeuille-pg-cluster"
+  mode: "standalone"
+  cluster:
+    imageName: "ghcr.io/cloudnative-pg/postgresql:17.7"
+    enableSuperuserAccess: true
+    superuserSecret: "millefeuille-db-superuser"
+    initdb:
+      database: "millefeuille"
+      owner: "millefeuille"
+      secret:
+        name: "millefeuille-db-appuser"
+    monitoring:
+      enabled: true
+  backups:
+    method: "barmanObjectStore"
+    endpointURL: "https://s3.fr-par.scw.cloud"
+    provider: "s3"
+    data:
+      compression: "gzip"
+      encryption: ""
+      jobs: 2
+    wal:
+      compression: "gzip"
+      encryption: ""
+      maxParallel: 2
+    secret:
+      create: false
+      name: "millefeuille-db-backups"
+  recovery:
+    method: "object_store"
+    clusterName: "millefeuille-pg-cluster"
+    database: "millefeuille"
+    owner: "millefeuille"
+    endpointURL: "https://s3.fr-par.scw.cloud"
+    provider: "s3"
+    secret:
+      create: false
+      name: "millefeuille-db-backups"
+  replica:
+    bootstrap:
+      source: "object_store"
+      database: "millefeuille"
+      owner: "millefeuille"
+    origin:
+      objectStore:
+        clusterName: "millefeuille-pg-cluster"
+        endpointURL: "https://s3.fr-par.scw.cloud"
+        provider: "s3"
+        secret:
+          create: false
+          name: "millefeuille-db-backups"

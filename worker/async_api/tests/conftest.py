@@ -7,7 +7,7 @@ for name, value in {
     "AWS_ACCESS_KEY_ID": "test",
     "AWS_SECRET_ACCESS_KEY": "test",
     "AWS_S3_BUCKET_NAME": "test",
-    "DIGDIGDOC_BASE_URL": "http://localhost:8000",
-    "DIGDIGDOC_API_TOKEN": "test",
+    "MILLEFEUILLE_BASE_URL": "http://localhost:8000",
+    "MILLEFEUILLE_API_TOKEN": "test",
 }.items():
     os.environ.setdefault(name, value)

@@ -1,6 +1,6 @@
 # Migration des validations de prédiction vers l'analyse de dossier
 
-Issue : [#120](https://github.com/IA-Generative/dig-dig-doc/issues/120) (parent [#106](https://github.com/IA-Generative/dig-dig-doc/issues/106)). Migration `3c4d5e6f7a8b`.
+Issue : [#120](https://github.com/IA-Generative/mille-feuille/issues/120) (parent [#106](https://github.com/IA-Generative/mille-feuille/issues/106)). Migration `3c4d5e6f7a8b`.
 
 ## Avant / après
 

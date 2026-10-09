@@ -13,7 +13,7 @@ class WorkerSettings(BaseSettings):
     AWS_ENDPOINT_URL: str = "http://localhost:9000"
     AWS_ACCESS_KEY_ID: str = "rustfsadmin"
     AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
-    AWS_S3_BUCKET_NAME: str = "dig-dig-doc"
+    AWS_S3_BUCKET_NAME: str = "mille-feuille"
 
     # Langue Tesseract (ISO 639-2) pour l'OCR des pages scannées par
     # liteparse. "fra" couvre le français par défaut.

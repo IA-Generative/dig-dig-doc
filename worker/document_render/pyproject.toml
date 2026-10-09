@@ -1,5 +1,5 @@
 [project]
-name = "dig-dig-doc-worker-document-render"
+name = "mille-feuille-worker-document-render"
 version = "0.11.3"
 description = "Worker Celery : remplissage de modèles ODT et conversion PDF avec LibreOffice"
 requires-python = ">=3.12"

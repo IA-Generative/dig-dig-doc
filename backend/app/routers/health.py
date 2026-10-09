@@ -36,4 +36,4 @@ async def health_ready(response: Response) -> HealthReport:
                 extra={"dependency": dependency.name, "details": dependency.extras},
             )
 
-    return HealthReport(name="dig-dig-doc-backend", status=api_status, dependencies=dependencies)
+    return HealthReport(name="mille-feuille-backend", status=api_status, dependencies=dependencies)

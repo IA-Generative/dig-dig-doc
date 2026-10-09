@@ -1,7 +1,7 @@
 # Le contexte est la racine du dépôt : on n'envoie que ce dont l'image a besoin.
 *
-!sdks/python/digdigdoc
-!sdks/python/digdigdoc-ephemeral
+!sdks/python/millefeuille
+!sdks/python/millefeuille-ephemeral
 !worker/async_api/pyproject.toml
 !worker/async_api/uv.lock
 !worker/async_api/contrat.json

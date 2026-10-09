@@ -10,7 +10,7 @@ _redis_settings = RedisSettings()
 # celery_app.py - même nom de tâche, aucune queue dédiée des deux côtés).
 # Le backend ne lit un résultat que pour l'extraction des champs d'un modèle (#138), avec un
 # délai court ; les autres tâches sont lancées sans attendre.
-celery_client = Celery("dig-dig-doc-backend", broker=_redis_settings.REDIS_URL, backend=_redis_settings.REDIS_URL)
+celery_client = Celery("mille-feuille-backend", broker=_redis_settings.REDIS_URL, backend=_redis_settings.REDIS_URL)
 
 
 def dispatch_text_extraction(document_id: str) -> str:

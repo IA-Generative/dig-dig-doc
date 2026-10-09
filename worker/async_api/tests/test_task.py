@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from contract import example
-from digdigdoc.exceptions import NotFoundError
-from digdigdoc_ephemeral import EphemeralClient, EphemeralRun
+from millefeuille.exceptions import NotFoundError
+from millefeuille_ephemeral import EphemeralClient, EphemeralRun
 from mic_worker import S3Client
 from mic_worker.typed import IncomingMessage
 
@@ -211,7 +211,7 @@ async def test_backend_error_is_rendered_and_cleaned_up() -> None:
     task, _, client = make_task([])
     client.runs.create.side_effect = NotFoundError("Analyse introuvable", status_code=404)
 
-    with pytest.raises(RuntimeError, match=r"Erreur dig-dig-doc \(404\) : Analyse introuvable"):
+    with pytest.raises(RuntimeError, match=r"Erreur mille-feuille \(404\) : Analyse introuvable"):
         await run_task(task)
 
     client.analyses.delete.assert_called_once_with(uuid.UUID(ANALYSE_ID))

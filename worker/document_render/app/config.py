@@ -5,18 +5,18 @@ DEFAULT_S3_ENDPOINT_URL = "http://localhost:9000"
 
 
 class WorkerSettings(BaseSettings):
-    # Broker et résultats Celery. En Kubernetes, le secret `digdigdoc-redis` fournit `REDIS_URL` (avec le mot de
+    # Broker et résultats Celery. En Kubernetes, le secret `millefeuille-redis` fournit `REDIS_URL` (avec le mot de
     # passe) : à défaut de `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` (docker-compose), c'est lui qui sert.
     REDIS_URL: str = ""
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
 
     # RustFS en local/dev, un bucket S3 réel en prod. Variables standard AWS : `AWS_ENDPOINT_URL` est défini par le
-    # chart en Kubernetes (le secret `digdigdoc-s3` peut aussi le fournir, parfois sans schéma).
+    # chart en Kubernetes (le secret `millefeuille-s3` peut aussi le fournir, parfois sans schéma).
     AWS_ENDPOINT_URL: str = ""
     AWS_ACCESS_KEY_ID: str = "rustfsadmin"
     AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
-    AWS_S3_BUCKET_NAME: str = "dig-dig-doc"
+    AWS_S3_BUCKET_NAME: str = "mille-feuille"
 
     # LibreOffice en ligne de commande (conversion en PDF).
     SOFFICE_BINARY: str = "soffice"

@@ -1,0 +1,37 @@
+apiVersion: v2
+name: millefeuille
+type: application
+version: 0.9.3
+appVersion: "0.11.3"
+description: A Helm chart to deploy millefeuille.
+# Floor set by the core APIs the chart renders (autoscaling/v2, policy/v1). The Gateway API
+# resources additionally need the gateway.networking.k8s.io CRDs installed in the cluster.
+kubeVersion: ">=1.25.0-0"
+# home: https://this-is-tobi.com
+deprecated: false
+annotations: {}
+#   artifacthub.io/category: storage
+#   artifacthub.io/license: MIT
+#   artifacthub.io/changes: |
+#     - kind: changed
+#       description: Upgrade backup image to v1.0.1
+#     - kind: fixed
+#       description: Remove podMonitor template that is natively handle by operator
+keywords: []
+dependencies:
+  - name: redis
+    alias: redis
+    version: 0.27.9
+    repository: oci://registry-1.docker.io/cloudpirates
+    condition: redis.enabled
+  - name: cluster
+    alias: cnpg
+    version: 0.8.1
+    repository: https://cloudnative-pg.github.io/charts
+    condition: cnpg.enabled
+sources:
+  - https://github.com/IA-Generative/mille-feuille
+maintainers: []
+# - name: this-is-tobi
+#   email: this-is-tobi@proton.me
+#   url: https://this-is-tobi.com
