@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.3...v0.12.0) (2026-10-09)
+
+
+### Features
+
+* **front:** nom MilleFeuille et icône Marianne dans l'onglet ([d3aab65](https://github.com/IA-Generative/dig-dig-doc/commit/d3aab65d588940400c2685f4833f6a060432f2b1)), closes [#244](https://github.com/IA-Generative/dig-dig-doc/issues/244)
+
+
+### Bug Fixes
+
+* **ci:** gitleaks et ruff après le renommage ([d27593b](https://github.com/IA-Generative/dig-dig-doc/commit/d27593b3a7034ce24dd39de47c9da5a81e56d4e3)), closes [#244](https://github.com/IA-Generative/dig-dig-doc/issues/244)
+
 ## [0.12.0-rc](https://github.com/IA-Generative/dig-dig-doc/compare/v0.11.3...v0.12.0-rc) (2026-10-09)
 
 
