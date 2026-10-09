@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [digdigdoc, digdigdoc-ephemeral]
+        package: [millefeuille, millefeuille-ephemeral]
     defaults:
       run:
         working-directory: sdks/python/${{ matrix.package }}

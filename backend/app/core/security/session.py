@@ -6,9 +6,9 @@ from dataclasses import asdict, dataclass
 from keycloak import KeycloakOpenID
 from redis import Redis
 
-PENDING_PREFIX = "digdigdoc:auth:pending:"
-SESSION_PREFIX = "digdigdoc:auth:session:"
-RATE_LIMIT_PREFIX = "digdigdoc:auth:rate:"
+PENDING_PREFIX = "millefeuille:auth:pending:"
+SESSION_PREFIX = "millefeuille:auth:session:"
+RATE_LIMIT_PREFIX = "millefeuille:auth:rate:"
 PENDING_TTL_SECONDS = 600
 # Refresh the access token this many seconds before it actually expires, so a
 # request never races a token that dies mid-flight.

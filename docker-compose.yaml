@@ -21,7 +21,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+      DATABASE_URL: postgresql+asyncpg://millefeuille:millefeuille@postgres:5432/millefeuille
     command: ["alembic", "upgrade", "head"]
     depends_on:
       postgres:
@@ -35,14 +35,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+      DATABASE_URL: postgresql+asyncpg://millefeuille:millefeuille@postgres:5432/millefeuille
       REDIS_URL: redis://redis:6379/0
       MEILI_URL: http://meilisearch:7700
       MEILI_API_KEY: ${MEILI_MASTER_KEY:-dev-only-meili-key-not-for-prod}
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
-      KEYCLOAK_REALM: dig-dig-doc
-      KEYCLOAK_CLIENT_ID: dig-dig-doc-backend
+      KEYCLOAK_REALM: mille-feuille
+      KEYCLOAK_CLIENT_ID: mille-feuille-backend
       KEYCLOAK_CLIENT_SECRET: dev-only-secret-not-for-prod
       BACKEND_PUBLIC_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:8081
@@ -52,7 +52,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
       SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
       INTERNAL_WORKER_TOKEN: ${INTERNAL_WORKER_TOKEN:-dev-only-worker-token-not-for-prod}
       # Hub LLM (compatible API OpenAI) pour GET /api/models et le choix de
@@ -87,7 +87,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
     depends_on:
       redis:
         condition: service_healthy
@@ -109,7 +109,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
       # Hub LLM (compatible API OpenAI) pour la classification (VLM + LLM)
       # et l'extraction d'entités (LLM en structured output).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -138,7 +138,7 @@ services:
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
     depends_on:
       redis:
         condition: service_healthy
@@ -146,7 +146,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Worker AsyncTaskAPI (RabbitMQ, sans Celery) : exécute des analyses dig-dig-doc via l'API
+  # Worker AsyncTaskAPI (RabbitMQ, sans Celery) : exécute des analyses mille-feuille via l'API
   # éphémère, pour être consommé par https://github.com/IA-Generative/async-api. Hors du
   # `docker compose up` par défaut : `docker compose --profile async-api up`. Voir
   # worker/async_api/README.md (jeton d'accès à async-api requis pour construire l'image).
@@ -175,17 +175,17 @@ services:
         - github_token
     environment:
       BROKER_URL: amqp://${RABBITMQ_USER:-dev}:${RABBITMQ_PASSWORD:-dev-only-rabbitmq-not-for-prod}@rabbitmq:5672
-      IN_QUEUE_NAME: dig_dig_doc_queue_in
-      OUT_QUEUE_NAME: dig_dig_doc_queue_out
+      IN_QUEUE_NAME: mille_feuille_queue_in
+      OUT_QUEUE_NAME: mille_feuille_queue_out
       SERVICE_CLASS: long
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
       AWS_S3_VERIFY: "false"
-      DIGDIGDOC_BASE_URL: http://backend:8000
+      MILLEFEUILLE_BASE_URL: http://backend:8000
       # Token API créé via POST /api/app-tokens (compte de service du worker).
-      DIGDIGDOC_API_TOKEN: ${ASYNC_API_WORKER_TOKEN:-}
+      MILLEFEUILLE_API_TOKEN: ${ASYNC_API_WORKER_TOKEN:-}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -220,12 +220,12 @@ services:
         "--queues=maintenance",
       ]
     environment:
-      DATABASE_URL: postgresql+asyncpg://digdigdoc:digdigdoc@postgres:5432/digdigdoc
+      DATABASE_URL: postgresql+asyncpg://millefeuille:millefeuille@postgres:5432/millefeuille
       REDIS_URL: redis://redis:6379/0
       AWS_ENDPOINT_URL: http://rustfs:9000
       AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-dev-only-rustfs-key-not-for-prod}
       AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-dev-only-rustfs-key-not-for-prod}
-      AWS_S3_BUCKET_NAME: dig-dig-doc
+      AWS_S3_BUCKET_NAME: mille-feuille
       SHARE_SECRET_KEY: ${SHARE_SECRET_KEY:-dev-only-share-secret-not-for-prod}
     depends_on:
       postgres:
@@ -241,15 +241,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: digdigdoc
-      POSTGRES_PASSWORD: digdigdoc
-      POSTGRES_DB: digdigdoc
+      POSTGRES_USER: millefeuille
+      POSTGRES_PASSWORD: millefeuille
+      POSTGRES_DB: millefeuille
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U digdigdoc"]
+      test: ["CMD-SHELL", "pg_isready -U millefeuille"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -282,7 +282,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
-    # Importe le realm dig-dig-doc (client + utilisateurs de dev) au premier
+    # Importe le realm mille-feuille (client + utilisateurs de dev) au premier
     # démarrage. --import-realm ne réimporte pas si le realm existe déjà, ce
     # qui évite d'écraser les modifs faites à la main ensuite.
     command: start-dev --import-realm

@@ -1,6 +1,6 @@
 # Accès de l'agent assistant aux dossiers
 
-Issue [#222](https://github.com/IA-Generative/dig-dig-doc/issues/222), suite de [#177](acces-aux-dossiers.md). **L'agent assistant agit au nom d'une personne : il ne voit jamais plus de dossiers qu'elle.**
+Issue [#222](https://github.com/IA-Generative/mille-feuille/issues/222), suite de [#177](acces-aux-dossiers.md). **L'agent assistant agit au nom d'une personne : il ne voit jamais plus de dossiers qu'elle.**
 
 L'agent assistant est le modèle de langage qui cherche, crée et lance des dossiers à la demande d'une personne. Il existe sous deux formes, qui n'ont pas de session Keycloak :
 
@@ -36,7 +36,7 @@ Les routes internes sont authentifiées par le jeton du worker, un **service de 
 Les groupes et le rôle d'une personne sont ceux que l'**annuaire local** a enregistrés à sa **dernière connexion** ([affectation](affectation-des-dossiers.md)). Conséquences :
 
 - Une personne qui n'a **jamais ouvert l'application** n'est pas dans l'annuaire : son agent n'a **aucun groupe** et ne voit que les dossiers « selon l'analyse ».
-- Un changement de groupe dans Keycloak n'est pris en compte qu'à la **prochaine connexion** de la personne ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)).
+- Un changement de groupe dans Keycloak n'est pris en compte qu'à la **prochaine connexion** de la personne ([#179](https://github.com/IA-Generative/mille-feuille/issues/179)).
 - Sans `X-Acting-User`, ou avec une personne inconnue, l'agent n'a aucun droit : il ne voit pas de dossier restreint et **ne peut pas créer de dossier** (un dossier restreint a besoin d'au moins un groupe : 422 `groups_required`).
 
 ## Les routes internes de l'agent de l'interface

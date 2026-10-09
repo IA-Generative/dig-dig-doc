@@ -21,7 +21,7 @@ const emit = defineEmits<{
 // --- Redimensionnement ---------------------------------------------------
 // Taille persistée en localStorage (en px). On part des valeurs CSS par
 // défaut (max-width: 48rem ≈ 768px, max-height: 80vh) la première fois.
-const STORAGE_KEY = "digdigdoc-modal-size";
+const STORAGE_KEY = "millefeuille-modal-size";
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 240;
 

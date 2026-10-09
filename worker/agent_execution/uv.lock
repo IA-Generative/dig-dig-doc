@@ -290,7 +290,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dig-dig-doc-worker-agent-execution"
+name = "mille-feuille-worker-agent-execution"
 version = "0.5.0rc2"
 source = { editable = "." }
 dependencies = [

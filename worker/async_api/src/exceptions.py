@@ -14,7 +14,7 @@ class FileTooLargeError(AnalysisError):
 
 
 class RunFailedError(AnalysisError):
-    """Le run dig-dig-doc s'est terminé en `échec` ou `arrêté`."""
+    """Le run mille-feuille s'est terminé en `échec` ou `arrêté`."""
 
 
 class RunTimeoutError(AnalysisError):

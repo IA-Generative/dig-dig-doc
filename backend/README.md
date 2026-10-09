@@ -1,4 +1,4 @@
-# dig-dig-doc backend
+# mille-feuille backend
 
 BFF (Backend For Frontend) FastAPI. Configuration entièrement par variables
 d'environnement (pydantic-settings). En dev via `docker compose`, ces
@@ -13,7 +13,7 @@ voir `.env.example` à la racine du repo et la section _Configuration_ du
 
 | Variable       | Défaut                                                              | Description                    |
 | -------------- | ------------------------------------------------------------------- | ------------------------------ |
-| `DATABASE_URL` | `postgresql+asyncpg://digdigdoc:digdigdoc@localhost:5432/digdigdoc` | URL Postgres (driver asyncpg). |
+| `DATABASE_URL` | `postgresql+asyncpg://millefeuille:millefeuille@localhost:5432/millefeuille` | URL Postgres (driver asyncpg). |
 
 ### Redis (`RedisSettings`)
 
@@ -28,7 +28,7 @@ voir `.env.example` à la racine du repo et la section _Configuration_ du
 | `AWS_ENDPOINT_URL` | `http://localhost:9000` | RustFS en local/dev, un vrai endpoint S3 en prod. |
 | `AWS_ACCESS_KEY_ID`   | `rustfsadmin`           |                                                   |
 | `AWS_SECRET_ACCESS_KEY`   | `rustfsadmin`           |                                                   |
-| `AWS_S3_BUCKET_NAME`       | `dig-dig-doc`           |                                                   |
+| `AWS_S3_BUCKET_NAME`       | `mille-feuille`           |                                                   |
 | `AWS_DEFAULT_REGION`       | `us-east-1`             |                                                   |
 
 ### Keycloak / sessions (`KeycloakSettings`)
@@ -37,12 +37,12 @@ voir `.env.example` à la racine du repo et la section _Configuration_ du
 | ------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
 | `KEYCLOAK_URL`            | `http://localhost:8080`              | URL backend → Keycloak (nom de service Docker en dev).               |
 | `KEYCLOAK_PUBLIC_URL`     | _(vide, retombe sur `KEYCLOAK_URL`)_ | URL Keycloak côté navigateur si différente (reverse proxy).          |
-| `KEYCLOAK_REALM`          | `dig-dig-doc`                        |                                                                      |
-| `KEYCLOAK_CLIENT_ID`      | `dig-dig-doc-backend`                |                                                                      |
+| `KEYCLOAK_REALM`          | `mille-feuille`                        |                                                                      |
+| `KEYCLOAK_CLIENT_ID`      | `mille-feuille-backend`                |                                                                      |
 | `KEYCLOAK_CLIENT_SECRET`  | _(vide)_                             | À définir en prod.                                                   |
 | `BACKEND_PUBLIC_URL`      | `http://localhost:8000`              | Sert à construire le `redirect_uri` OAuth2 enregistré côté Keycloak. |
 | `FRONTEND_URL`            | `http://localhost:5173`              | Où rediriger après login/logout ; aussi utilisé pour CORS.           |
-| `SESSION_COOKIE_NAME`     | `digdigdoc_session`                  |                                                                      |
+| `SESSION_COOKIE_NAME`     | `millefeuille_session`                  |                                                                      |
 | `SESSION_COOKIE_SECURE`   | `true`                               |                                                                      |
 | `SESSION_COOKIE_SAMESITE` | `lax`                                |                                                                      |
 | `SESSION_TTL_SECONDS`     | `604800` (7 jours)                   |                                                                      |
@@ -98,8 +98,8 @@ cd backend && uv run --group dev python scripts/generate_data_model.py
 Le schéma est généré à partir des modèles SQLAlchemy (aucune base nécessaire ; il faut Graphviz, la commande `dot`). Pour tester une migration sans toucher à la base de développement, créer une base à part et la cibler avec `DATABASE_URL` :
 
 ```bash
-docker exec dig-dig-doc-postgres-1 psql -U digdigdoc -d postgres -c "CREATE DATABASE digdigdoc_test"
-export DATABASE_URL=postgresql+asyncpg://digdigdoc:digdigdoc@localhost:5432/digdigdoc_test
+docker exec mille-feuille-postgres-1 psql -U millefeuille -d postgres -c "CREATE DATABASE millefeuille_test"
+export DATABASE_URL=postgresql+asyncpg://millefeuille:millefeuille@localhost:5432/millefeuille_test
 uv run alembic upgrade head && uv run pytest
 ```
 

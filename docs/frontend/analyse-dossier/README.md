@@ -1,6 +1,6 @@
 # Analyse de dossier : la vue de l'instructeur
 
-Issue : [#116](https://github.com/IA-Generative/dig-dig-doc/issues/116) (parent [#106](https://github.com/IA-Generative/dig-dig-doc/issues/106)).
+Issue : [#116](https://github.com/IA-Generative/mille-feuille/issues/116) (parent [#106](https://github.com/IA-Generative/mille-feuille/issues/106)).
 
 L'analyse de dossier est le document de travail d'un dossier : **une analyse par exécution**, faite d'éléments (classifications, entités, relations, synthèses, champs) qui ont chacun plusieurs versions. Cette page permet à l'instructeur de la **consulter**, de voir d'où vient chaque valeur, de **l'enrichir**, de **revenir à une version antérieure** et de traiter les **propositions de modification**. Elle est interne : elle n'est jamais montrée aux usagers.
 
@@ -33,7 +33,7 @@ La valeur actuelle et la valeur proposée sont comparées mot à mot. Si l'élé
 
 ## Dans le chat du dossier
 
-Issue : [#115](https://github.com/IA-Generative/dig-dig-doc/issues/115).
+Issue : [#115](https://github.com/IA-Generative/mille-feuille/issues/115).
 
 Quand l'instructeur apporte une information claire dans le chat (« j'ai appelé l'usager, le nom est bien Dupont »), le chat **propose** la modification de l'analyse. Les propositions s'affichent en cartes sous sa réponse, avec la même carte que dans la vue de l'analyse :
 
@@ -52,7 +52,7 @@ Comment ça marche :
 
 ## Notes internes
 
-Issue : [#117](https://github.com/IA-Generative/dig-dig-doc/issues/117).
+Issue : [#117](https://github.com/IA-Generative/mille-feuille/issues/117).
 
 En bas de la page de l'analyse, l'instructeur consigne ses observations sur le dossier (« pièce vérifiée par téléphone », « montant à revoir »).
 
@@ -78,7 +78,7 @@ Comment ça marche :
 
 ## Travail à plusieurs
 
-Issue : [#118](https://github.com/IA-Generative/dig-dig-doc/issues/118).
+Issue : [#118](https://github.com/IA-Generative/mille-feuille/issues/118).
 
 Plusieurs instructeurs peuvent travailler en même temps sur la même analyse sans s'écraser. Cela concerne l'**analyse courante** et modifiable ; une exécution précédente ou une analyse figée n'a ni présence ni verrou.
 

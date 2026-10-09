@@ -13,7 +13,7 @@ class WorkerSettings(BaseSettings):
     AWS_ENDPOINT_URL: str = "http://localhost:9000"
     AWS_ACCESS_KEY_ID: str = "rustfsadmin"
     AWS_SECRET_ACCESS_KEY: str = "rustfsadmin"
-    AWS_S3_BUCKET_NAME: str = "dig-dig-doc"
+    AWS_S3_BUCKET_NAME: str = "mille-feuille"
 
     # Hub LLM (compatible API OpenAI) - mêmes variables que côté backend
     # (voir app.config.llm.LlmSettings). Le worker en a besoin pour parler

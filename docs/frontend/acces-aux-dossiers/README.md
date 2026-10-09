@@ -1,6 +1,6 @@
 # Accès aux dossiers par groupe
 
-Issue : [#177](https://github.com/IA-Generative/dig-dig-doc/issues/177) (parent [#167](https://github.com/IA-Generative/dig-dig-doc/issues/167)). Questions associées : [#178](https://github.com/IA-Generative/dig-dig-doc/issues/178) (rôles et permissions), [#179](https://github.com/IA-Generative/dig-dig-doc/issues/179) (prise en compte des changements de groupes), [#180](https://github.com/IA-Generative/dig-dig-doc/issues/180) (dossiers existants), [#181](https://github.com/IA-Generative/dig-dig-doc/issues/181) (dossier sans groupe actif), [#182](https://github.com/IA-Generative/dig-dig-doc/issues/182) (traces d'accès administrateur).
+Issue : [#177](https://github.com/IA-Generative/mille-feuille/issues/177) (parent [#167](https://github.com/IA-Generative/mille-feuille/issues/167)). Questions associées : [#178](https://github.com/IA-Generative/mille-feuille/issues/178) (rôles et permissions), [#179](https://github.com/IA-Generative/mille-feuille/issues/179) (prise en compte des changements de groupes), [#180](https://github.com/IA-Generative/mille-feuille/issues/180) (dossiers existants), [#181](https://github.com/IA-Generative/mille-feuille/issues/181) (dossier sans groupe actif), [#182](https://github.com/IA-Generative/mille-feuille/issues/182) (traces d'accès administrateur).
 
 Avoir accès à une **analyse** ne doit pas donner accès à **tous ses dossiers** : un dossier peut être **restreint** à certains **groupes Keycloak**. Cette page décrit l'interface ; elle suit le tableau de bord et le [tableau de suivi](../tableau-de-suivi/README.md). La règle est appliquée **par le serveur** ([accès aux dossiers, backend](../../backend/acces-aux-dossiers.md), [accès de l'agent assistant](../../backend/acces-de-l-agent-assistant.md)) : l'interface la lit, l'explique et la modifie.
 
@@ -17,7 +17,7 @@ Avoir accès à une **analyse** ne doit pas donner accès à **tous ses dossiers
 | **Les administrateurs** | Ils voient tout et sont **seuls à modifier** l'accès d'un dossier existant ; leur accès hors de leurs groupes sera tracé. |
 | **Le créateur** | Il n'a **aucun droit propre** : son accès passe par ses groupes. Un dossier restreint a donc **au moins un groupe**. |
 | **Affectation** | On n'affecte qu'une personne qui a accès au dossier ; si elle le perd, l'affectation est annulée. |
-| **Dossiers existants** | Ils restent « Selon l'analyse », visibles comme avant, sans limite de temps ([#180](https://github.com/IA-Generative/dig-dig-doc/issues/180)). |
+| **Dossiers existants** | Ils restent « Selon l'analyse », visibles comme avant, sans limite de temps ([#180](https://github.com/IA-Generative/mille-feuille/issues/180)). |
 
 ## Repérer un dossier restreint
 
@@ -72,8 +72,8 @@ Quand l'accès est retiré, les notifications passées de la personne restent da
 ## Choix et limites
 
 - **Le contrôle est côté serveur** : l'interface masque et explique, mais c'est la garde unique du serveur qui protège les données. Un dossier inaccessible répond **404**, pas 403.
-- **Groupes** : ce sont ceux de la connexion de la personne (`groups` de son profil), sans appel à l'API d'administration de Keycloak. Un groupe modifié dans Keycloak n'est pris en compte qu'à la prochaine connexion ([#179](https://github.com/IA-Generative/dig-dig-doc/issues/179)).
-- **Rôles** : la première version n'a qu'un niveau d'accès (voir le dossier ou non). Lecture seule, instruction, administration… seront définis dans Keycloak ([#178](https://github.com/IA-Generative/dig-dig-doc/issues/178)).
-- **Dossiers existants** : ils restent « Selon l'analyse » à la mise en production ; seuls les dossiers créés ensuite sont restreints par défaut ([#180](https://github.com/IA-Generative/dig-dig-doc/issues/180)).
+- **Groupes** : ce sont ceux de la connexion de la personne (`groups` de son profil), sans appel à l'API d'administration de Keycloak. Un groupe modifié dans Keycloak n'est pris en compte qu'à la prochaine connexion ([#179](https://github.com/IA-Generative/mille-feuille/issues/179)).
+- **Rôles** : la première version n'a qu'un niveau d'accès (voir le dossier ou non). Lecture seule, instruction, administration… seront définis dans Keycloak ([#178](https://github.com/IA-Generative/mille-feuille/issues/178)).
+- **Dossiers existants** : ils restent « Selon l'analyse » à la mise en production ; seuls les dossiers créés ensuite sont restreints par défaut ([#180](https://github.com/IA-Generative/mille-feuille/issues/180)).
 - **Pas encore** : un lien de partage par e-mail qui ne donnerait jamais plus de droits que ceux du destinataire ; l'état « restreint » annoncé par un lecteur d'écran est à vérifier (la pastille a un libellé, pas seulement une couleur).
-- Pas de test automatisé côté interface ([#213](https://github.com/IA-Generative/dig-dig-doc/issues/213)) : l'écran est vérifié par ces captures, prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée (`node scripts/doc-screenshots.mjs <url> access`).
+- Pas de test automatisé côté interface ([#213](https://github.com/IA-Generative/mille-feuille/issues/213)) : l'écran est vérifié par ces captures, prises par `frontend/scripts/doc-screenshots.mjs` avec l'API interceptée (`node scripts/doc-screenshots.mjs <url> access`).

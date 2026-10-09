@@ -33,7 +33,7 @@ from app.schemas.pagination import Page
 # Voir docs/mcp-helper-agent-plan.md pour le design complet et
 # mcp/README.md pour la doc client.
 mcp_server = MCPServer(
-    name="dig-dig-doc-helper",
+    name="mille-feuille-helper",
     instructions=(
         "Recherche/création d'analyses et de dossiers persistants, ajout de fichiers, lancement du "
         "pipeline (classification, extraction, agents) en asynchrone, consultation des résultats. "

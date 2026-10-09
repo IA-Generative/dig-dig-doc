@@ -1,9 +1,9 @@
 {
   "manifeste": 1,
-  "nom": "dig-dig-doc",
-  "titre": "Analyser des documents avec dig-dig-doc",
+  "nom": "mille-feuille",
+  "titre": "Analyser des documents avec mille-feuille",
   "classe": "long",
-  "description": "Exécute une analyse dig-dig-doc (classification, extraction d'entités, agents) sur un ou plusieurs documents déjà déposés dans le stockage, et renvoie le résultat complet du run. L'analyse est soit définie à la volée dans la requête, soit une analyse dig-dig-doc existante.",
+  "description": "Exécute une analyse mille-feuille (classification, extraction d'entités, agents) sur un ou plusieurs documents déjà déposés dans le stockage, et renvoie le résultat complet du run. L'analyse est soit définie à la volée dans la requête, soit une analyse mille-feuille existante.",
   "description_courte": "Pour un ensemble de documents : classe chaque document, en extrait des entités et exécute des agents selon la définition d'analyse fournie.",
   "icone": "fr-icon-search-line",
   "entree": {
@@ -109,7 +109,7 @@
       "analyse_id": {
         "type": "string",
         "format": "uuid",
-        "description": "Identifiant d'une analyse dig-dig-doc existante (exclusif avec analysis)",
+        "description": "Identifiant d'une analyse mille-feuille existante (exclusif avec analysis)",
         "x-titre": "Analyse existante"
       },
       "ttl_hours": {
@@ -117,13 +117,13 @@
         "minimum": 1,
         "maximum": 17520,
         "default": 24,
-        "description": "Durée de conservation du résultat côté dig-dig-doc, en heures",
+        "description": "Durée de conservation du résultat côté mille-feuille, en heures",
         "x-titre": "Durée de conservation (h)"
       },
       "persist": {
         "type": "boolean",
         "default": false,
-        "description": "true : le run et ses fichiers sont conservés dans dig-dig-doc (sans expiration)",
+        "description": "true : le run et ses fichiers sont conservés dans mille-feuille (sans expiration)",
         "x-titre": "Conserver le run"
       }
     }

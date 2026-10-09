@@ -1,7 +1,7 @@
 /**
  * Rendu Markdown minimaliste — sans dépendance externe.
  *
- * Suffit pour le CHANGELOG et les CGU de dig-dig-doc : titres, listes,
+ * Suffit pour le CHANGELOG et les CGU de mille-feuille : titres, listes,
  * gras, liens, code inline, paragraphes. Le HTML produit est échappé en
  * amont pour éviter toute injection XSS (les contenus viennent de fichiers
  * statiques servis par l'app elle-même, mais on reste prudent).

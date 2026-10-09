@@ -2,7 +2,7 @@
 #
 # Contexte de build : la RACINE du dépôt (le worker dépend des SDK du monorepo, sdks/python/).
 #   GH_TOKEN=$(gh auth token) docker build -f worker/async_api/Dockerfile \
-#     --secret id=github_token,env=GH_TOKEN -t dig-dig-doc-async-api-worker .
+#     --secret id=github_token,env=GH_TOKEN -t mille-feuille-async-api-worker .
 #
 # `mic-worker` vient du dépôt PRIVÉ IA-Generative/async-api : le secret BuildKit `github_token`
 # (jeton avec accès en lecture à ce dépôt) est nécessaire au build. Il n'est jamais écrit dans
@@ -16,8 +16,8 @@ RUN apt-get update \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Même chemin relatif qu'en local : pyproject.toml référence ../../sdks/python/*.
 WORKDIR /worker/async_api
-COPY sdks/python/digdigdoc /sdks/python/digdigdoc
-COPY sdks/python/digdigdoc-ephemeral /sdks/python/digdigdoc-ephemeral
+COPY sdks/python/millefeuille /sdks/python/millefeuille
+COPY sdks/python/millefeuille-ephemeral /sdks/python/millefeuille-ephemeral
 COPY worker/async_api/pyproject.toml worker/async_api/uv.lock ./
 RUN --mount=type=secret,id=github_token \
     GIT_CONFIG_COUNT=1 \
