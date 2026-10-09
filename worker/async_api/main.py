@@ -1,11 +1,11 @@
 import asyncio
 
-from millefeuille_ephemeral import EphemeralClient
 from loguru import logger
 from mic_worker import S3Client
 from mic_worker.manifeste import charger_voisin
 from mic_worker.typed import HealthCheckConfig, Infinite
 from mic_worker.worker import AsyncWorkerRunner
+from millefeuille_ephemeral import EphemeralClient
 
 import src.logger  # noqa: F401 — side-effect: configure logging
 from src.config import settings
