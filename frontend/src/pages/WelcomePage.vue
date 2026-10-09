@@ -172,7 +172,7 @@ const useCases = [
     <!-- Fonctionnalités -->
     <section id="features" :ref="registerSection" class="welcome__section welcome__animate">
       <div class="fr-container">
-        <h2 class="welcome__section-title">Ce que mille-feuille vous apporte</h2>
+        <h2 class="welcome__section-title">Ce que MilleFeuille vous apporte</h2>
         <p class="welcome__section-subtitle">
           Une suite d'outils d'IA pour fiabiliser et accélérer le traitement
           documentaire, de l'import à la validation.
@@ -222,7 +222,7 @@ const useCases = [
       <div class="fr-container">
         <h2 class="welcome__section-title">Cas d'usage</h2>
         <p class="welcome__section-subtitle">
-          Mille-feuille s'adapte à tout flux d'instruction documentaire nécessitant
+          MilleFeuille s'adapte à tout flux d'instruction documentaire nécessitant
           fiabilité et traçabilité.
         </p>
         <div class="welcome__usecase-grid">
@@ -272,13 +272,13 @@ const useCases = [
     <footer class="welcome__footer">
       <div class="fr-container welcome__footer-inner">
         <div class="welcome__footer-brand">
-          <DsfrLogo small logo-text="mille-feuille" />
+          <DsfrLogo small logo-text="MilleFeuille" />
         </div>
         <nav class="welcome__footer-links">
           <a href="/cgu.md" target="_blank" class="fr-link">Conditions d'utilisation</a>
           <a href="https://github.com/IA-Generative/mille-feuille" target="_blank" rel="noopener" class="fr-link">Code source</a>
         </nav>
-        <p class="welcome__footer-copy">© 2026 mille-feuille — Instruction assistée des dossiers usagers</p>
+        <p class="welcome__footer-copy">© 2026 MilleFeuille — Instruction assistée des dossiers usagers</p>
       </div>
     </footer>
   </div>
