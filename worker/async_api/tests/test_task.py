@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from contract import example
-from millefeuille.exceptions import NotFoundError
-from millefeuille_ephemeral import EphemeralClient, EphemeralRun
 from mic_worker import S3Client
 from mic_worker.typed import IncomingMessage
+from millefeuille.exceptions import NotFoundError
+from millefeuille_ephemeral import EphemeralClient, EphemeralRun
 
 from src.exceptions import FileTooLargeError, InvalidRequestError, RunFailedError, RunTimeoutError
 from src.task import AnalyzeTask

@@ -4,11 +4,11 @@ import time
 import uuid
 from typing import Any, Protocol
 
-from millefeuille.models import DossierStatus, ExecutionStepStatus
-from millefeuille_ephemeral import MilleFeuilleError, EphemeralClient, EphemeralRun
 from loguru import logger
 from mic_worker import S3Client
 from mic_worker.typed import AsyncProgressProtocol, AsyncTaskInterface, IncomingMessage
+from millefeuille.models import DossierStatus, ExecutionStepStatus
+from millefeuille_ephemeral import EphemeralClient, EphemeralRun, MilleFeuilleError
 from pydantic import ValidationError
 
 from src.exceptions import FileTooLargeError, InvalidRequestError, RunFailedError, RunTimeoutError

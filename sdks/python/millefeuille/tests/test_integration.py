@@ -14,7 +14,9 @@ BASE_URL = os.environ.get("MILLEFEUILLE_BASE_URL")
 BEARER_TOKEN = os.environ.get("MILLEFEUILLE_BEARER_TOKEN")
 
 
-@pytest.mark.skipif(not (BASE_URL and BEARER_TOKEN), reason="MILLEFEUILLE_BASE_URL / MILLEFEUILLE_BEARER_TOKEN non définis")
+@pytest.mark.skipif(
+    not (BASE_URL and BEARER_TOKEN), reason="MILLEFEUILLE_BASE_URL / MILLEFEUILLE_BEARER_TOKEN non définis"
+)
 def test_analyse_and_dossier_lifecycle() -> None:
     assert BASE_URL and BEARER_TOKEN
     with MilleFeuilleClient(BASE_URL, bearer_token=BEARER_TOKEN) as client:
