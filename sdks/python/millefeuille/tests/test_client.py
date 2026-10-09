@@ -31,13 +31,13 @@ def test_normalize_base_url(url: str, expected: str) -> None:
 
 def test_auth_headers_and_cookie(make_client) -> None:
     client, seen = make_client(
-        lambda r: httpx.Response(200, json={"models": []}), api_token="ddd", bearer_token="b", session_cookie="s"
+        lambda r: httpx.Response(200, json={"models": []}), api_token="mille", bearer_token="b", session_cookie="s"
     )
     with client:
         client.models.list()
     request = seen[0]
     assert request.url == "https://api.test/api/models"
-    assert request.headers["X-App-Token"] == "ddd"
+    assert request.headers["X-App-Token"] == "mille"
     assert request.headers["Authorization"] == "Bearer b"
     assert "millefeuille_session=s" in request.headers["cookie"]
 
