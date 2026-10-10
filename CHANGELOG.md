@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.3](https://github.com/IA-Generative/mille-feuille/compare/v0.12.2...v0.12.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **worker:** broker Celery pris dans REDIS_URL (document_process, agent_execution) ([8d6d3c5](https://github.com/IA-Generative/mille-feuille/commit/8d6d3c5907f44fda32fd8cc71ccd784df2347971))
+
 ## [0.12.2](https://github.com/IA-Generative/mille-feuille/compare/v0.12.1...v0.12.2) (2026-10-09)
 
 
