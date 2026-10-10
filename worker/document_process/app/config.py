@@ -1,9 +1,14 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_REDIS_URL = "redis://localhost:6379/0"
+
 
 class WorkerSettings(BaseSettings):
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
+    # Broker et résultats Celery. En Kubernetes, le secret `millefeuille-redis` fournit `REDIS_URL` (avec le mot de
+    # passe) : à défaut de `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` (docker-compose), c'est lui qui sert.
+    REDIS_URL: str = ""
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
 
     BACKEND_INTERNAL_URL: str = "http://localhost:8000"
     INTERNAL_WORKER_TOKEN: str = ""
@@ -21,6 +26,14 @@ class WorkerSettings(BaseSettings):
     TESSDATA_PATH: str | None = None
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")
+
+    @property
+    def celery_broker_url(self) -> str:
+        return self.CELERY_BROKER_URL or self.REDIS_URL or DEFAULT_REDIS_URL
+
+    @property
+    def celery_result_backend(self) -> str:
+        return self.CELERY_RESULT_BACKEND or self.REDIS_URL or DEFAULT_REDIS_URL
 
 
 settings = WorkerSettings()

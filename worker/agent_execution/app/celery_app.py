@@ -10,8 +10,8 @@ from app.config import settings
 # app.tasks.run_helper_chat - voir docs/mcp-helper-agent-plan.md, Phase 7).
 celery_app = Celery(
     "agent_execution",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
+    broker=settings.celery_broker_url,
+    backend=settings.celery_result_backend,
     include=[
         "app.tasks.chat",
         "app.tasks.classification",
